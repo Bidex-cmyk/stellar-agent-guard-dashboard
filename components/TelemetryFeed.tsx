@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { describeGuardEvent, explainReason } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
+import { filterEvents, DEFAULT_FILTER, type TelemetryFilter } from "../lib/guard/telemetry";
 import { useGuard } from "./GuardProvider.tsx";
 import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
+import { TelemetryFilterBar } from "./TelemetryFilterBar.tsx";
 
 /**
  * The live event feed.
@@ -21,6 +24,9 @@ import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
  */
 export function TelemetryFeed() {
   const { events, feed, startWatching, stopWatching, clearEvents, guard } = useGuard();
+  const [filter, setFilter] = useState<TelemetryFilter>(DEFAULT_FILTER);
+
+  const filtered = filterEvents(events, filter);
 
   return (
     <div className="panel">
@@ -62,11 +68,20 @@ export function TelemetryFeed() {
 
       {feed.error && <ErrorBlock title="The event feed could not poll" detail={feed.error} />}
 
-      {events.length === 0 ? (
+      <TelemetryFilterBar
+        filter={filter}
+        onChange={setFilter}
+        totalEvents={events.length}
+        filteredCount={filtered.length}
+      />
+
+      {filtered.length === 0 ? (
         <p className="tiny muted">
-          {feed.watching
-            ? "No events from this guard yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
-            : "Start watching to tail this guard's events."}
+          {events.length === 0
+            ? feed.watching
+              ? "No events from this guard yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
+              : "Start watching to tail this guard's events."
+            : "No events match the current filters."}
         </p>
       ) : (
         <div className="scrolly">
@@ -81,7 +96,7 @@ export function TelemetryFeed() {
               </tr>
             </thead>
             <tbody>
-              {events.map((event, index) => (
+              {filtered.map((event: GuardEvent, index: number) => (
                 <tr key={`${event.topic}-${event.transactionHash ?? "-"}-${event.ledger ?? "-"}-${index}`}>
                   <td>
                     <div>{labelFor(event)}</div>

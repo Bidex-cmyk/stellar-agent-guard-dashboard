@@ -26,6 +26,97 @@ import type { GuardEvent } from "stellar-agent-guard-sdk";
 import type { rpc } from "@stellar/stellar-sdk";
 import { NETWORK } from "./network.ts";
 
+/** Outcome filter options for the telemetry feed. */
+export type OutcomeFilter = "all" | "approved-only" | "blocked-only";
+
+/** Event type filter options for the telemetry feed. */
+export type EventTypeFilter = "all" | "auth_checked" | "heartbeat" | "policy_set" | "frozen";
+
+/** A single set of telemetry filter criteria. */
+export interface TelemetryFilter {
+  outcome: OutcomeFilter;
+  eventType: EventTypeFilter;
+  addressSearch: string;
+  minStroops: bigint | null;
+}
+
+/** The default filter: show everything, no address search, no minimum amount. */
+export const DEFAULT_FILTER: TelemetryFilter = {
+  outcome: "all",
+  eventType: "all",
+  addressSearch: "",
+  minStroops: null,
+};
+
+/**
+ * Filter a list of GuardEvents against the given criteria.
+ *
+ * Applies all predicates conjunctively: an event must satisfy every
+ * non-default criterion to appear in the result. Undetermined fields
+ * (null decision, missing data) are handled gracefully:
+ * - An outcome filter excludes events whose decision is null when
+ *   the filter is not "all".
+ * - A minimum stroop amount excludes events whose data does not
+ *   contain a valid numeric amount at or above the threshold.
+ */
+export function filterEvents(events: GuardEvent[], filter: TelemetryFilter): GuardEvent[] {
+  return events.filter((event) => {
+    // Outcome filter
+    if (filter.outcome !== "all") {
+      if (event.decision === null) return false;
+      const isAllowed = event.decision.result === "allowed";
+      const isBlocked = event.decision.result === "blocked";
+      if (filter.outcome === "approved-only" && !isAllowed) return false;
+      if (filter.outcome === "blocked-only" && !isBlocked) return false;
+    }
+
+    // Event type filter
+    if (filter.eventType !== "all" && event.kind !== filter.eventType) return false;
+
+    // Address/contract search
+    if (filter.addressSearch.trim() !== "") {
+      const search = filter.addressSearch.trim().toLowerCase();
+      const contractId = (event.contractId ?? "").toLowerCase();
+      const txHash = (event.transactionHash ?? "").toLowerCase();
+      if (!contractId.includes(search) && !txHash.includes(search)) return false;
+    }
+
+    // Minimum stroop amount
+    if (filter.minStroops !== null) {
+      const amount = extractStroops(event.data as Record<string, unknown> | undefined);
+      if (amount === null || amount < filter.minStroops) return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Extract a stroop amount from an event's data field.
+ *
+ * Looks for a numeric amount value in the event data. Returns null
+ * if the data does not contain a parseable integer amount.
+ */
+function extractStroops(data: Record<string, unknown> | undefined | null): bigint | null {
+  if (typeof data === "undefined" || data === null) return null;
+
+  // Common field names for stroop amounts in event data
+  const candidates = ["amount", "stroops", "max_cap_stroops", "value"];
+  for (const key of candidates) {
+    const val = data[key];
+    if (typeof val === "bigint") return val;
+    if (typeof val === "number" && Number.isInteger(val)) return BigInt(val);
+    if (typeof val === "string") {
+      try {
+        return BigInt(val);
+      } catch {
+        // not a valid integer string
+      }
+    }
+  }
+  return null;
+}
+
 export interface TelemetryPage {
   events: GuardEvent[];
   cursor: string;
