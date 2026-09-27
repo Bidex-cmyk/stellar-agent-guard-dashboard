@@ -5,6 +5,7 @@ import { useGuard } from "./GuardProvider.tsx";
 import { ErrorBlock, Read, Stat, relativeTime, short } from "./bits.tsx";
 import { PHASE1_ARTIFACT, NETWORK } from "../lib/guard/network.ts";
 import { compilePrintReport } from "../lib/guard/printReport.ts";
+import { calculateVelocity } from "../lib/guard/velocity.ts";
 
 
 /**
@@ -128,11 +129,59 @@ export function StatusPanel() {
               }
               const cap = policy.window_cap;
               const pct = cap > 0n ? Number((window.total * 100n) / cap) : null;
+              
+              const now = snapshot.status.ok ? snapshot.status.value.now : null;
+              let velocityStats = null;
+              if (now !== null) {
+                const remaining = cap > 0n ? (cap > window.total ? cap - window.total : 0n) : null;
+                const metrics = calculateVelocity(window.entries, now, remaining);
+                const exhaust = metrics.exhaustionMinutes;
+                
+                // orange/red if exhaustion < 30 minutes
+                const isCritical = exhaust !== null && exhaust < 30;
+                const velocityTone = isCritical ? "danger" : "ok";
+                
+                velocityStats = (
+                  <>
+                    <h4 style={{ marginTop: 20 }}>Spending Velocity</h4>
+                    <div className="grid">
+                      <Stat label="1m Velocity" value={metrics.spend1m.toString()} />
+                      <Stat 
+                        label="15m Velocity" 
+                        value={metrics.spend15m.toString()} 
+                        tone={isCritical ? "danger" : undefined} 
+                        note={exhaust !== null ? `Cap exhaustion in ~${Math.round(exhaust)}m` : undefined} 
+                      />
+                      <Stat label="1h Velocity" value={metrics.spend1h.toString()} />
+                    </div>
+                    {cap > 0n && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', marginBottom: 4 }}>
+                          <span>Window Utilization</span>
+                          <span style={{ color: isCritical ? 'var(--danger)' : undefined }}>{pct}%</span>
+                        </div>
+                        <div style={{ width: '100%', backgroundColor: '#222', height: 12, borderRadius: 6, overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${Math.min(pct || 0, 100)}%`, 
+                            backgroundColor: isCritical ? 'var(--danger)' : (pct && pct > 80 ? 'var(--warn)' : 'var(--ok)'), 
+                            height: '100%',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              }
+
               return (
-                <div className="grid">
-                  <Stat label="Spent in window" value={window.total.toString()} note={pct === null ? "no window cap set" : `${pct}% of the ${cap} cap`} />
-                  <Stat label="Window length" value={`${policy.window_secs}s`} note={`${window.entries.length} entry(ies) on the ledger`} />
-                </div>
+                <>
+                  <div className="grid">
+                    <Stat label="Spent in window" value={window.total.toString()} note={pct === null ? "no window cap set" : `${pct}% of the ${cap} cap`} />
+                    <Stat label="Window length" value={`${policy.window_secs}s`} note={`${window.entries.length} entry(ies) on the ledger`} />
+                  </div>
+                  {velocityStats}
+                </>
               );
             }}
           />
