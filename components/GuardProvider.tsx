@@ -134,7 +134,13 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   const [instances, setInstances] = useState<GuardInstance[]>(() =>
     isDemoMode() ? [DEMO_INSTANCE] : [...KNOWN_INSTANCES],
   );
-  const [guard, setGuard] = useState<string>(isDemoMode() ? DEMO_GUARD : KNOWN_INSTANCES[0]!.guard);
+  const [guard, setGuard] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const g = new URLSearchParams(window.location.search).get("guard");
+      if (g) return g;
+    }
+    return isDemoMode() ? DEMO_GUARD : KNOWN_INSTANCES[0]!.guard;
+  });
   const [snapshot, setSnapshot] = useState<GuardSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);

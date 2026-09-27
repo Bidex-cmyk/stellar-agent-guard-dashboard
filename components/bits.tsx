@@ -17,6 +17,7 @@ export function Tabs() {
   const pathname = usePathname();
   const tabs = [
     { href: "/", label: "Console" },
+    { href: "/fleet", label: "Fleet" },
     { href: "/configure", label: "Configure" },
   ];
   return (
