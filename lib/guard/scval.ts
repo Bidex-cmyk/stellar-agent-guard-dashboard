@@ -8,12 +8,24 @@
 
 import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
+/**
+ * The Web Crypto implementation the hashing helpers run on.
+ *
+ * There is deliberately no `node:crypto` fallback: a `await import("node:crypto")`
+ * is a bare `node:`-scheme specifier that webpack refuses to bundle for the
+ * browser, which would break `ANALYZE=true next build --webpack` (the
+ * @next/bundle-analyzer path). The runtime floor is Node 24 (`engines` in
+ * package.json), and every supported browser exposes `crypto.subtle`, so the
+ * global is the one implementation in all environments this module runs in.
+ */
 async function getSubtleCrypto(): Promise<SubtleCrypto> {
-  if (typeof globalThis !== "undefined" && globalThis.crypto?.subtle) {
-    return globalThis.crypto.subtle;
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new Error(
+      "crypto.subtle is unavailable: hashing needs Web Crypto in this runtime",
+    );
   }
-  const nodeCrypto = await import("node:crypto");
-  return nodeCrypto.webcrypto.subtle as unknown as SubtleCrypto;
+  return subtle;
 }
 
 /** SHA-256 of arbitrary bytes, as lowercase hex. */

@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege by default: this workflow only needs to read the repository to
+# check it out, so `contents: read` is the whole grant. Anything broader would
+# hand an unnecessary capability to third-party action code running in the job.
 permissions:
   contents: read
 
@@ -12,9 +15,14 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Every `uses:` is pinned to a full 40-char commit SHA with a readable
+      # version comment. A moving tag (e.g. `@v4`) can be repointed upstream at
+      # any time, which would let changed third-party code execute here with no
+      # reviewable diff in this repository. Dependabot (.github/dependabot.yml)
+      # keeps these pins current through reviewable PRs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: npm
@@ -44,3 +52,31 @@ jobs:
       # have drifted apart on what is and is not enforced.
       - name: Enforcement-scope statement is consistent
         run: node --test tests/unit/scopeStatement.test.ts
+
+      # Browser end-to-end suites (issues #112/#113): the operator lifecycle
+      # and the telemetry filter/export paths, driven through the real pages in
+      # headless Chromium against an in-process mock chain — no testnet, no
+      # network. These live inside the required `ci` job rather than beside it
+      # so branch protection (which requires the check named `ci`) actually
+      # gates on them.
+      #
+      # The perf benchmark (tests/perf, #114) is deliberately absent:
+      # frame-rate assertions depend on the runner's GPU/CPU, so it runs
+      # locally via `npm run test:perf` and is not a CI gate.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      # Traces and the HTML report are the first thing a maintainer needs when
+      # CI goes red; the config keeps traces only on failure.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore

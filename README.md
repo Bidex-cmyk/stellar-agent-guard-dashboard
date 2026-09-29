@@ -25,7 +25,7 @@
 
 An autonomous agent holding a wallet has a single point of failure: one prompt-injection or one buggy loop can drain it. Stellar Agent Guard makes that impossible on-chain — the agent's funds stay in its own smart account, and *every* transaction the account must authorize is intercepted by the contract's `__check_auth` and rejected pre-broadcast unless it satisfies the operator's installed policy: per-transaction spend caps, a rolling-window spend limit, recipient/asset allowlists, protocol allowlists, a pause switch, and a dead-man switch. This dashboard provides the operator's command console: a pure client-side Next.js interface for Freighter wallets to inspect guard status, deploy and configure account-level spending policies via a no-code form, view live event telemetry, and execute immediate panic-button freezes confirmed directly from the contract.
 
-**Status: Phase 3 built, with Phase 2 publish status honestly disclosed.** Pure consumer of [stellar-agent-guard-sdk](https://github.com/aigbagbobila/stellar-agent-guard-sdk) and Soroban RPC. Holds no secrets and has no server component: every write is signed by the operator's Freighter wallet and broadcast directly to Soroban RPC. Consumes the SDK as a vendored package tarball matching merged Phase 2 `main` pending registry publish authorization.
+**Status: Phase 3 built, with Phase 2 publish status honestly disclosed.** Pure consumer of [stellar-agent-guard-sdk](https://github.com/aigbagbobila/stellar-agent-guard-sdk) and Soroban RPC. Holds no secrets and has no server component: every write is signed by the operator's own wallet and broadcast directly to Soroban RPC. Consumes the SDK from a committed vendored tarball (`vendor/stellar-agent-guard-sdk-0.1.0.tgz`) so CI and offline builds resolve the exact, reviewable bytes; version 0.1.0 of the package is also published to npm (see the Phase 2 table below).
 
 > ### Phase 2 Exit Status & Dependency Disclosure
 >
@@ -64,6 +64,13 @@ Enforcement happens **inside the account itself**, via Soroban's native Custom A
 - **Live event telemetry feed (`TelemetryFeed`)**: Cursor-based polling of `event_auth_checked` topics from Soroban RPC, decoding contract outcomes and reason codes using the SDK's verified vocabulary.
 - **Installable PWA shell**: A `manifest.json`, responsive vector icons and a static-shell-only service worker let the console be installed and opened instantly on a phone or after a local network drop. Every `/soroban/rpc` and Horizon request is hard-bypassed — the worker never reads or writes a cache for chain state, so an offline shell can never present a cached balance or freeze flag as if it were live.
 - **Cross-tab lockstep**: A `BroadcastChannel` coordinator (with a `localStorage` fallback) propagates guard switches, confirmed freezes and policy installs across every open tab. Receiving tabs re-read the chain rather than trusting the broadcast, and never overwrite a form edit in progress.
+- **Multi-wallet connectors**: One `WalletConnector` interface over Freighter, Albedo and xBull, with a detection modal that names what the browser found and links to install what it did not. The operator's choice persists so a returning session is not asked again.
+- **Observer mode**: With no wallet connected, reads still run by attributing the read-only simulation to a fallback source account. The header says the session is observing, and every write control explains why it is disabled instead of going silently inert.
+- **Wallet/network guard**: A detected network mismatch renders as an inline warning bar with a one-click switch request, and a declined request is reported as declined — never as a false breakdown.
+- **Opt-in security alerts**: An optional two-beep Web Audio chime and a browser notification when the guard blocks a call, an admin freeze lands, or a policy is revoked. Both channels default off.
+- **Operator accelerators**: A `Cmd`/`Ctrl`+`K` command palette, dark/light/high-contrast themes, an address book, a drag-to-reorder dashboard grid, and an unsigned-XDR export/import path for multisig or air-gapped signing.
+- **Fleet overview (`/fleet`)**: One table of every registered guard instance with its live on-chain state, so an operator running more than one agent does not have to open them one at a time.
+- **Printable compliance report**: A `@media print` stylesheet and a "Print compliance report" action render a clean, paginated summary of the contract id, pinned bytecode hash, active policy and freeze state for auditors.
 
 ## Quick Start
 
@@ -103,7 +110,7 @@ Demo mode is strictly opt-in. When neither the environment flag nor the query pa
 ```bash
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
-npm test             # unit tests (31/31 passing)
+npm test             # full unit suite (see CI for the current count)
 npm run build        # Next.js production build
 npm run inspect      # read-only dump of an instance's state
 ```
@@ -112,23 +119,32 @@ npm run inspect      # read-only dump of an instance's state
 
 ### Screens
 
-- **`/` (Console Overview)**: Displays connected wallet, active guard address, current balance, policy parameters summary, dead-man switch countdown, live telemetry event stream, and the emergency panic button.
+- **`/` (Console Overview)**: Displays connected wallet, active guard address, current balance, policy parameters summary, dead-man switch countdown, live telemetry event stream, transaction history, multisig approvals, an unsigned-XDR submit panel, and the emergency panic button.
 - **`/configure` (Policy Configurator & Deployment)**:
   - Deploy fresh guard accounts from verified on-chain WASM bytecode.
   - Configure spending policy parameters with real-time validation.
   - Sign and submit `set_policy` transactions.
+- **`/fleet` (Fleet Overview)**: One table of every registered guard instance with its live on-chain state, for operators running more than one guarded agent.
 
 ### Key Components & Actions
 
-- **`DeployPanel`**: Fetches bytecode, verifies SHA-256 hash (`f47919...`), predicts custom account address, prompts Freighter signature, and initializes admin + agent keys.
-- **`PolicyForm`**: Real-time form validation, encoding via SDK `policyToScVal`, Freighter signing, and transaction broadcast.
+- **`DeployPanel`**: Fetches bytecode, verifies SHA-256 hash (`f47919...`), predicts custom account address, prompts the wallet signature, and initializes admin + agent keys.
+- **`PolicyForm`**: Real-time form validation, encoding via SDK `policyToScVal`, wallet signing, and transaction broadcast.
 - **`PanicPanel`**: Emergency freeze workflow:
   - Prompts explicit operator confirmation modal.
   - Submits wallet-signed `freeze()` transaction.
   - Re-reads contract `status()` to verify `admin_frozen = true`.
   - Provides wallet-signed `unfreeze()` to restore normal operations.
 - **`TelemetryFeed`**: Cursor-based polling of `event_auth_checked` topics from Soroban RPC, decoding contract outcomes and reason codes.
-- **`WalletBar`**: Displays Freighter connection status, address, and network validation.
+- **`WalletBar`**: Wallet connection status, address, network validation, and the Freighter / Albedo / xBull connector picker.
+- **`FleetTable`**: Live per-instance status across every registered guard account.
+- **`TxHistoryTable`** / **`MultisigTracker`**: The locally recorded submission history and pending multisig approvals.
+- **`SubmitSignedXDRPanel`**: Imports and broadcasts an externally signed transaction envelope for multisig or air-gapped signing.
+- **`CommandPalette`** (`Cmd`/`Ctrl`+`K`): Keyboard-navigable navigation, guard-instance search, and quick actions.
+- **`ThemeToggle`**: Dark / light / high-contrast themes, following the OS preference until the operator chooses.
+- **`AddressBookModal`** / **`MigrationWizard`**: Saved recipients and a guided policy-migration flow.
+- **`DashboardGrid`**: Operator-arranged, persisted panel layout.
+- **`TelemetryAlerts`**: Opt-in audio and browser-notification alerts for blocked calls and freezes.
 
 ## Operator Runbooks
 
@@ -138,6 +154,12 @@ Two step-by-step procedures cover the console's high-stakes operations. They are
 | --- | --- |
 | [**Emergency Freeze & Security Incident Response**](./docs/runbooks/emergency-freeze.md) | An agent is behaving abnormally or a key may be compromised. Covers incident classification and response timelines, the two-step `PanicPanel` confirmation ritual, verifying frozen status on chain (dashboard reader and Stellar CLI), preserving evidence, agent/admin key rotation, root-cause analysis and the unfreeze checklist. |
 | [**Routine Policy Updates & Audit**](./docs/runbooks/policy-updates.md) | Changing caps, allowlists, execution windows, pause state or the dead-man switch. Covers capturing a rollback baseline, staging and validating a draft in `PolicyForm`, the `set_policy` rolling-window and dead-man-switch resets, the pre-flight security checklist (including verifying token contract IDs on Stellar Expert), post-submission verification and rollback/recovery. |
+
+## Developer Guides
+
+| Guide | Description |
+| --- | --- |
+| [**Agent Integration Guide**](./docs/guides/agent-integration.md) | Connecting custom AI agent runtimes (TypeScript, Python, LangChain, ElizaOS) to a deployed Guard, configuring environment variables, sending heartbeats, and diagnosing telemetry in the dashboard. |
 
 ## Architecture
 
@@ -175,9 +197,11 @@ Stellar Agent Guard operates across three dedicated repositories:
 | [**stellar-agent-guard-sdk**](https://github.com/aigbagbobila/stellar-agent-guard-sdk) | TypeScript SDK for pre-flight interception, simulation pricing, and AI agent framework integration | [GitHub](https://github.com/aigbagbobila/stellar-agent-guard-sdk) |
 | [**stellar-agent-guard-dashboard**](https://github.com/aigbagbobila/stellar-agent-guard-dashboard) (this repo) | Client-side operator dashboard for policy deployment, inspection, and emergency panic-button freeze | [GitHub](https://github.com/aigbagbobila/stellar-agent-guard-dashboard) |
 
+The dashboard's own internal contract — data flow, the derived-vs-stored state model, the complete write surface and the trust model — is normative in [`SPEC.md`](./SPEC.md).
+
 ## ✅ Verified against live testnet
 
-The dashboard core logic (`lib/guard/*`) was proven against live Stellar testnet via `scripts/prove-phase3.ts` using the identical module pipeline that powers the UI:
+The dashboard core logic (`lib/guard/*`) was proven against live Stellar testnet via `scripts/prove-phase3.ts` using the identical module pipeline that powers the UI. The table below is a **dated record** of that run (its exact timestamp is `ranAt` in [`tests/fixtures/phase3-proof.json`](./tests/fixtures/phase3-proof.json)), not a claim re-verified on every build:
 
 | Step | Result | Evidence |
 |---|---|---|
@@ -206,6 +230,25 @@ Full proof artifact recorded in [`tests/fixtures/phase3-proof.json`](./tests/fix
 Full recipient/amount enforcement — spend caps, allowlists, per-transaction limits — is native and automatic for SAC token transfers (`transfer`/`transfer_from`), since these are the calls whose arguments the Soroban auth context exposes for inspection. For other Soroban contract calls made by the guarded account (arbitrary DEX/lending/protocol calls), the policy engine still enforces window and pause state, but per-call amount/recipient limits are not yet enforced — extending fine-grained enforcement to arbitrary calls is tracked as a v2 item, not implied as already covered.
 
 This boundary is an inherent property of the platform (the auth context does not expose arbitrary call arguments generically), not a gap this project hides or overclaims. The classification that produces this boundary (`AssetTransfer` vs `Protocol` vs `Unknown` default-deny) is spelled out in SPEC §6.
+
+## Topics
+
+The canonical GitHub topics for this repository, each mapped to the README section that evidences it. A topic is listed only if the capability behind it is demonstrated above, so the list cannot drift into keyword stuffing.
+
+| Topic | README evidence |
+| --- | --- |
+| `stellar` | Intro and Architecture — Stellar testnet, SAC transfers |
+| `soroban` | Architecture — Soroban RPC, Custom Account `__check_auth` |
+| `dashboard` | Title and "What it does" |
+| `operator-console` | Intro ("the operator's command console"), Screens & Actions |
+| `nextjs` | Badges, Architecture (Next.js 16) |
+| `typescript` | Architecture repo table — `lib/guard/*` is TypeScript |
+| `wallet-security` | "What makes this different" — non-custodial, no key custody |
+| `web3` | Architecture; "Verified against live testnet" |
+| `ai-agents` | Intro — guarding an autonomous agent's wallet |
+| `guardrails` | "What it does" — spend caps, allowlists, dead-man switch |
+
+The **About** description and the topic list are repository settings, not files in this tree; the exact `gh` commands that apply them are recorded in [`docs/readme-claims.md`](./docs/readme-claims.md) and in this change's pull request.
 
 ## Maintainers
 
