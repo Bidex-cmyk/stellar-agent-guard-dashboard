@@ -47,6 +47,7 @@ import {
   type IntegrityReport,
 } from "../lib/guard/wasmInspector.ts";
 import { useGuard } from "./GuardProvider.tsx";
+import { writeControlState } from "../lib/guard/observerMode.ts";
 import { MigrationWizard } from "./MigrationWizard.tsx";
 import { ErrorBlock, OutcomeList, starLink } from "./bits.tsx";
 
@@ -69,6 +70,13 @@ export function DeployPanel() {
   const [error, setError] = useState<string | null>(null);
   const [agentPubkey, setAgentPubkey] = useState("");
   const [initResult, setInitResult] = useState<InvokeResult | null>(null);
+  // Deploy is a write like any other: available to a connected admin, inert and
+  // self-explanatory to an observer (#101).
+  const deployControl = writeControlState(wallet, {
+    busy: deploying,
+    extraDisabled: artifact?.ok !== true,
+    label: "deploy a guard",
+  });
 
   // The salt can be typed as well as rolled. `salt` stays the bytes that will
   // actually be deployed, and the text box is only its presentation, so the
@@ -563,7 +571,8 @@ export function DeployPanel() {
 
       <div className="row" style={{ marginTop: 14 }}>
         <button
-          disabled={!wallet || deploying || artifact?.ok !== true}
+          disabled={deployControl.disabled}
+          title={deployControl.title}
           onClick={() => void deploy()}
         >
           {deploying ? "Deploying..." : "Deploy guard"}

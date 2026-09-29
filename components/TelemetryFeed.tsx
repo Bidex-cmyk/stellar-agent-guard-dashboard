@@ -3,6 +3,7 @@
 import { describeGuardEvent, explainReason } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
 import { useGuard } from "./GuardProvider.tsx";
+import { TelemetryAlerts } from "./TelemetryAlerts.tsx";
 import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
 import { DateRangePicker } from "./DateRangePicker.tsx";
 import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
@@ -88,6 +89,8 @@ export function TelemetryFeed() {
       </div>
 
       {feed.error && <ErrorBlock title="The event feed could not poll" detail={feed.error} />}
+
+      <TelemetryAlerts />
 
       {events.length === 0 ? (
         <p className="tiny muted">

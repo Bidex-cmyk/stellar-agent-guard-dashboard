@@ -5,6 +5,7 @@ import type { InvokeResult } from "../lib/guard/submit.ts";
 import { freezeGuard, unfreezeGuard } from "../lib/guard/guardOps.ts";
 import { refusedEventsFromDiagnostics } from "../lib/guard/telemetry.ts";
 import { useGuard } from "./GuardProvider.tsx";
+import { WRITE_DISABLED_HINT, writeControlState } from "../lib/guard/observerMode.ts";
 import { ErrorBlock, starLink } from "./bits.tsx";
 
 /**
@@ -104,6 +105,16 @@ export function PanicPanel() {
   }, [confirming]);
 
   const alreadyFrozen = snapshot?.status.ok ? snapshot.status.value.admin_frozen : null;
+  // The panic button is the write an operator reaches for under pressure, so an
+  // inert one has to say why in the same words as every other control (#101).
+  const freezeControl = writeControlState(wallet, {
+    extraDisabled: alreadyFrozen === true,
+    label: "freeze this account",
+  });
+  const unfreezeControl = writeControlState(wallet, {
+    extraDisabled: alreadyFrozen === false,
+    label: "unfreeze this account",
+  });
 
   async function run(action: "freeze" | "unfreeze", exportOnly = false) {
     setError(null);
@@ -185,14 +196,19 @@ export function PanicPanel() {
         </p>
       )}
 
-      {!wallet && <p className="tiny muted">Connect the admin wallet to freeze or unfreeze.</p>}
+      {!wallet && (
+        <p className="tiny muted" data-testid="observer-notice">
+          {WRITE_DISABLED_HINT}: freeze, unfreeze and heartbeat are all signed writes.
+        </p>
+      )}
 
       {phase !== "confirming" && (
         <div className="row" style={{ marginTop: 12 }}>
           <button
             className="danger"
             ref={triggerRef}
-            disabled={!wallet || alreadyFrozen === true}
+            disabled={freezeControl.disabled}
+            title={freezeControl.title}
             onClick={() => {
               setAcknowledged(false);
               setPhase("confirming");
@@ -203,14 +219,16 @@ export function PanicPanel() {
           </button>
           <button
             className="secondary"
-            disabled={!wallet || alreadyFrozen === false}
+            disabled={unfreezeControl.disabled}
+            title={unfreezeControl.title}
             onClick={() => void run("unfreeze")}
           >
             Unfreeze
           </button>
           <button
             className="secondary"
-            disabled={!wallet || alreadyFrozen === false}
+            disabled={unfreezeControl.disabled}
+            title={unfreezeControl.title}
             onClick={() => void run("unfreeze", true)}
           >
             Export Unfreeze XDR
