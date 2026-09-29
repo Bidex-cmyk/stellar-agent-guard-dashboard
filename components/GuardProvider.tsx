@@ -56,9 +56,17 @@ import {
   isDemoMode,
   syntheticDemoEvent,
 } from "../lib/guard/demoFixtures.ts";
+import { resolvePreset, validateRange, type RangePreset, type TimeRange } from "../lib/guard/ledgerTime.ts";
 
 const SNAPSHOT_INTERVAL_MS = 15_000;
 const FEED_INTERVAL_MS = 5_000;
+
+/** Display labels for the historical-range presets, mirroring `ledgerTime.ts`. */
+const RANGE_PRESET_LABELS: Record<Exclude<RangePreset, "custom">, string> = {
+  "1h": "last 1 hour",
+  "24h": "last 24 hours",
+  "7d": "last 7 days",
+};
 
 interface GuardContextValue {
   server: rpc.Server;
@@ -89,6 +97,15 @@ interface GuardContextValue {
   clearEvents: () => void;
   /** Surface refused-write diagnostics in the feed, labelled as diagnostics. */
   pushEvents: (events: GuardEvent[]) => void;
+  /**
+   * Query the feed's guard over a historical time range (#148). Replaces the
+   * live view with the window's events and labels it, so a historical result
+   * is never mistaken for the live tail. In demo mode the window is answered
+   * from the fixtures, since demo mode never touches RPC.
+   */
+  queryRange: (range: TimeRange, preset: RangePreset) => Promise<void>;
+  /** Human-readable label of the range currently displayed, or null when live. */
+  rangeLabel: string | null;
   /**
    * Tell the other open tabs that this one changed something. The provider adds
    * the active guard, so callers only name the change.
@@ -145,6 +162,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [events, setEvents] = useState<GuardEvent[]>([]);
+  const [rangeLabel, setRangeLabel] = useState<string | null>(null);
   const [feed, setFeed] = useState<GuardContextValue["feed"]>({
     watching: false,
     latestLedger: null,
@@ -331,6 +349,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
       setGuard(next);
       setSnapshot(null);
       setEvents([]);
+      setRangeLabel(null);
       seenRef.current = new Set();
       // Every other tab follows the operator's selection instead of continuing to
       // poll a guard they are no longer looking at.
@@ -378,8 +397,63 @@ export function GuardProvider({ children }: { children: ReactNode }) {
 
   const clearEvents = useCallback(() => {
     setEvents([]);
+    setRangeLabel(null);
     seenRef.current = new Set();
   }, []);
+
+  // ── Historical range queries (#148) ──────────────────────────────────
+  // The demo feed never touches RPC, so a demo-mode range query is answered
+  // from the fixtures filtered by the same timestamps — the demo's honesty
+  // note stays true and the picker still demonstrably works.
+  const queryRange = useCallback(
+    async (range: TimeRange, preset: RangePreset) => {
+      const invalid = validateRange(range);
+      if (invalid) {
+        setFeed((current) => ({ ...current, error: invalid }));
+        return;
+      }
+      const label =
+        preset === "custom"
+          ? `${new Date((range.fromUnixSecs ?? 0) * 1000).toLocaleString()} → ${
+              range.toUnixSecs === null ? "now" : new Date(range.toUnixSecs * 1000).toLocaleString()
+            }`
+          : RANGE_PRESET_LABELS[preset];
+      if (demo) {
+        const from = range.fromUnixSecs ?? 0;
+        const to = range.toUnixSecs ?? Number.MAX_SAFE_INTEGER;
+        const inRange = demoEvents()
+          .filter((event) => {
+            if (!event.ledgerClosedAt) return false;
+            const closedAt = Math.floor(new Date(event.ledgerClosedAt).getTime() / 1000);
+            return closedAt >= from && closedAt <= to;
+          });
+        setEvents(inRange);
+        seenRef.current = new Set(inRange.map(eventKey));
+        setRangeLabel(label);
+        return;
+      }
+      const feedRunner =
+        feedRef.current && feedRef.current.guard === guard
+          ? feedRef.current
+          : new GuardFeed(server, guard);
+      if (feedRef.current !== feedRunner) feedRef.current = feedRunner;
+      setFeed((current) => ({ ...current, error: null }));
+      try {
+        const page = await feedRunner.pollRange(range);
+        setEvents(page.events);
+        // seenRef is rebuilt so returning to the live tail does not re-suppress
+        // rows this historical view already displayed.
+        seenRef.current = new Set(page.events.map(eventKey));
+        setRangeLabel(label);
+      } catch (error) {
+        setFeed((current) => ({
+          ...current,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
+    },
+    [demo, guard, server],
+  );
 
   // ── Operator session auto-lock ───────────────────────────────────────────
   // The countdown only runs while a wallet is connected: there is nothing to
@@ -481,6 +555,8 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     stopWatching,
     clearEvents,
     pushEvents,
+    queryRange,
+    rangeLabel,
     notifyTabs,
     session: {
       state: idleState,

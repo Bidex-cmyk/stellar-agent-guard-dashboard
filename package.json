@@ -12,6 +12,7 @@
     "dev": "next dev",
     "dev:demo": "NEXT_PUBLIC_DEMO_MODE=true next dev",
     "build": "next build",
+    "export": "EXPORT_BUILD=true next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
