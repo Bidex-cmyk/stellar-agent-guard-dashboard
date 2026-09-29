@@ -138,7 +138,7 @@ jobs:
       - name: Download the report artifact
         id: artifact
         if: steps.wait.outputs.run-id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bundle-size-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
