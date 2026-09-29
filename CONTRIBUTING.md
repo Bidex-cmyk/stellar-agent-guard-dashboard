@@ -19,22 +19,27 @@ npm ci
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
 npm test            # node --test (unit suite)
+npm run test:e2e    # Playwright browser suites (npx playwright install chromium first)
 npm run build       # Next.js production build
 ```
 
-Two extra scripts are not part of the CI gate:
+Three extra scripts are not part of the CI gate:
 
 - `npm run prove:phase3` — re-runs the live testnet proof against the real deployed
   contract; needs funded testnet keypairs.
 - `npm run inspect` — read-only dump of a deployed instance's on-chain state.
+- `npm run test:perf` — the telemetry throughput benchmark (`tests/perf`, 10k
+  events in 30s with FPS/heap assertions); frame-rate numbers depend on the
+  runner's hardware, so it is measured locally and never gates a merge.
 
 ## Branch protection and CI
 
 `main` is protected by the `main-protection` ruleset, and the required status check is
 named exactly **`ci`**. The `ci` workflow runs typecheck, lint, the unit tests, the
-production build, and a dedicated step that re-checks the enforcement-scope statement in
+production build, a dedicated step that re-checks the enforcement-scope statement in
 `README.md` and `SPEC.md` against the canonical constant in `lib/guard/network.ts`
-(`tests/unit/scopeStatement.test.ts`). Rewording the boundary fails CI, which is the
+(`tests/unit/scopeStatement.test.ts`), and the Playwright end-to-end suites
+(`npm run test:e2e`, headless Chromium against a mocked chain). Rewording the boundary fails CI, which is the
 point — see [Enforcement scope](README.md#enforcement-scope--read-this-before-relying-on-the-caps).
 
 ## Keeping docs true to the code

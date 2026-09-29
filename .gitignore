@@ -11,3 +11,7 @@ build/
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright output: traces, last-run state and generated benchmark reports.
+test-results/
+playwright-report/

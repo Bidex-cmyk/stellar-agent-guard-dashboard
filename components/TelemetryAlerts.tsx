@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
-import { useGuard } from "./GuardProvider.tsx";
+import { useGuard, useGuardEvents } from "./GuardProvider.tsx";
 import { short } from "./bits.tsx";
 import {
   AudioAlerter,
@@ -48,7 +48,8 @@ const REASON_LABEL: Record<NonNullable<ReturnType<typeof alertReasonFor>>, strin
 };
 
 export function TelemetryAlerts() {
-  const { events, guard } = useGuard();
+  const events = useGuardEvents();
+  const { guard } = useGuard();
   const [settings, setSettings] = useState<AlertSettings>({
     audio: false,
     desktop: false,

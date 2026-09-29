@@ -116,7 +116,6 @@ interface GuardContextValue {
   snapshotError: string | null;
   refreshing: boolean;
   refresh: () => Promise<void>;
-  events: GuardEvent[];
   feed: {
     watching: boolean;
     latestLedger: number | null;
@@ -153,6 +152,20 @@ interface GuardContextValue {
 
 const GuardContext = createContext<GuardContextValue | null>(null);
 
+/**
+ * The event feed lives in its own context, deliberately separate from the
+ * console's general state.
+ *
+ * The feed is the only high-churn state here: batches arrive on every poll (or,
+ * under the #114 benchmark's seam, on every animation frame), and if `events`
+ * rode along on `GuardContext` then every value's identity would change with
+ * every batch — re-rendering the wallet bar, status panel, panic panel and the
+ * rest for a change only the telemetry table can see. Splitting the feed out
+ * keeps the cost of a batch proportional to the one panel that renders it.
+ * Only `TelemetryFeed` subscribes.
+ */
+const GuardEventsContext = createContext<GuardEvent[] | null>(null);
+
 /** A stable identity for an event, so re-polling the same page cannot duplicate rows. */
 function eventKey(event: GuardEvent): string {
   return [
@@ -162,7 +175,14 @@ function eventKey(event: GuardEvent): string {
     event.topic,
     event.decision?.result ?? "-",
     event.decision?.reason ?? "-",
-    typeof event.data === "object" && event.data !== null ? JSON.stringify(event.data) : String(event.data),
+    // The body is decoded ScVal: a heartbeat's `at` (and any other u64/i128)
+    // is a `bigint`, which `JSON.stringify` refuses to serialise — the replacer
+    // keeps the key derivable instead of throwing inside the feed's write path.
+    typeof event.data === "object" && event.data !== null
+      ? JSON.stringify(event.data, (_key, value: unknown) =>
+          typeof value === "bigint" ? value.toString() : value,
+        )
+      : String(event.data),
   ].join("|");
 }
 
@@ -496,18 +516,37 @@ export function GuardProvider({ children }: { children: ReactNode }) {
 
   const pushEvents = useCallback((incoming: GuardEvent[]) => {
     if (incoming.length === 0) return;
-    setEvents((current) => {
-      const fresh = incoming.filter((event) => {
-        const key = eventKey(event);
-        if (seenRef.current.has(key)) return false;
-        seenRef.current.add(key);
-        return true;
-      });
-      if (fresh.length === 0) return current;
-      // Newest first, and bounded: the feed is a live view, not an archive.
-      return [...fresh, ...current].slice(0, 250);
+    // De-duplicate *before* the state update, never inside it: the updater has
+    // to stay pure, because React StrictMode double-invokes updaters in
+    // development and a `seenRef` mutation in the first pass would make the
+    // second pass treat the whole batch as already known and drop it.
+    const fresh = incoming.filter((event) => {
+      const key = eventKey(event);
+      if (seenRef.current.has(key)) return false;
+      seenRef.current.add(key);
+      return true;
     });
+    if (fresh.length === 0) return;
+    // Newest first, and bounded: the feed is a live view, not an archive.
+    setEvents((current) => [...fresh, ...current].slice(0, 250));
   }, []);
+
+  // Benchmark seam (issue #114): the perf spec streams thousands of synthetic
+  // events through the feed at a controlled rate instead of waiting on the 5s
+  // poll cadence, so FPS and heap growth can be measured under sustained load.
+  // It is the same `pushEvents` the diagnostic path uses — no second write
+  // route — and it is stripped from production builds, where the only events
+  // are the ones actually polled from the chain.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const target = window as typeof window & {
+      __guardFeedInject?: (incoming: GuardEvent[]) => void;
+    };
+    target.__guardFeedInject = pushEvents;
+    return () => {
+      delete target.__guardFeedInject;
+    };
+  }, [pushEvents]);
 
   const startWatching = useCallback(() => {
     if (!demo && (!feedRef.current || feedRef.current.guard !== guard)) {
@@ -658,71 +697,110 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     };
   }, [feed.watching, pushEvents, demo]);
 
-  const value: GuardContextValue = {
-    server,
-    wallet,
-    walletError,
-    connecting,
-    connect,
-    disconnect,
-    signer,
-    providerId,
-    availableProviders,
-    observer: isObserverSession(wallet),
-    networkMismatch,
-    switchNetwork,
-    instances,
-    guard,
-    selectGuard,
-    addInstance,
-    snapshot,
-    snapshotError,
-    refreshing,
-    refresh,
-    events,
-    feed,
-    startWatching,
-    stopWatching,
-    clearEvents,
-    pushEvents,
-    queryRange,
-    rangeLabel,
-    notifyTabs,
-    session: {
-      state: idleState,
-      timeoutMs: idleTimeoutMs,
-      setTimeoutMs: setIdleTimeout,
+  // Memoised so an `events` batch — the frequent update — cannot change this
+  // object's identity and re-render every consumer that has nothing to do with
+  // the feed. All fields below are the context's own deps.
+  const value = useMemo<GuardContextValue>(
+    () => ({
+      server,
+      wallet,
+      walletError,
+      connecting,
+      connect,
+      disconnect,
+      signer,
+      providerId,
+      availableProviders,
+      observer: isObserverSession(wallet),
+      networkMismatch,
+      switchNetwork,
+      instances,
+      guard,
+      selectGuard,
+      addInstance,
+      snapshot,
+      snapshotError,
+      refreshing,
+      refresh,
+      feed,
+      startWatching,
+      stopWatching,
+      clearEvents,
+      pushEvents,
+      queryRange,
+      rangeLabel,
+      notifyTabs,
+      session: {
+        state: idleState,
+        timeoutMs: idleTimeoutMs,
+        setTimeoutMs: setIdleTimeout,
+        stayConnected,
+      },
+    }),
+    [
+      server,
+      wallet,
+      walletError,
+      connecting,
+      connect,
+      disconnect,
+      signer,
+      providerId,
+      availableProviders,
+      networkMismatch,
+      switchNetwork,
+      instances,
+      guard,
+      selectGuard,
+      addInstance,
+      snapshot,
+      snapshotError,
+      refreshing,
+      refresh,
+      feed,
+      startWatching,
+      stopWatching,
+      clearEvents,
+      pushEvents,
+      queryRange,
+      rangeLabel,
+      notifyTabs,
+      idleState,
+      idleTimeoutMs,
+      setIdleTimeout,
       stayConnected,
-    },
-  };
+    ],
+  );
 
   return (
     <GuardContext.Provider value={value}>
-      {children}
-      {idleState.phase === "warning" && wallet && (
-        <div className="modal-backdrop">
-          <div
-            className="modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="session-lock-title"
-            aria-describedby="session-lock-body"
-            tabIndex={-1}
-          >
-            <strong id="session-lock-title">
-              Session expiring due to inactivity. Click to stay connected.
-            </strong>
-            <p className="tiny" id="session-lock-body">
-              You will be disconnected in {idleState.secondsLeft}s. The admin wallet will be
-              unlinked and unsaved work dropped; reconnecting is required before anything can be
-              signed again.
-            </p>
-            <div className="row">
-              <button onClick={stayConnected}>Stay connected</button>
+      <GuardEventsContext.Provider value={events}>
+        {children}
+        {idleState.phase === "warning" && wallet && (
+          <div className="modal-backdrop">
+            <div
+              className="modal"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="session-lock-title"
+              aria-describedby="session-lock-body"
+              tabIndex={-1}
+            >
+              <strong id="session-lock-title">
+                Session expiring due to inactivity. Click to stay connected.
+              </strong>
+              <p className="tiny" id="session-lock-body">
+                You will be disconnected in {idleState.secondsLeft}s. The admin wallet will be
+                unlinked and unsaved work dropped; reconnecting is required before anything can be
+                signed again.
+              </p>
+              <div className="row">
+                <button onClick={stayConnected}>Stay connected</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </GuardEventsContext.Provider>
     </GuardContext.Provider>
   );
 }
@@ -733,4 +811,11 @@ export function useGuard(): GuardContextValue {
   return value;
 }
 
-export { eventKey, GuardContext };
+/** The live event feed, newest first — see `GuardEventsContext`. */
+export function useGuardEvents(): GuardEvent[] {
+  const value = useContext(GuardEventsContext);
+  if (value === null) throw new Error("useGuardEvents must be used inside <GuardProvider>");
+  return value;
+}
+
+export { eventKey, GuardContext, GuardEventsContext };
