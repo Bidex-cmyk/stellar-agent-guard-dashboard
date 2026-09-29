@@ -26,7 +26,6 @@ import {
   type ReactNode,
 } from "react";
 import type { rpc } from "@stellar/stellar-sdk";
-import type { GuardEvent } from "stellar-agent-guard-sdk";
 import { createServer } from "../lib/guard/chain.ts";
 import { readGuardSnapshot, type GuardSnapshot } from "../lib/guard/guardOps.ts";
 import { NETWORK } from "../lib/guard/network.ts";
@@ -40,6 +39,7 @@ import {
   pauseStream as pauseBuffer,
   resumeStream as resumeBuffer,
   type StreamBuffer,
+  type TelemetryEvent,
 } from "../lib/guard/telemetry.ts";
 import { createTabSync, type TabSyncEventType } from "../lib/guard/tabSync.ts";
 import {
@@ -149,7 +149,7 @@ interface GuardContextValue {
   /** Empty the visible list. The poll cursor and any queued events are kept. */
   clearEvents: () => void;
   /** Surface refused-write diagnostics in the feed, labelled as diagnostics. */
-  pushEvents: (events: GuardEvent[]) => void;
+  pushEvents: (events: TelemetryEvent[]) => void;
   /**
    * Query the feed's guard over a historical time range (#148). Replaces the
    * live view with the window's events and labels it, so a historical result
@@ -187,7 +187,7 @@ const GuardContext = createContext<GuardContextValue | null>(null);
  * keeps the cost of a batch proportional to the one panel that renders it.
  * Only `TelemetryFeed` subscribes.
  */
-const GuardEventsContext = createContext<GuardEvent[] | null>(null);
+const GuardEventsContext = createContext<TelemetryEvent[] | null>(null);
 
 export function GuardProvider({ children }: { children: ReactNode }) {
   const server = useMemo(() => createServer(NETWORK.rpcUrl), []);
@@ -514,7 +514,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     [tabSync],
   );
 
-  const pushEvents = useCallback((incoming: GuardEvent[]) => {
+  const pushEvents = useCallback((incoming: TelemetryEvent[]) => {
     if (incoming.length === 0) return;
     // `ingestEvents` is pure — it copies `seen` rather than mutating it — so it
     // is safe inside the updater even when StrictMode double-invokes it.
@@ -533,7 +533,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
     const target = window as typeof window & {
-      __guardFeedInject?: (incoming: GuardEvent[]) => void;
+      __guardFeedInject?: (incoming: TelemetryEvent[]) => void;
     };
     target.__guardFeedInject = pushEvents;
     return () => {
@@ -821,7 +821,7 @@ export function useGuard(): GuardContextValue {
 }
 
 /** The live event feed, newest first — see `GuardEventsContext`. */
-export function useGuardEvents(): GuardEvent[] {
+export function useGuardEvents(): TelemetryEvent[] {
   const value = useContext(GuardEventsContext);
   if (value === null) throw new Error("useGuardEvents must be used inside <GuardProvider>");
   return value;

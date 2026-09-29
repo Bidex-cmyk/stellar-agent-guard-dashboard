@@ -35,7 +35,8 @@ export const EMPTY_TELEMETRY_FILTER: TelemetryFilter = {
  * heartbeat neither was allowed nor was blocked, so "Allowed Only" and
  * "Blocked Only" both exclude it rather than pretending it carries a verdict.
  */
-export function filterGuardEvents(events: GuardEvent[], filter: TelemetryFilter): GuardEvent[] {
+// Generic so a richer event (one carrying its raw XDR) survives filtering intact.
+export function filterGuardEvents<T extends GuardEvent>(events: readonly T[], filter: TelemetryFilter): T[] {
   const contract = filter.contract.trim().toLowerCase();
   return events.filter((event) => {
     if (filter.verdict !== "all" && event.decision?.result !== filter.verdict) return false;

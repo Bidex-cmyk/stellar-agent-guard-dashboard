@@ -11,6 +11,15 @@ import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
 import { DateRangePicker } from "./DateRangePicker.tsx";
 import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
 import {
+  NDJSON_MIME,
+  auditLogFilename,
+  isFilterActive,
+  telemetryToAuditLog,
+} from "../lib/guard/exportFormats.ts";
+import { NETWORK } from "../lib/guard/network.ts";
+import { useAnnounce } from "../lib/guard/useAnnounce.ts";
+import { useDemoMode } from "../lib/guard/useDemoMode.ts";
+import {
   EMPTY_TELEMETRY_FILTER,
   filterGuardEvents,
   telemetryToCsv,
@@ -78,15 +87,40 @@ export function TelemetryFeed() {
     rangeLabel,
   } = useGuard();
   const [filter, setFilter] = useState<TelemetryFilter>(EMPTY_TELEMETRY_FILTER);
+  const announce = useAnnounce();
+  const demo = useDemoMode();
 
   // The three controls and the exports all act on the same projection, so a
   // CSV/NDJSON download is provably the filtered view on screen — one row in,
   // one line out, never a hidden superset.
   const rows = filterGuardEvents(events, filter);
-  const filterActive =
-    filter.verdict !== EMPTY_TELEMETRY_FILTER.verdict ||
-    filter.topic !== EMPTY_TELEMETRY_FILTER.topic ||
-    filter.contract.trim() !== EMPTY_TELEMETRY_FILTER.contract;
+  const filterActive = isFilterActive(filter);
+
+  /**
+   * Download the structured audit log: a header line naming the guard, network
+   * and filter, then one record per event with its raw XDR and every 64-bit
+   * value as a decimal string. Like the other exports it is the filtered view
+   * on screen; the header's `bufferedCount` shows how much the filter left out.
+   */
+  function exportAuditLog() {
+    const exportedAt = new Date();
+    const body = telemetryToAuditLog({
+      events: rows,
+      bufferedCount: events.length,
+      guard,
+      network: NETWORK.name,
+      filter,
+      latestLedger: feed.latestLedger,
+      demo,
+      exportedAt,
+    });
+    downloadText(
+      auditLogFilename(exportedAt, filterActive ? "filtered" : "full"),
+      body,
+      `${NDJSON_MIME};charset=utf-8`,
+    );
+    announce(`Exported ${rows.length} event${rows.length === 1 ? "" : "s"} to the audit log`);
+  }
 
   function applyRange(range: TimeRange, preset: RangePreset) {
     // A historical query replaces the live tail view: the feed shows exactly
@@ -222,6 +256,14 @@ export function TelemetryFeed() {
         >
           Export NDJSON
         </button>
+        <button
+          className="secondary"
+          onClick={exportAuditLog}
+          disabled={rows.length === 0}
+          title="NDJSON audit log: a header line, then decoded fields, verdict, ledger, transaction hash and the raw event XDR per event"
+        >
+          Export audit log
+        </button>
         {filterActive && (
           <button className="secondary" onClick={() => setFilter(EMPTY_TELEMETRY_FILTER)}>
             Clear filters
@@ -288,7 +330,8 @@ export function TelemetryFeed() {
       <p className="tiny muted" style={{ marginTop: 8 }}>
         Feed holds the most recent {events.length} event(s) from{" "}
         <span className="mono">{short(guard, 8, 6)}</span>.
-        {filterActive && <> Showing {rows.length} matching the current filter.</>}
+        {filterActive && <> Showing {rows.length} matching the current filter.</>} The audit log
+        keeps 64-bit values (ledgers, stroop amounts, timestamps) as strings so no precision is lost.
       </p>
     </div>
   );
