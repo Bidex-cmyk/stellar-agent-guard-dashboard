@@ -6,15 +6,23 @@ on:
       - main
   workflow_dispatch:
 
+# Previously inherited the repository-wide default token permissions. This job
+# only reads the repository (checkout + build) and pushes to Vercel using its own
+# secret token, so it needs nothing beyond `contents: read`.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a full 40-char commit SHA with a version comment; Dependabot
+      # (.github/dependabot.yml) proposes updates as reviewable PRs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version: "24"
           cache: npm
 
       - name: Install dependencies
@@ -24,7 +32,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+        uses: amondnet/vercel-action@16e87c0a08142b0d0d33b76aeaf20823c381b9b9 # v25.2.0
         if: ${{ env.VERCEL_TOKEN != '' }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

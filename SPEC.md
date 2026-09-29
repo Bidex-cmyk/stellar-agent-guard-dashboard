@@ -51,6 +51,14 @@ enforcement to arbitrary calls is tracked as a v2 item, not implied as already c
 "enforce this arbitrary call" control, because the platform cannot yet enforce one. Offering the
 control and documenting the caveat would be the overclaim in a different costume.
 
+**Canonical policy, not a second copy.** The normative statement of *what the contract enforces* lives
+in the contracts repository's [`SPEC.md`](https://github.com/Stellar-Agent-Guard/stellar-agent-guard-contracts/blob/main/SPEC.md).
+This document and the README reproduce the shared wording above as the interface's own drift-guard, but
+the contracts `SPEC.md` remains the single source of truth for the enforcement policy. If that document
+changes its boundary text, this one and the constant in `lib/guard/network.ts` must be re-synced in the
+same change — `tests/unit/scopeStatement.test.ts` fails otherwise, which is the mechanism that keeps
+the copies honest.
+
 ---
 
 ## 3. Trust model
@@ -74,6 +82,19 @@ There is **no server component**, and that is an architectural decision rather t
 network and refuses to proceed if it does not match this deployment's passphrase, because a signature
 produced for a different network id cannot authorize a call on this one — failing at connection is
 better than failing after an approval the operator cannot understand.
+
+**Zero-backend, mechanically.** "No server component" is not a promise, it is checked. `app/`
+contains no `route.ts` (no Next.js API route) and the repository contains no `middleware.ts`:
+
+```
+$ find app \( -name 'route.ts' -o -name 'route.tsx' \) | wc -l
+0
+$ find . -path ./node_modules -prune -o -name 'middleware.ts' -print | wc -l
+0
+```
+
+Both are empty, so there is no request handler in this codebase that could sign, hold a key, or proxy
+the RPC. Re-confirming those two greps still return nothing is part of reviewing any change to `app/`.
 
 ---
 
@@ -191,6 +212,52 @@ An empty feed is therefore **not** evidence that nothing was refused on chain, a
 
 ---
 
+## 8. State model — derived vs stored
+
+The console's core correctness rule is that anything the contract can answer must be read from the
+chain, and only genuinely local data (drafts, preferences, the instance registry) is persisted. A
+value *derived* from the chain may be stale for at most one poll; a value *stored* locally must never
+be presented as though it were chain state. Every state item the console holds is classified here,
+with its source, its refresh trigger, and whether it is allowed to be wrong.
+
+| State | Source | Refresh trigger | May it lie (stale)? |
+| --- | --- | --- | --- |
+| `status()` — freeze flags, heartbeat, dead-man state | chain (read-only `simulateTransaction`) | mount + poll; re-read after every freeze/unfreeze | no — a failed read renders an error, never a stale value |
+| `policy()` | chain (`simulateTransaction`) | mount + poll; re-read after `set_policy`/`revoke_policy` | no |
+| Rolling spend window | chain (`getLedgerEntries` on `DataKey::Window`) | mount + poll | no |
+| Balance | chain (SAC `balance` via simulation) | mount + poll | no |
+| Artifact identity / verification | chain (`getContractInstance` + `getContractWasmByContractId`) + local hash | on demand, before deploy and in the integrity inspector | no — a mismatch aborts the deploy |
+| Telemetry events | chain (`getEvents`, cursor-based) | continuous polling; cursor carried forward, never re-derived | no — an empty or gapped page is labelled, not smoothed over |
+| Registered guard instances (the fleet) | **`localStorage`** (`stellar-agent-guard-dashboard.instances.v1`) | user action (add/remove/select) | yes, by design — it is an address list, not chain state; every row's live numbers are re-read from the chain |
+| Policy form draft | component-local until submit | user input | yes, while editing — never treated as installed until the chain re-read confirms it |
+| Address book | **`localStorage`** (`…addressBook.v1`) | user action | yes — convenience data, carries no fund authority |
+| Transaction history | **`localStorage`** (`…txHistory.v1`) | after each submission | yes — it records what this browser submitted; the chain is authoritative |
+| Layout / theme / alert / idle preferences | **`localStorage`** (`…layout.v1`, `theme`, `…idleTimeout.v1`, `…alerts.v1`) | user action | yes — presentation only |
+| Wallet-provider preference | **`localStorage`** (`…walletProvider.v1`) | user action (connector pick) | yes — convenience, carries no authority |
+| Multisig approval evaluation | pasted envelope is component-local; signer weights/thresholds are read live from Horizon | on paste / on demand | n/a for the pasted envelope; the account's signers are re-read, not cached |
+| Tab-sync envelope | **`localStorage`** (`…tab-sync.v1`) when `BroadcastChannel` is unavailable | transient | n/a — a transport, not state; receiving tabs re-read the chain (§7) |
+| Active tab / route / modal-open flags | component-local | user action | n/a |
+
+The rule that makes the table enforceable: **a `localStorage` value may only be an input to a chain
+read, never a substitute for one.** The instance registry and the address book supply addresses; the
+status, policy and balance displayed for those addresses are always re-read. Test coverage for the
+persisted helpers lives beside them (`tests/unit/tabSync.test.ts`, `tests/unit/txHistory.test.ts`,
+`tests/unit/addressBook.test.ts`, `tests/unit/dashboardGrid.test.ts`, `tests/unit/useIdleTimer.test.ts`).
+
+### Complete write surface
+
+Every path that mutates chain state, and what it does after the write. No write path trusts its own
+submission response where the outcome matters.
+
+| Write | Trigger | Auth path | Re-read after? |
+| --- | --- | --- | --- |
+| `set_policy` / `revoke_policy` | `/configure` form, migration wizard | operator wallet signs auth entries + envelope; enforced simulation before broadcast | **yes** — policy re-read |
+| `freeze` / `unfreeze` | `PanicPanel` | operator wallet, same enforced-simulation path | **yes, mandatory** — `status()` must report the new flag or the UI reports failure |
+| deploy (`create_contract`) + `initialize` | `DeployPanel` | operator wallet; `create_contract` uses its recorded authorization | **yes** — the new instance is re-read and re-verified against the pinned hash |
+| agent SAC transfers | not this console | agent key, via the SDK | n/a — the console is admin, never the agent |
+
+No other write exists. In particular the console never calls `heartbeat` (it needs the guard's own
+auth — see §5) and never holds a key that could authorize one.
 
 ---
 
@@ -207,5 +274,8 @@ driving the identical library code headlessly. Files under `lib/guard/` are the 
 React components are thin over them and are not covered by automated tests.
 
 ## 10. Architecture Decision Records
-Key architectural decisions are documented in ADRs under \docs/adr/\:
-- [ADR 001 - Zero-Server Client-Only Architecture](docs/adr/001-zero-server-architecture.md)
+
+Key architectural decisions are documented as ADRs under [`docs/adr/`](./docs/adr/):
+
+- [ADR 001 — Zero-Server Client-Only Architecture](./docs/adr/001-zero-server-architecture.md)
+- [ADR 002 — Diagnostic Simulation for Rejections](./docs/adr/002-diagnostic-simulation-for-rejections.md)

@@ -37,6 +37,28 @@ production build, and a dedicated step that re-checks the enforcement-scope stat
 (`tests/unit/scopeStatement.test.ts`). Rewording the boundary fails CI, which is the
 point — see [Enforcement scope](README.md#enforcement-scope--read-this-before-relying-on-the-caps).
 
+## Keeping docs true to the code
+
+Two documentation rules are part of the review, not optional polish:
+
+- **README claims are tracked, not asserted.** The top-level `README.md` describes what the console can
+do. Every behaviour claim there has a row in [`docs/readme-claims.md`](./docs/readme-claims.md) with
+the file or test that evidences it. When you add, rename or remove a screen, panel, script or
+capability bullet, update the matching row (and its "Last verified" date) in the same commit; a claim
+with no evidence row is treated as a stale claim.
+- **State-model changes update `SPEC.md`.** The derived-vs-stored table and the write-surface inventory
+in [`SPEC.md` §8](./SPEC.md) are normative. If a change adds a persisted key, changes what is read from
+the chain, adds a write path, or changes when a value refreshes, update that table in the same change —
+the model and the code move together. This is this repo's adaptation of the contracts repo's "code and
+spec co-move" rule to a client-side app.
+
+## Supply chain
+
+Workflow actions are pinned to full commit SHAs with a readable version comment, and every workflow
+declares the least-privilege `permissions:` it needs. Do not replace a SHA pin with a moving tag, and
+do not add a `uses:` without a pin. [`dependabot.yml`](./.github/dependabot.yml) opens the reviewable
+bumps for both `github-actions` and `npm`.
+
 ## Issues
 
 - Backlog: <https://github.com/aigbagbobila/stellar-agent-guard-dashboard/issues>
