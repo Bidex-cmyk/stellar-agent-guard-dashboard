@@ -168,3 +168,130 @@ export function refusedEventsFromDiagnostics(
 ): GuardEvent[] {
   return guardEventsFromDiagnostics(diagnosticEvents, guard);
 }
+
+/**
+ * The feed's display buffer, with a pause control.
+ *
+ * During a burst, new rows arriving at the top push the row an operator is
+ * reading off screen. Pausing freezes what is displayed, **not** the poller:
+ * the cursor keeps advancing in the background and new events wait in
+ * `pending`. Resuming applies them exactly as if the stream had never been
+ * paused, so a pause cannot duplicate a row or skip past one.
+ *
+ * Pure and immutable, so it drops straight into a React state updater and can
+ * be tested without a DOM. Events are held newest first, the order the table
+ * renders them.
+ */
+export interface StreamBuffer {
+  /** What the table shows, newest first. */
+  rows: GuardEvent[];
+  /** Events that arrived while paused, newest first. They are not shown until resume. */
+  pending: GuardEvent[];
+  paused: boolean;
+  /** Identities already accepted, so a re-polled page or re-pushed diagnostic is not shown twice. */
+  seen: ReadonlySet<string>;
+  /** Events that fell out of the pending queue while paused because it exceeded the buffer limit. */
+  dropped: number;
+}
+
+/** How many rows the feed keeps. The feed is a live view, not an archive. */
+export const STREAM_BUFFER_LIMIT = 250;
+
+export function emptyStreamBuffer(): StreamBuffer {
+  return { rows: [], pending: [], paused: false, seen: new Set(), dropped: 0 };
+}
+
+/**
+ * A stable identity for an event, so re-polling the same page cannot duplicate
+ * rows. Decoded event data can hold bigints (a heartbeat's `at`), which plain
+ * `JSON.stringify` rejects, so they are written as decimal strings.
+ */
+export function eventKey(event: GuardEvent): string {
+  return [
+    event.source,
+    event.transactionHash ?? "-",
+    event.ledger ?? "-",
+    event.topic,
+    event.decision?.result ?? "-",
+    event.decision?.reason ?? "-",
+    typeof event.data === "object" && event.data !== null
+      ? JSON.stringify(event.data, (_key, value: unknown) => (typeof value === "bigint" ? `${value}n` : value))
+      : String(event.data),
+  ].join("|");
+}
+
+/**
+ * Accept a batch of incoming events.
+ *
+ * Unseen events go on top of the visible rows, or into `pending` while paused.
+ * `dedupe: false` is for sources that make every event unique by construction
+ * but can repeat the same fields, such as the demo generator.
+ */
+export function ingestEvents(
+  buffer: StreamBuffer,
+  incoming: readonly GuardEvent[],
+  options: { limit?: number; dedupe?: boolean } = {},
+): StreamBuffer {
+  const limit = options.limit ?? STREAM_BUFFER_LIMIT;
+  const dedupe = options.dedupe ?? true;
+  let seen = buffer.seen;
+  const fresh: GuardEvent[] = [];
+  for (const event of incoming) {
+    if (dedupe) {
+      const key = eventKey(event);
+      if (seen.has(key)) continue;
+      if (seen === buffer.seen) seen = new Set(buffer.seen);
+      (seen as Set<string>).add(key);
+    }
+    fresh.push(event);
+  }
+  if (fresh.length === 0) return buffer;
+
+  if (buffer.paused) {
+    const queued = [...fresh, ...buffer.pending];
+    return {
+      ...buffer,
+      seen,
+      pending: queued.slice(0, limit),
+      dropped: buffer.dropped + Math.max(0, queued.length - limit),
+    };
+  }
+  return { ...buffer, seen, rows: [...fresh, ...buffer.rows].slice(0, limit) };
+}
+
+/**
+ * A buffer holding a historical window's events as its rows, live and unpaused.
+ * `seen` is rebuilt from exactly those rows, so returning to the live tail does
+ * not re-suppress events the window displayed, nor re-show ones it did.
+ */
+export function historicalBuffer(events: readonly GuardEvent[]): StreamBuffer {
+  return { ...emptyStreamBuffer(), rows: [...events], seen: new Set(events.map(eventKey)) };
+}
+
+export function pauseStream(buffer: StreamBuffer): StreamBuffer {
+  return buffer.paused ? buffer : { ...buffer, paused: true };
+}
+
+/** Put the queued events on top of the rows, in arrival order, and go live again. */
+export function resumeStream(buffer: StreamBuffer, limit: number = STREAM_BUFFER_LIMIT): StreamBuffer {
+  if (!buffer.paused) return buffer;
+  return {
+    ...buffer,
+    paused: false,
+    rows: [...buffer.pending, ...buffer.rows].slice(0, limit),
+    pending: [],
+    dropped: 0,
+  };
+}
+
+/**
+ * Empty the visible list only.
+ *
+ * The poll cursor lives in `GuardFeed` and is not touched, so clearing never
+ * re-scans the chain. `seen` is kept, so nothing already delivered can come
+ * back. `pending` is kept too: those are events the operator has not seen yet,
+ * and clearing what is on screen should not discard them silently.
+ */
+export function clearStreamRows(buffer: StreamBuffer): StreamBuffer {
+  return { ...buffer, rows: [] };
+}

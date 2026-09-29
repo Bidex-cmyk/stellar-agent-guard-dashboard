@@ -3,6 +3,7 @@
 import { memo, useState } from "react";
 import { describeGuardEvent, explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
+import { STREAM_BUFFER_LIMIT } from "../lib/guard/telemetry.ts";
 import { eventKey, useGuard, useGuardEvents } from "./GuardProvider.tsx";
 import { TelemetryAlerts } from "./TelemetryAlerts.tsx";
 import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
@@ -63,8 +64,18 @@ export function TelemetryFeed() {
   // The feed subscribes to the events context itself: batches re-render this
   // panel and nothing else (see `GuardEventsContext`).
   const events = useGuardEvents();
-  const { feed, startWatching, stopWatching, clearEvents, guard, queryRange, rangeLabel } =
-    useGuard();
+  const {
+    feed,
+    stream,
+    pauseStream,
+    resumeStream,
+    startWatching,
+    stopWatching,
+    clearEvents,
+    guard,
+    queryRange,
+    rangeLabel,
+  } = useGuard();
   const [filter, setFilter] = useState<TelemetryFilter>(EMPTY_TELEMETRY_FILTER);
 
   // The three controls and the exports all act on the same projection, so a
@@ -94,6 +105,7 @@ export function TelemetryFeed() {
         <h2 style={{ margin: 0 }}>Telemetry</h2>
         <div className="row">
           {feed.watching && <span className="pill ok">polling</span>}
+          {stream.paused && <span className="pill warn">paused</span>}
           {feed.latestLedger !== null && <span className="tiny muted">ledger {feed.latestLedger}</span>}
           {feed.watching ? (
             <button className="secondary" onClick={stopWatching}>
@@ -102,8 +114,27 @@ export function TelemetryFeed() {
           ) : (
             <button onClick={startWatching}>Start watching</button>
           )}
-          <button className="secondary" onClick={clearEvents} disabled={events.length === 0}>
-            Clear
+          {stream.paused ? (
+            <button onClick={resumeStream}>
+              Resume{stream.pendingCount > 0 ? ` (${stream.pendingCount})` : ""}
+            </button>
+          ) : (
+            <button
+              className="secondary"
+              onClick={pauseStream}
+              disabled={!feed.watching}
+              title="Freeze the table so rows stop moving. Polling continues; new events queue until you resume."
+            >
+              Pause stream
+            </button>
+          )}
+          <button
+            className="secondary"
+            onClick={clearEvents}
+            disabled={events.length === 0}
+            title="Empty the list. The poll cursor is kept, so nothing is re-fetched and nothing is skipped."
+          >
+            Clear buffer
           </button>
         </div>
       </div>
@@ -116,6 +147,23 @@ export function TelemetryFeed() {
             <button className="secondary" onClick={backToLive}>
               Back to live tail
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Announced politely so a screen reader hears the queue grow without being interrupted. */}
+      <div role="status" aria-live="polite">
+        {stream.paused && (
+          <div className="notice" style={{ marginTop: 12 }}>
+            <strong>
+              Stream paused ({stream.pendingCount} new event{stream.pendingCount === 1 ? "" : "s"} pending)
+            </strong>
+            <span className="tiny">
+              The table is frozen so you can read it. Polling carries on in the background and new
+              events queue here; resume to add them in order, with no duplicates and none skipped.
+              {stream.dropped > 0 &&
+                ` ${stream.dropped} older queued event${stream.dropped === 1 ? "" : "s"} fell past the ${STREAM_BUFFER_LIMIT}-event buffer and will not be shown.`}
+            </span>
           </div>
         )}
       </div>
