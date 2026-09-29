@@ -59,7 +59,6 @@ const TEST_GUARD = {
   snapshotError: null,
   refreshing: false,
   refresh: async () => {},
-  events: [],
   feed: { watching: false, latestLedger: null, error: null, lastPolledAt: null },
   startWatching: () => {},
   stopWatching: () => {},

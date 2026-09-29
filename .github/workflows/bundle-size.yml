@@ -1,0 +1,190 @@
+# Bundle-size analyzer and budget guard for pull requests (#115).
+#
+# Two events, deliberately split so fork PRs still get a report comment without
+# ever running untrusted code with a write-capable token:
+#
+#   pull_request        Runs the analysis (npm ci, both builds, compare) with a
+#                       read-only token and uploads the report as an artifact.
+#                       The compare step's exit code is the budget gate.
+#   pull_request_target Runs with `permissions: pull-requests: write` on the
+#                       base branch's copy of this file, waits for the analysis
+#                       run of the same head SHA, downloads its report artifact
+#                       and posts/updates the PR comment. It executes no code
+#                       from the pull request.
+
+name: bundle-size
+
+on:
+  pull_request:
+    branches: [main]
+  pull_request_target:
+    branches: [main]
+
+# The two events share a ref, so without an event-qualified group one would
+# cancel the other.
+concurrency:
+  group: bundle-size-${{ github.event.pull_request.number }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # @next/bundle-analyzer is a webpack plugin; ANALYZE=true switches it on
+      # in next.config.ts, and --webpack is required on Turbopack-backed Next.
+      - name: Build with the bundle analyzer
+        run: ANALYZE=true npx next build --webpack
+
+      - name: Collect pull-request bundle sizes
+        run: node scripts/analyze-bundle.mjs collect --out bundle-pr.json
+
+      - name: Build the main baseline
+        # A baseline build failure (for example before this workflow's own
+        # setup has landed on main) degrades to an absolute-size report rather
+        # than failing the analysis; compare() handles a missing baseline.
+        continue-on-error: true
+        run: |
+          git worktree add "$RUNNER_TEMP/bundle-baseline" origin/main
+          cd "$RUNNER_TEMP/bundle-baseline"
+          npm ci
+          ANALYZE=true npx next build --webpack
+
+      - name: Collect main baseline bundle sizes
+        run: |
+          if [ -f "$RUNNER_TEMP/bundle-baseline/.next/analyze/client.json" ]; then
+            node scripts/analyze-bundle.mjs collect \
+              --report "$RUNNER_TEMP/bundle-baseline/.next/analyze/client.json" \
+              --out bundle-main.json
+          else
+            echo "{}" > bundle-main.json
+          fi
+
+      - name: Compare against main and check the 200 KB budget
+        id: compare
+        run: |
+          node scripts/analyze-bundle.mjs compare \
+            --baseline bundle-main.json \
+            --current bundle-pr.json \
+            --budget-kb 200 \
+            --metric page \
+            --out bundle-report.md
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the report artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-size-report
+          path: |
+            bundle-report.md
+            bundle-pr.json
+            bundle-main.json
+          if-no-files-found: ignore
+
+      - name: Fail when a page bundle exceeds the budget
+        if: steps.compare.outputs.code != '0'
+        run: |
+          echo "Page bundle budget exceeded — see bundle-report.md in the bundle-size-report artifact."
+          exit 1
+
+  comment:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Wait for the analysis run of this head SHA
+        id: wait
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headSha = context.payload.pull_request.head.sha;
+            const deadline = Date.now() + 25 * 60 * 1000;
+            let run = null;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "bundle-size.yml",
+                head_sha: headSha,
+                event: "pull_request",
+                per_page: 10,
+              });
+              run = data.workflow_runs.find((candidate) => candidate.status !== "in_progress" && candidate.status !== "queued")
+                ?? data.workflow_runs[0] ?? null;
+              if (run && run.status === "completed") break;
+              run = null;
+              await new Promise((resolve) => setTimeout(resolve, 15000));
+            }
+            core.setOutput("run-id", run ? String(run.id) : "");
+            core.setOutput("conclusion", run ? (run.conclusion ?? "") : "timeout");
+
+      - name: Download the report artifact
+        id: artifact
+        if: steps.wait.outputs.run-id != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: bundle-size-report
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.wait.outputs.run-id }}
+
+      - name: Post or update the PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- bundle-size-report -->";
+            let body = null;
+            if (fs.existsSync("bundle-report.md")) {
+              body = fs.readFileSync("bundle-report.md", "utf8");
+            } else {
+              body = [
+                marker,
+                "## Bundle size report",
+                "",
+                "The bundle-size analysis run did not produce a report" +
+                  `${inputs.conclusion === "timeout" ? " (timed out waiting for it)" : ""}.`,
+                "Check the `bundle-size` workflow logs on this pull request.",
+              ].join("\n");
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+        env:
+          conclusion: ${{ steps.wait.outputs.conclusion }}

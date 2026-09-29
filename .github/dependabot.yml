@@ -1,0 +1,33 @@
+# Keeps the supply-chain hardening in .github/workflows/*.yml reviewable rather
+# than manual: Dependabot opens a PR whenever one of the pinned action SHAs has a
+# newer release, and whenever a direct npm dependency has a security or version
+# update. Every bump still lands as a diff a maintainer approves — the pins never
+# move on their own.
+version: 2
+updates:
+  # GitHub Actions: updates the SHA pins + version comments in .github/workflows/.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "scope:dashboard"
+      - "dependencies"
+
+  # Application dependencies declared in package.json / package-lock.json.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "scope:dashboard"
+      - "dependencies"
+    # The SDK is consumed as a vendored tarball until registry publish
+    # authorization lands, so a registry bump here would fight the vendoring.
+    ignore:
+      - dependency-name: "stellar-agent-guard-sdk"

@@ -12,32 +12,37 @@
     "dev": "next dev",
     "dev:demo": "NEXT_PUBLIC_DEMO_MODE=true next dev",
     "build": "next build",
+    "export": "EXPORT_BUILD=true next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:e2e": "playwright test tests/e2e",
+    "test:perf": "playwright test tests/perf",
     "prove:phase3": "node scripts/prove-phase3.ts",
     "inspect": "node scripts/inspect-instance.ts"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^17.0.1",
-    "next": "^16.3.5",
+    "next": "^16.3.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "stellar-agent-guard-sdk": "^0.1.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.3.6",
+    "@playwright/test": "^1.63.0",
     "@types/jsdom": "^30.0.0",
-    "@types/next": "^8.0.7",
+    "@types/next": "^9.0.0",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "axe-core": "^4.13.0",
     "eslint": "^9.39.0",
-    "eslint-config-next": "^16.3.5",
+    "eslint-config-next": "^16.3.6",
     "jsdom": "^30.1.1",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.2"
   }
 }

@@ -21,6 +21,7 @@ import {
 } from "../lib/guard/assetCapsCsv.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { ErrorBlock, ScopeNotice, starLink } from "./bits.tsx";
+import { writeControlState } from "../lib/guard/observerMode.ts";
 
 /**
  * The no-code configurator.
@@ -32,7 +33,6 @@ import { ErrorBlock, ScopeNotice, starLink } from "./bits.tsx";
  */
 export function PolicyForm() {
   const { signer, guard, server, refresh, snapshot, pushEvents, wallet, notifyTabs } = useGuard();
-
   // `null` means "not edited yet", which is what lets the form seed itself from
   // the installed policy without an effect: the seed is derived during render and
   // the operator's first keystroke takes over from it.
@@ -56,6 +56,20 @@ export function PolicyForm() {
 
   const validation = buildPolicyConfig(effective);
   const issues = validation.ok ? [] : validation.issues;
+
+  // Every write here is inert for the same reason, in the same words as every
+  // other write control in the console (issue #101).
+  const installControl = writeControlState(wallet, {
+    busy,
+    extraDisabled: issues.length > 0,
+    label: "install the policy",
+  });
+  const exportControl = writeControlState(wallet, {
+    busy,
+    extraDisabled: issues.length > 0,
+    label: "export the policy",
+  });
+  const revokeControl = writeControlState(wallet, { busy, label: "revoke the policy" });
 
   function set<K extends keyof PolicyDraft>(key: K, value: PolicyDraft[K]) {
     setDraft((current) => ({ ...(current ?? installedDraft), [key]: value }));
@@ -413,13 +427,27 @@ export function PolicyForm() {
       )}
 
       <div className="row" style={{ marginTop: 14 }}>
-        <button disabled={!wallet || busy || issues.length > 0} onClick={() => void submit()}>
+        <button
+          disabled={installControl.disabled}
+          title={installControl.title}
+          onClick={() => void submit()}
+        >
           {busy ? "Working…" : "Sign and install policy"}
         </button>
-        <button className="secondary" disabled={!wallet || busy || issues.length > 0} onClick={() => void submit(true)}>
+        <button
+          className="secondary"
+          disabled={exportControl.disabled}
+          title={exportControl.title}
+          onClick={() => void submit(true)}
+        >
           Export XDR
         </button>
-        <button className="secondary" disabled={!wallet || busy} onClick={() => void revoke()}>
+        <button
+          className="secondary"
+          disabled={revokeControl.disabled}
+          title={revokeControl.title}
+          onClick={() => void revoke()}
+        >
           Revoke policy (default deny)
         </button>
         <button className="secondary" onClick={() => { setDraft(EMPTY_DRAFT); setAssetCapChanges({}); }} disabled={busy}>
