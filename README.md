@@ -155,6 +155,12 @@ Two step-by-step procedures cover the console's high-stakes operations. They are
 | [**Emergency Freeze & Security Incident Response**](./docs/runbooks/emergency-freeze.md) | An agent is behaving abnormally or a key may be compromised. Covers incident classification and response timelines, the two-step `PanicPanel` confirmation ritual, verifying frozen status on chain (dashboard reader and Stellar CLI), preserving evidence, agent/admin key rotation, root-cause analysis and the unfreeze checklist. |
 | [**Routine Policy Updates & Audit**](./docs/runbooks/policy-updates.md) | Changing caps, allowlists, execution windows, pause state or the dead-man switch. Covers capturing a rollback baseline, staging and validating a draft in `PolicyForm`, the `set_policy` rolling-window and dead-man-switch resets, the pre-flight security checklist (including verifying token contract IDs on Stellar Expert), post-submission verification and rollback/recovery. |
 
+## Developer Guides
+
+| Guide | Description |
+| --- | --- |
+| [**Agent Integration Guide**](./docs/guides/agent-integration.md) | Connecting custom AI agent runtimes (TypeScript, Python, LangChain, ElizaOS) to a deployed Guard, configuring environment variables, sending heartbeats, and diagnosing telemetry in the dashboard. |
+
 ## Architecture
 
 Stellar Agent Guard operates across three dedicated repositories:
