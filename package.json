@@ -23,7 +23,7 @@
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^17.0.1",
-    "next": "^16.3.5",
+    "next": "^16.3.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "stellar-agent-guard-sdk": "^0.1.0"
