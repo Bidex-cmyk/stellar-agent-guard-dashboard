@@ -29,7 +29,8 @@ test("assembleFromSimulation correctly builds transaction without prompting for 
   });
 
   assert.ok(assembled.transaction, "Assembly should return a transaction object");
-  assert.equal(assembled.transaction.fee, "200", "Total fee should be 100 base + 100 minResourceFee");
+  // Total fee = 100 (base INCLUSION_FEE) + 115 (minResourceFee 100 padded +15% Standard headroom)
+  assert.equal(assembled.transaction.fee, "215", "Total fee should be 100 base + 115 padded resource fee (Standard +15%)");
   
   const xdr = assembled.transaction.toXDR();
   assert.ok(typeof xdr === "string", "Exported XDR should be a string");

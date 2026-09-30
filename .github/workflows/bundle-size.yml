@@ -126,8 +126,14 @@ jobs:
                 event: "pull_request",
                 per_page: 10,
               });
-              run = data.workflow_runs.find((candidate) => candidate.status !== "in_progress" && candidate.status !== "queued")
-                ?? data.workflow_runs[0] ?? null;
+              // Exclude runs that are still pending approval (action_required):
+              // those will never produce an artifact, so treat them as not-yet-done.
+              run = data.workflow_runs.find(
+                (candidate) =>
+                  candidate.status !== "in_progress" &&
+                  candidate.status !== "queued" &&
+                  candidate.conclusion !== "action_required"
+              ) ?? null;
               if (run && run.status === "completed") break;
               run = null;
               await new Promise((resolve) => setTimeout(resolve, 15000));
@@ -137,7 +143,12 @@ jobs:
 
       - name: Download the report artifact
         id: artifact
-        if: steps.wait.outputs.run-id != ''
+        # Only attempt download when analyze actually completed (not action_required/timeout).
+        if: |
+          steps.wait.outputs.run-id != '' &&
+          steps.wait.outputs.conclusion != 'action_required' &&
+          steps.wait.outputs.conclusion != 'timeout'
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: bundle-size-report
@@ -145,21 +156,28 @@ jobs:
           run-id: ${{ steps.wait.outputs.run-id }}
 
       - name: Post or update the PR comment
+        if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require("fs");
             const marker = "<!-- bundle-size-report -->";
+            const conclusion = process.env.conclusion;
             let body = null;
             if (fs.existsSync("bundle-report.md")) {
               body = fs.readFileSync("bundle-report.md", "utf8");
             } else {
+              let reason = "";
+              if (conclusion === "action_required") {
+                reason = " The analysis workflow is awaiting maintainer approval for this fork PR. Once approved and re-run, this comment will update automatically.";
+              } else if (conclusion === "timeout") {
+                reason = " (timed out waiting for the analysis run)";
+              }
               body = [
                 marker,
                 "## Bundle size report",
                 "",
-                "The bundle-size analysis run did not produce a report" +
-                  `${inputs.conclusion === "timeout" ? " (timed out waiting for it)" : ""}.`,
+                "The bundle-size analysis run did not produce a report." + reason,
                 "Check the `bundle-size` workflow logs on this pull request.",
               ].join("\n");
             }

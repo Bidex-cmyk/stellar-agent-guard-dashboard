@@ -143,6 +143,11 @@ test.describe("guard lifecycle: deploy → configure → freeze → unfreeze", (
     await expect(policyPanel.locator(".error")).toHaveCount(0);
 
     await policyPanel.getByRole("button", { name: "Sign and install policy" }).click();
+    // The diff is the operator's last look before the wallet prompt, so it has to
+    // be acknowledged explicitly before anything is signed.
+    const policyDiff = page.getByRole("dialog", { name: "Policy changes" });
+    await expect(policyDiff).toBeVisible();
+    await policyDiff.getByRole("button", { name: "Confirm and sign" }).click();
     await expect(page.getByText("set_policy landed on chain")).toBeVisible({ timeout: 60_000 });
 
     // The form re-seeds from what the chain now reports — the receipt is the

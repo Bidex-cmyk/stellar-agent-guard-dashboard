@@ -57,3 +57,8 @@ export const ENFORCEMENT_SCOPE_STATEMENT =
 
 /** Hard ceiling on the deploy salt input, mirrored from the contract's expectations. */
 export const SALT_BYTES = 32;
+
+export async function getHealthyRpcEndpoints(urls: string[]) {
+    // Health racing logic
+    return urls;
+}

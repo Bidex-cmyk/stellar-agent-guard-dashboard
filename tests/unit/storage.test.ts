@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { xdr } from "@stellar/stellar-sdk";
+import { decodeStorageFootprint } from "../../lib/guard/storage.ts";
+import {
+  MOCK_GUARD,
+  i128,
+  persistentDataEntry,
+  structScVal,
+  u64,
+  windowScVal,
+} from "../mocks/sorobanFixtures.ts";
+
+/** Wrap a contract-data fixture in a full `LedgerEntry`, as `getLedgerEntries` returns it. */
+function asLedgerEntry(data: xdr.LedgerEntryData): string {
+  return new xdr.LedgerEntry({
+    lastModifiedLedgerSeq: 42,
+    data,
+    ext: xdr.LedgerEntryExt.v0(),
+  }).toXdr("base64");
+}
+
+/** A TTL entry as the ledger stores it for a persistent contract key. */
+function ttlEntry(liveUntilLedgerSeq: number): string {
+  return new xdr.LedgerEntry({
+    lastModifiedLedgerSeq: 42,
+    data: xdr.LedgerEntryData.ttl(
+      new xdr.TtlEntry({ keyHash: new Uint8Array(32).fill(7), liveUntilLedgerSeq }),
+    ),
+    ext: xdr.LedgerEntryExt.v0(),
+  }).toXdr("base64");
+}
+
+describe("decodeStorageFootprint", () => {
+  test("decodes DataKey::Policy into its typed struct", () => {
+    const policy = structScVal({
+      per_tx_cap: i128(1_000n),
+      window_secs: u64(86_400n),
+      window_cap: i128(5_000n),
+      allow_any_recipient: xdr.ScVal.scvBool(false),
+    });
+    const xdrBase64 = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "Policy", policy).data);
+
+    const decoded = decodeStorageFootprint<{ per_tx_cap: bigint; window_cap: bigint }>(xdrBase64, "Policy");
+
+    const value = decoded.value as { per_tx_cap: bigint; window_cap: bigint };
+    assert.equal(decoded.decoded, true);
+    assert.equal(decoded.dataKey, "Policy");
+    assert.equal(value.per_tx_cap, 1_000n);
+    assert.equal(value.window_cap, 5_000n);
+  });
+
+  test("decodes DataKey::Window with its total and entries", () => {
+    const window = windowScVal({
+      total: 30n,
+      entries: [
+        { ts: 100n, amount: 10n },
+        { ts: 200n, amount: 20n },
+      ],
+    });
+    const xdrBase64 = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "Window", window).data);
+
+    const decoded = decodeStorageFootprint<{ total: bigint; entries: Array<{ ts: bigint; amount: bigint }> }>(
+      xdrBase64,
+      "Window",
+    );
+
+    const value = decoded.value as { total: bigint; entries: Array<{ ts: bigint; amount: bigint }> };
+    assert.equal(decoded.decoded, true);
+    assert.equal(value.total, 30n);
+    assert.deepEqual(value.entries, [
+      { amount: 10n, ts: 100n },
+      { amount: 20n, ts: 200n },
+    ]);
+  });
+
+  test("decodes DataKey::DeadManSwitch and DataKey::Paused scalars", () => {
+    const heartbeat = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "DeadManSwitch", u64(1_789_481_700n)).data);
+    const paused = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "Paused", xdr.ScVal.scvBool(true)).data);
+
+    assert.equal(decodeStorageFootprint<bigint>(heartbeat, "DeadManSwitch").value, 1_789_481_700n);
+    assert.equal(decodeStorageFootprint<boolean>(paused, "Paused").value, true);
+  });
+
+  test("accepts a bare LedgerEntryData without the wrapping entry", () => {
+    const data = persistentDataEntry(MOCK_GUARD, "Paused", xdr.ScVal.scvBool(false)).data;
+    const decoded = decodeStorageFootprint<boolean>(data.toXdr("base64"), "Paused");
+    assert.equal(decoded.decoded, true);
+    assert.equal(decoded.value, false);
+  });
+
+  test("reports remaining ledger lifetime from a TTL entry", () => {
+    const decoded = decodeStorageFootprint(ttlEntry(1_234_567), "Policy");
+    assert.equal(decoded.decoded, true);
+    assert.equal(decoded.ttl, 1_234_567);
+    assert.equal(decoded.value, undefined);
+  });
+
+  test("returns Uninitialized for an empty footprint", () => {
+    assert.equal(decodeStorageFootprint("", "Policy").value, "Uninitialized");
+    assert.equal(decodeStorageFootprint("", "Policy").decoded, false);
+  });
+
+  test("returns Uninitialized for invalid XDR instead of throwing", () => {
+    const decoded = decodeStorageFootprint("invalid_xdr", "Window");
+    assert.equal(decoded.decoded, false);
+    assert.equal(decoded.value, "Uninitialized");
+  });
+
+  test("returns Uninitialized for a non-contract-data entry", () => {
+    const codeEntry = new xdr.LedgerEntry({
+      lastModifiedLedgerSeq: 1,
+      data: xdr.LedgerEntryData.contractCode(
+        new xdr.ContractCodeEntry({
+          ext: xdr.ContractCodeEntryExt.v0(),
+          hash: new Uint8Array(32).fill(1),
+          code: new Uint8Array([0x00, 0x61, 0x73, 0x6d]),
+        }),
+      ),
+      ext: xdr.LedgerEntryExt.v0(),
+    }).toXdr("base64");
+
+    assert.equal(decodeStorageFootprint(codeEntry, "Policy").value, "Uninitialized");
+  });
+});
