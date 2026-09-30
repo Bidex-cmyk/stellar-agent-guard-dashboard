@@ -17,6 +17,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:visual": "playwright test --config=playwright.visual.config.ts",
+    "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots",
     "test:e2e": "playwright test tests/e2e",
     "test:perf": "playwright test tests/perf",
     "prove:phase3": "node scripts/prove-phase3.ts",
