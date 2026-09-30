@@ -18,6 +18,9 @@ import { useGuard } from "./GuardProvider.tsx";
 import { starLink } from "./bits.tsx";
 import { useRouter } from "next/navigation";
 import { freighterSigner } from "../lib/guard/wallet.ts";
+// Cadence + jitter from the one poll config (`lib/guard/polling.ts`); the value
+// (5s) is the interval this table already polled at.
+import { DEFAULT_POLL_CADENCE as POLL_CADENCE, startPollingLoop } from "../lib/guard/polling.ts";
 
 export function FleetTable() {
   const { wallet, server } = useGuard();
@@ -48,10 +51,12 @@ export function FleetTable() {
     };
     
     fetchFleet();
-    const interval = setInterval(fetchFleet, 5000);
+    const stop = startPollingLoop(POLL_CADENCE.fleetMs, () => {
+      void fetchFleet();
+    });
     return () => {
       mounted = false;
-      clearInterval(interval);
+      stop();
     };
   }, [server]);
 

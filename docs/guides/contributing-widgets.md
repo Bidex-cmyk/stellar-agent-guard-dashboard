@@ -28,8 +28,8 @@ The dashboard follows a unidirectional, context-driven architecture:
                                            ▼
                       ┌─────────────────────────────────────────┐
                       │              GuardProvider              │
-                      │  - Automatic snapshot polling (15s)     │
-                      │  - Cursor-based telemetry polling (5s)  │
+                      │  - Automatic snapshot polling (15s†)    │
+                      │  - Cursor-based telemetry polling (5s†) │
                       │  - Cross-tab coordination (TabSync)     │
                       │  - Connected wallet state (Freighter)   │
                       └────────────────────┬────────────────────┘
@@ -223,7 +223,7 @@ function formatMetric(...) { ... }
 
 ## Using `GuardProvider` and `useGuard()`
 
-`GuardProvider` (`components/GuardProvider.tsx`) manages all client-side state. It polls on-chain state every 15 seconds (`SNAPSHOT_INTERVAL_MS = 15_000`) and event telemetry every 5 seconds (`FEED_INTERVAL_MS = 5_000`).
+`GuardProvider` (`components/GuardProvider.tsx`) manages all client-side state. It polls on-chain state every 15 seconds (`DEFAULT_POLL_CADENCE.statusMs`) and event telemetry every 5 seconds (`DEFAULT_POLL_CADENCE.feedMs`). Both intervals — and the fleet table's — live in one config, [`lib/guard/polling.ts`](../../../lib/guard/polling.ts), and each poll loop runs with full jitter by default: every delay is uniform in `[interval × 0.8, interval]`, the SDK telemetry listener's thundering-herd defense (SDK issue #71) applied to multi-tab operators, so two tabs of the console don't poll the shared RPC in lockstep. †The diagram's intervals are the jitter windows' upper bounds, not exact tick times.
 
 ### The `GuardContextValue` Interface
 

@@ -88,8 +88,11 @@ import {
 } from "../lib/guard/demoFixtures.ts";
 import { resolvePreset, validateRange, type RangePreset, type TimeRange } from "../lib/guard/ledgerTime.ts";
 
-const SNAPSHOT_INTERVAL_MS = 15_000;
-const FEED_INTERVAL_MS = 5_000;
+// Poll cadences live in one config (`lib/guard/polling.ts`), which also adds
+// full jitter to each loop (the SDK's fleet-thundering-herd reasoning, issue
+// #71, applied to multi-tab operators). Values are the pre-centralization
+// ones, preserved per site.
+import { DEFAULT_POLL_CADENCE as POLL_CADENCE, startPollingLoop } from "../lib/guard/polling.ts";
 
 /** Display labels for the historical-range presets, mirroring `ledgerTime.ts`. */
 const RANGE_PRESET_LABELS: Record<Exclude<RangePreset, "custom">, string> = {
@@ -486,8 +489,8 @@ export function GuardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
-    const timer = setInterval(() => void refresh(), SNAPSHOT_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const stop = startPollingLoop(POLL_CADENCE.statusMs, () => void refresh());
+    return stop;
   }, [refresh]);
 
   const selectGuard = useCallback(
@@ -687,10 +690,10 @@ export function GuardProvider({ children }: { children: ReactNode }) {
       }
     };
     void tick();
-    const timer = setInterval(() => void tick(), FEED_INTERVAL_MS);
+    const stop = startPollingLoop(POLL_CADENCE.feedMs, () => void tick());
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stop();
     };
   }, [feed.watching, pushEvents, demo]);
 
