@@ -367,6 +367,20 @@ label.field .hint {
   letter-spacing: 0.08em;
 }
 
+/* Empty-state primitive, shared by every data surface (fleet table, telemetry
+ * feed, tx history): a centered title + recovery hint, with the surface adding
+ * its own recovery control below. Append here; do not fork per-component. */
+.fleet-empty strong,
+.empty-state strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.fleet-empty span,
+.empty-state span {
+  display: block;
+}
+
 .demo-badge {
   display: flex;
   align-items: center;
