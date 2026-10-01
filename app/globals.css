@@ -418,6 +418,25 @@ code {
 }
 
 /*
+ * Policy presets: the archetype picker and its profile legend, visually grouped
+ * so the legend reads as documentation for the select rather than as form
+ * fields.
+ */
+.preset-picker {
+  margin-top: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.preset-legend {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/*
  * Keyboard accessibility (WCAG 2.1 AA, SC 2.4.7 + 1.4.11).
  *
  * Every interactive element gets a high-visibility focus indicator on

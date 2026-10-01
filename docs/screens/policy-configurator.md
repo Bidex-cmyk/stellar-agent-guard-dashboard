@@ -2,6 +2,7 @@
 
 Interactive no-code form for configuring smart account guardrails:
 
+- **Policy Presets**: One-click archetypes (Strict Micro-Agent, Standard DeFi Bot, High-Throughput Arbitrage), each badged Conservative, Balanced or Permissive. Selecting one asks to confirm before replacing the current draft; placeholder addresses must be replaced before installing.
 - **Per-Transaction Spend Cap**: Limits maximum tokens moved in a single call.
 - **Rolling Window Cap & Duration**: Enforces spending limits over a rolling time window (seconds).
 - **Asset Allowlists**: Enforces accepted SAC tokens.

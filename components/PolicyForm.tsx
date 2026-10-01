@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PolicyDraft } from "../lib/guard/policyForm.ts";
 import {
   EMPTY_DRAFT,
@@ -8,6 +8,14 @@ import {
   describeDraft,
   draftFromConfig,
 } from "../lib/guard/policyForm.ts";
+import {
+  POLICY_PRESETS,
+  SECURITY_PROFILES,
+  draftFromPreset,
+  policyPresetById,
+  type PolicyPreset,
+  type SecurityProfile,
+} from "../lib/guard/presets.ts";
 import { installPolicy, revokePolicy } from "../lib/guard/guardOps.ts";
 import { computePolicyDiff, type PolicyDiff } from "../lib/guard/policyDiff.ts";
 import { PolicyDiffModal } from "./PolicyDiffModal.tsx";
@@ -49,8 +57,74 @@ export function PolicyForm() {
   const [error, setError] = useState<string | null>(null);
   const [pendingDiff, setPendingDiff] = useState<PolicyDiff | null>(null);
   const [assetCapChanges, setAssetCapChanges] = useState<Record<string, AssetCapChange>>({});
+  // A preset is applied in two steps: choosing one stages it here, and the
+  // confirmation dialog applies it. The draft is never replaced by a stray
+  // change event on the select.
+  const [pendingPreset, setPendingPreset] = useState<PolicyPreset | null>(null);
   const csvInput = useRef<HTMLInputElement>(null);
   const jsonInput = useRef<HTMLInputElement>(null);
+  const presetSelect = useRef<HTMLSelectElement>(null);
+  const presetDialog = useRef<HTMLDivElement>(null);
+
+  const confirmingPreset = pendingPreset !== null;
+
+  // Same focus discipline as the freeze dialog: move focus into the modal, keep
+  // Tab inside it, close on Escape, and return focus to the select afterwards.
+  useEffect(() => {
+    if (!confirmingPreset) return;
+    const dialog = presetDialog.current;
+    if (!dialog) return;
+
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+
+    dialog.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setPendingPreset(null);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      const inside = active !== null && dialog.contains(active);
+      if (event.shiftKey && (active === first || !inside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !inside)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate late ref read, see PanicPanel
+      presetSelect.current?.focus();
+    };
+  }, [confirmingPreset]);
+
+  function applyPreset(preset: PolicyPreset) {
+    setDraft(draftFromPreset(preset));
+    setAssetCapChanges({});
+    setOutcome(null);
+    setError(null);
+    setPendingPreset(null);
+  }
 
   // Editing starts from the policy that is actually installed, not from an empty
   // form that looks like a reset. With nothing installed yet, it starts empty.
@@ -178,6 +252,42 @@ export function PolicyForm() {
         Installing a policy resets the rolling window and restarts the dead-man-switch clock, so a
         freshly installed policy always starts with full grace.
       </p>
+
+      <div className="preset-picker">
+        <label className="field" style={{ maxWidth: 420 }}>
+          <span className="lbl">Policy presets</span>
+          <select
+            ref={presetSelect}
+            value=""
+            disabled={busy}
+            aria-label="Apply a policy preset"
+            onChange={(event) => {
+              const preset = policyPresetById(event.target.value);
+              if (preset) setPendingPreset(preset);
+            }}
+          >
+            <option value="">Choose a vetted starting point…</option>
+            {POLICY_PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.name} — {SECURITY_PROFILES[preset.securityProfile].label}
+              </option>
+            ))}
+          </select>
+          <span className="hint">
+            Fills every field from a vetted archetype. You will be asked to confirm before your
+            current draft is replaced.
+          </span>
+        </label>
+        <div className="preset-legend">
+          {POLICY_PRESETS.map((preset) => (
+            <div key={preset.id} className="tiny">
+              <SecurityProfileBadge profile={preset.securityProfile} />{" "}
+              <strong>{preset.name}</strong>
+              <span className="muted"> — {preset.explanation}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="split" style={{ marginTop: 14 }}>
         <div>
@@ -488,6 +598,40 @@ export function PolicyForm() {
         </button>
       </div>
 
+      {pendingPreset && (
+        <div className="modal-backdrop">
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preset-confirm-title"
+            ref={presetDialog}
+            tabIndex={-1}
+          >
+            <strong id="preset-confirm-title">Replace current draft?</strong>
+            <p className="tiny">
+              Applying the {pendingPreset.name} preset overwrites every field in the form — caps,
+              allowlists, active window, pause state and dead-man grace.
+            </p>
+            <p className="tiny">
+              <SecurityProfileBadge profile={pendingPreset.securityProfile} />{" "}
+              {SECURITY_PROFILES[pendingPreset.securityProfile].description}
+            </p>
+            <p className="tiny mono">{describeDraft(draftFromPreset(pendingPreset))}</p>
+            <p className="tiny muted">
+              The placeholder asset, recipient and protocol addresses in this preset must be replaced
+              with your own before installing.
+            </p>
+            <div className="row">
+              <button onClick={() => applyPreset(pendingPreset)}>Replace draft</button>
+              <button className="secondary" onClick={() => setPendingPreset(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && <ErrorBlock title="The policy write did not complete" detail={error} />}
 
       {outcome?.kind === "invoked" && <OutcomeBlock result={outcome.result} verb="set_policy" onClose={() => setOutcome(null)} />}
@@ -506,6 +650,20 @@ export function PolicyForm() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The security-profile badge: a colour-coded pill an operator can read at a
+ * glance. The full description lives on `title` so the trade-off is available
+ * without cluttering the row.
+ */
+function SecurityProfileBadge({ profile }: { profile: SecurityProfile }) {
+  const meta = SECURITY_PROFILES[profile];
+  return (
+    <span className={`pill ${meta.pillClass}`} title={meta.description}>
+      {meta.label}
+    </span>
   );
 }
 
