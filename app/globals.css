@@ -283,6 +283,31 @@ label.field .hint {
   margin-bottom: 4px;
 }
 
+/*
+ * Freeze dry-run output. Visually distinct from a write receipt (banner plus a
+ * bordered panel) so a simulation can never be mistaken for a broadcast freeze.
+ */
+.dry-run {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.dry-run-banner {
+  display: inline-block;
+  border: 1px dashed var(--warn);
+  background: #2a2010;
+  color: var(--warn);
+  border-radius: 7px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .demo-badge {
   display: flex;
   align-items: center;

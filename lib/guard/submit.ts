@@ -335,7 +335,7 @@ function safeJson(value: unknown): string {
  * them. The RPC puts them either beside the error or inside it, and the host's
  * own `fn_call`/`error`/`log` entries are what make a trap diagnosable.
  */
-function diagnosticEventsOf(response: unknown): unknown[] {
+export function diagnosticEventsOf(response: unknown): unknown[] {
   const candidate = response as {
     diagnosticEventsXdr?: unknown;
     events?: unknown;

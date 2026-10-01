@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { InvokeResult } from "../lib/guard/submit.ts";
-import { freezeGuard, unfreezeGuard } from "../lib/guard/guardOps.ts";
+import {
+  freezeGuard,
+  simulateFreeze,
+  unfreezeGuard,
+  type FreezeSimulationResult,
+} from "../lib/guard/guardOps.ts";
 import { refusedEventsFromDiagnostics } from "../lib/guard/telemetry.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { WRITE_DISABLED_HINT, writeControlState } from "../lib/guard/observerMode.ts";
@@ -30,12 +35,125 @@ interface Report {
   note: string;
 }
 
+/**
+ * Render a freeze dry run.
+ *
+ * The banner is not decoration: a simulation output looks similar enough to a
+ * real write's receipt that without an explicit "not broadcast" marker an
+ * operator could believe the account was frozen when it was not. The report
+ * states the execution result, the authorizations the call would need, and its
+ * priced resource cost — and says plainly that recording-mode simulation does
+ * not enforce auth, so a passing dry run is not a promise the real call passes.
+ */
+function DryRunReport({
+  simulation,
+  onDismiss,
+}: {
+  simulation: FreezeSimulationResult;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="dry-run">
+      <div className="dry-run-banner" role="status">
+        DRY RUN - NOT BROADCAST
+      </div>
+
+      {simulation.kind === "refused" ? (
+        <p className="tiny">
+          The simulation refused the call, so a real freeze would fail in pre-flight too. Nothing was
+          broadcast. The detail names the stage: <span className="mono">{simulation.detail}</span>
+        </p>
+      ) : (
+        <>
+          <p className="tiny">
+            <span className="pill ok">simulated</span> <code>{simulation.fn}()</code> would execute.
+            The account is unchanged — no transaction was built, signed or sent.
+          </p>
+
+          <p className="tiny" style={{ marginBottom: 2 }}>
+            <strong>Required authorization signatures</strong>
+          </p>
+          {simulation.authorizations.length === 0 ? (
+            <p className="tiny muted">
+              No separate authorization entries. The wallet&apos;s transaction-envelope signature (not
+              requested in a dry run) would be the only signature needed.
+            </p>
+          ) : (
+            <ul className="tiny" style={{ margin: "0 0 6px 16px", padding: 0 }}>
+              {simulation.authorizations.map((entry, index) => (
+                <li key={`${entry.kind}-${entry.address ?? "none"}-${index}`}>
+                  {entry.kind === "source_account"
+                    ? "Source account — covered by the envelope signature"
+                    : entry.kind === "address"
+                      ? `${entry.address ?? "unknown address"} must sign an authorization entry`
+                      : "An authorization this dashboard cannot satisfy"}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="tiny muted">
+            {simulation.separateSignaturesRequired === 0
+              ? "0 separate auth-entry signatures required."
+              : `${simulation.separateSignaturesRequired} separate auth-entry signature(s) required.`}{" "}
+            None are requested by a dry run.
+          </p>
+
+          <p className="tiny" style={{ marginBottom: 2 }}>
+            <strong>Resource fees</strong>
+          </p>
+          <table className="events">
+            <tbody>
+              <tr>
+                <td>Resource fee (CPU, ledger I/O, events)</td>
+                <td className="mono">{simulation.resourceFeeStroops} stroops</td>
+              </tr>
+              <tr>
+                <td>Inclusion fee floor</td>
+                <td className="mono">{simulation.inclusionFeeStroops} stroops</td>
+              </tr>
+              <tr>
+                <td>Total fee if submitted</td>
+                <td className="mono">{simulation.totalFeeStroops} stroops</td>
+              </tr>
+              <tr>
+                <td>Footprint ledger keys</td>
+                <td className="mono">{simulation.footprintEntries}</td>
+              </tr>
+              <tr>
+                <td>Simulated against ledger</td>
+                <td className="mono">{simulation.latestLedger ?? "—"}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p className="tiny muted" style={{ marginTop: 8 }}>
+            Recording-mode simulation does not enforce authorization, so a passing dry run checks
+            connectivity, permissions and resource pricing — it is not a guarantee the enforced
+            submission will pass later.
+          </p>
+        </>
+      )}
+
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="secondary" onClick={onDismiss}>
+          Dismiss dry run
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PanicPanel() {
   const { signer, guard, server, refresh, snapshot, pushEvents, wallet, notifyTabs } = useGuard();
   const [phase, setPhase] = useState<Phase>("idle");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  // The dry-run result is kept separate from `report` so a simulation can never
+  // be mistaken for a freeze that happened. `simulating` disables the button
+  // while the read-only call is in flight.
+  const [simulation, setSimulation] = useState<FreezeSimulationResult | null>(null);
+  const [simulating, setSimulating] = useState(false);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -115,6 +233,25 @@ export function PanicPanel() {
     extraDisabled: alreadyFrozen === false,
     label: "unfreeze this account",
   });
+
+  /**
+   * Dry-run the freeze: simulate the call and show what it would cost and
+   * require. This path deliberately never signs and never broadcasts, so it is
+   * safe to run on a live account (and the assertion is pinned by a unit test).
+   */
+  async function runSimulation() {
+    setSimulating(true);
+    setSimulation(null);
+    setError(null);
+    try {
+      const result = await simulateFreeze({ server, signer: signer(), guard });
+      setSimulation(result);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSimulating(false);
+    }
+  }
 
   async function run(action: "freeze" | "unfreeze", exportOnly = false) {
     setError(null);
@@ -233,6 +370,14 @@ export function PanicPanel() {
           >
             Export Unfreeze XDR
           </button>
+          <button
+            className="secondary"
+            disabled={!wallet || simulating}
+            onClick={() => void runSimulation()}
+            title="Simulate freeze() read-only: no wallet prompt, no broadcast"
+          >
+            {simulating ? "Simulating…" : "Simulate freeze (dry run)"}
+          </button>
         </div>
       )}
 
@@ -294,6 +439,8 @@ export function PanicPanel() {
       )}
 
       {error && <ErrorBlock title="The freeze could not be completed" detail={error} />}
+
+      {simulation && <DryRunReport simulation={simulation} onDismiss={() => setSimulation(null)} />}
 
       {report?.result.kind === "exported" && (
         <div className="modal-backdrop" onClick={() => { setReport(null); setPhase("idle"); }}>
