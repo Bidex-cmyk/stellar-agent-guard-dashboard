@@ -47,6 +47,7 @@ import {
   type IntegrityReport,
 } from "../lib/guard/wasmInspector.ts";
 import { useGuard } from "./GuardProvider.tsx";
+import { CopyButton } from "./CopyButton.tsx";
 import { writeControlState } from "../lib/guard/observerMode.ts";
 import { MigrationWizard } from "./MigrationWizard.tsx";
 import { ErrorBlock, OutcomeList, starLink } from "./bits.tsx";
@@ -418,9 +419,12 @@ export function DeployPanel() {
         <div className="grid">
           <div className="stat">
             <div className="k">Predicted guard address</div>
-            <div className="v small mono">{plan.predicted}</div>
+            <div className="v small mono" title={plan.predicted}>
+              {plan.predicted}
+            </div>
             <div className="n">
-              computed before signing, then confirmed by reading the instance back
+              computed before signing, then confirmed by reading the instance back{" "}
+              <CopyButton value={plan.predicted} label="predicted guard address" />
             </div>
           </div>
           <div className="stat">
@@ -620,7 +624,8 @@ export function DeployPanel() {
               ? "Deployed and verified against the pinned artifact"
               : "A contract was created, but it is NOT the pinned artifact"}
           </strong>
-          <span className="tiny mono">{outcome.guard}</span>
+          <span className="tiny mono">{outcome.guard}</span>{" "}
+          <CopyButton value={outcome.guard} label="deployed guard address" />
           <OutcomeList steps={outcome.steps} />
           {outcome.identity && (
             <p className="tiny muted">

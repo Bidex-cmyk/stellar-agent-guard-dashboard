@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { ReadResult } from "../lib/guard/chain.ts";
 import { ENFORCEMENT_SCOPE_STATEMENT } from "../lib/guard/network.ts";
 import { lookupLabel, subscribeAddressBook } from "../lib/guard/addressBook.ts";
+import { CopyButton } from "./CopyButton.tsx";
 import {
   formatRawStroops,
   formatStroopsWithUnit,
@@ -196,7 +197,8 @@ export function OutcomeList({
           <span className="mono">{step.label}</span>
           {step.result.hash && (
             <div className="mono" style={{ marginLeft: 4 }}>
-              tx {starLink(step.result.hash)} ledger {step.result.ledger ?? "-"}
+              tx {starLink(step.result.hash)} ledger {step.result.ledger ?? "-"}{" "}
+              <CopyButton value={step.result.hash} label={`${step.label} transaction hash`} />
             </div>
           )}
           {step.result.detail && <div className="mono muted">{step.result.detail}</div>}
@@ -211,6 +213,22 @@ export function starLink(hash: string): ReactNode {
     <a href={`https://stellar.expert/explorer/testnet/tx/${hash}`} target="_blank" rel="noreferrer">
       <span className="mono">{short(hash, 10, 6)}</span>
     </a>
+  );
+}
+
+/**
+ * A transaction hash as an explorer link plus a copy button (issue #33).
+ *
+ * The link is for looking the transaction up; the button is for taking the
+ * exact hash somewhere else — support tickets, other explorers, runbook
+ * records. Both, because each alone loses the other use.
+ */
+export function TxHashCell({ hash }: { hash: string }): ReactNode {
+  return (
+    <span className="copyable">
+      {starLink(hash)}
+      <CopyButton value={hash} label="transaction hash" />
+    </span>
   );
 }
 

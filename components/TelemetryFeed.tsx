@@ -7,7 +7,7 @@ import { STREAM_BUFFER_LIMIT } from "../lib/guard/telemetry.ts";
 import { useGuard, useGuardEvents } from "./GuardProvider.tsx";
 import { TelemetryAlerts } from "./TelemetryAlerts.tsx";
 import { TelemetryChart } from "./TelemetryChart.tsx";
-import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
+import { ErrorBlock, relativeTime, short, starLink, TxHashCell } from "./bits.tsx";
 import { DateRangePicker } from "./DateRangePicker.tsx";
 import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
 import {
@@ -397,7 +397,7 @@ const TelemetryRow = memo(function TelemetryRow({ event }: { event: GuardEvent }
       <td className="mono tiny">{event.ledger ?? "—"}</td>
       <td>
         {event.transactionHash ? (
-          starLink(event.transactionHash)
+          <TxHashCell hash={event.transactionHash} />
         ) : (
           <span className="tiny muted">none — never broadcast</span>
         )}

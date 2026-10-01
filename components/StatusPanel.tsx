@@ -3,6 +3,7 @@
 import { deadManRemaining, describePolicy, isDeadManFrozen } from "stellar-agent-guard-sdk";
 import { useGuard } from "./GuardProvider.tsx";
 import { ErrorBlock, Read, Stat, relativeTime, short } from "./bits.tsx";
+import { CopyButton } from "./CopyButton.tsx";
 import { PHASE1_ARTIFACT, NETWORK } from "../lib/guard/network.ts";
 import { compilePrintReport } from "../lib/guard/printReport.ts";
 import { calculateVelocity } from "../lib/guard/velocity.ts";
@@ -44,7 +45,7 @@ export function StatusPanel() {
       </div>
 
       <p className="tiny muted" style={{ marginTop: 10 }}>
-        <span className="mono">{guard}</span>
+        <span className="mono">{guard}</span> <CopyButton value={guard} label="guard address" />
       </p>
 
       {snapshotError && (

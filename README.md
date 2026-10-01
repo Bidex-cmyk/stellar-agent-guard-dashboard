@@ -107,6 +107,10 @@ While demo mode is active:
 
 Demo mode is strictly opt-in. When neither the environment flag nor the query parameter is set, none of the fixture code is reached and the console keeps its **no mock state** guarantee: every number is read live from Soroban RPC, and a failed read is rendered as a failure, never as a zero.
 
+### Copy and confirmation micro-UX
+
+Operator-facing identifiers (guard addresses, transaction hashes, deploy result IDs) render with one-click copy buttons (`components/CopyButton.tsx`) that write the **full** value, swap to `Copied ✓` for two seconds, announce the outcome through the shared announcer, and — when the async Clipboard API is unavailable (insecure-context dev over plain http, or denied permission) — show an inline "select manually" hint instead of failing silently.
+
 ### Verification and Development
 
 ```bash

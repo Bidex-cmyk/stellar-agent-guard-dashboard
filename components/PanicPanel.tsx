@@ -12,6 +12,7 @@ import { refusedEventsFromDiagnostics } from "../lib/guard/telemetry.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { WRITE_DISABLED_HINT, writeControlState } from "../lib/guard/observerMode.ts";
 import { ErrorBlock, starLink } from "./bits.tsx";
+import { CopyButton } from "./CopyButton.tsx";
 
 /**
  * The emergency panic button.
@@ -165,6 +166,7 @@ export function PanicPanel() {
   // whenever the dialog goes away. Without this a modal is either a keyboard
   // trap (focus escapes into the page behind it) or a dead end (focus lands
   // nowhere on dismissal) — both fail WCAG 2.1 AA keyboard requirements.
+  // (Extracted into the shared ConfirmDialog in issue #34.)
   useEffect(() => {
     if (!confirming) return;
     const dialog = dialogRef.current;
@@ -540,7 +542,8 @@ export function PanicPanel() {
           {report.result.kind === "submitted" && (
             <p className="tiny" style={{ marginTop: 6 }}>
               transaction {starLink(report.result.hash)} · included in ledger{" "}
-              {report.result.ledger ?? "—"}
+              {report.result.ledger ?? "—"}{" "}
+              <CopyButton value={report.result.hash} label="freeze transaction hash" />
             </p>
           )}
           {report.result.kind === "refused" && (
