@@ -18,6 +18,7 @@ import {
 } from "../lib/guard/exportFormats.ts";
 import { NETWORK } from "../lib/guard/network.ts";
 import { useAnnounce } from "../lib/guard/useAnnounce.ts";
+import { eventsToCsv, eventsToJson, exportFilename } from "../lib/guard/eventExport.ts";
 import { useDemoMode } from "../lib/guard/useDemoMode.ts";
 import {
   EMPTY_TELEMETRY_FILTER,
@@ -89,6 +90,31 @@ export function TelemetryFeed() {
   const [filter, setFilter] = useState<TelemetryFilter>(EMPTY_TELEMETRY_FILTER);
   const announce = useAnnounce();
   const demo = useDemoMode();
+
+  /**
+   * Download the feed through the shared export path (issue #37). The schema,
+   * BOM and filename rules all live in `lib/guard/eventExport.ts` — this is a
+   * thin binding, not a second exporter.
+   */
+  function downloadExport(format: "csv" | "json") {
+    const content =
+      format === "csv"
+        ? eventsToCsv(rows, guard)
+        : JSON.stringify(eventsToJson(rows, guard), null, 2);
+    const type = format === "csv" ? "text/csv;charset=utf-8" : "application/json";
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = exportFilename(guard, format, rows.length);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    announce(
+      `Exported ${rows.length} event${rows.length === 1 ? "" : "s"} as ${format.toUpperCase()}`,
+    );
+  }
 
   // The three controls and the exports all act on the same projection, so a
   // CSV/NDJSON download is provably the filtered view on screen — one row in,
@@ -255,12 +281,19 @@ export function TelemetryFeed() {
         />
         <button
           className="secondary"
-          onClick={() =>
-            downloadText("guard-telemetry.csv", telemetryToCsv(rows), "text/csv;charset=utf-8")
-          }
+          onClick={() => downloadExport("csv")}
           disabled={rows.length === 0}
+          title="Stable append-only schema (docs/export-schema.md): schema_version, guard, topic, kind, source, decision, reason, reason_label, ledger, ledger_closed_at, transaction_hash — BOM-prefixed for Excel"
         >
           Export CSV
+        </button>
+        <button
+          className="secondary"
+          onClick={() => downloadExport("json")}
+          disabled={rows.length === 0}
+          title="Same schema as the CSV export, as one JSON object: schemaVersion, columns, guard, rows"
+        >
+          Export JSON
         </button>
         <button
           className="secondary"

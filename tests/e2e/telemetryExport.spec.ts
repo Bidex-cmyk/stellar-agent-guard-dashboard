@@ -12,7 +12,7 @@
 
 import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
+import { explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import { installSorobanRpcMock } from "./sorobanRpcMock.ts";
 import { installFreighterMock } from "./walletMock.ts";
 import {
@@ -21,7 +21,7 @@ import {
   MIXED_FEED_TOTAL,
   mixedTelemetryEvents,
 } from "../mocks/eventFixtures.ts";
-import { TELEMETRY_CSV_COLUMNS } from "../../lib/guard/telemetryExport.ts";
+import { EVENT_EXPORT_COLUMNS } from "../../lib/guard/eventExport.ts";
 
 /** The console's default guard — the one the feed tails in this test. */
 const WATCHED_GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
@@ -139,26 +139,32 @@ test.describe("telemetry feed: filtering and export", () => {
     );
 
     // ── CSV export of the filtered view ────────────────────────────────────
+    // This branch exports the issue-#37 schema (docs/export-schema.md): the
+    // column list is append-only and the file is BOM-prefixed so Excel opens
+    // it as UTF-8. Strip the BOM before parsing, then assert the full column
+    // list — including the columns this branch adds.
     const csv = await exportedText(feed(page), "Export CSV");
-    const table = parseCsv(csv);
-    expect(table[0]).toEqual([...TELEMETRY_CSV_COLUMNS]);
+    expect(csv.charCodeAt(0)).toBe(0xfeff); // UTF-8 BOM
+    const table = parseCsv(csv.replace(/^\uFEFF/, ""));
+    expect(table[0]).toEqual([...EVENT_EXPORT_COLUMNS]);
     const dataRows = table.slice(1);
     expect(dataRows).toHaveLength(MIXED_FEED_COUNTS.blocked);
 
-    const column = (name: string): number => TELEMETRY_CSV_COLUMNS.indexOf(name as never);
+    const column = (name: string): number => EVENT_EXPORT_COLUMNS.indexOf(name as never);
     const ledgers = new Set<string>();
     for (const row of dataRows) {
-      expect(row).toHaveLength(TELEMETRY_CSV_COLUMNS.length);
+      expect(row).toHaveLength(EVENT_EXPORT_COLUMNS.length);
+      expect(row[column("schema_version")]).toBe("1");
+      expect(row[column("guard")]).toBe(WATCHED_GUARD);
       expect(row[column("kind")]).toBe("auth_checked");
       expect(row[column("topic")]).toBe(GUARD_EVENT_TOPICS.authChecked);
       expect(row[column("decision")]).toBe("blocked");
       expect(row[column("reason")]).toBe(MIXED_FEED_BLOCK_REASON);
       expect(row[column("source")]).toBe("ledger");
-      expect(row[column("contract_id")]).toBe(WATCHED_GUARD);
+      // The raw symbol is paired with the SDK's human explanation.
+      expect(row[column("reason_label")]).toBe(explainReason(MIXED_FEED_BLOCK_REASON));
       expect(row[column("ledger")]).toMatch(/^\d+$/);
       expect(row[column("transaction_hash")]).toMatch(/^[0-9a-f]{64}$/);
-      // The body column is quoted JSON, not a truncated fragment.
-      expect(() => JSON.parse(row[column("data")]!)).not.toThrow();
       ledgers.add(row[column("ledger")]!);
     }
     // One row per event, with no duplicates standing in for missing ones.
@@ -175,6 +181,9 @@ test.describe("telemetry feed: filtering and export", () => {
       expect(record["topic"]).toBe(GUARD_EVENT_TOPICS.authChecked);
       expect(record["decision"]).toBe("blocked");
       expect(record["reason"]).toBe(MIXED_FEED_BLOCK_REASON);
+      // The NDJSON button streams upstream's telemetryToNdjson, which keys the
+      // emitting contract as contract_id (the CSV above is our exporter's
+      // append-only schema, where the column is `guard`).
       expect(record["contract_id"]).toBe(WATCHED_GUARD);
       expect(String(record["ledger"])).toMatch(/^\d+$/);
     }
@@ -187,8 +196,8 @@ test.describe("telemetry feed: filtering and export", () => {
     await feed(page).getByRole("button", { name: "Clear filters" }).click();
     await expect(rows).toHaveCount(MIXED_FEED_TOTAL);
 
-    const fullCsv = parseCsv(await exportedText(feed(page), "Export CSV"));
-    expect(fullCsv[0]).toEqual([...TELEMETRY_CSV_COLUMNS]);
+    const fullCsv = parseCsv((await exportedText(feed(page), "Export CSV")).replace(/^\uFEFF/, ""));
+    expect(fullCsv[0]).toEqual([...EVENT_EXPORT_COLUMNS]);
     expect(fullCsv).toHaveLength(MIXED_FEED_TOTAL + 1);
 
     const fullNdjson = (await exportedText(feed(page), "Export NDJSON"))
