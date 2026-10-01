@@ -31,17 +31,34 @@ export function parseAddressList(csv: string): ParsedAddress[] {
     const description = parts[2];
 
     if (!isValidGAddress(address) && !isValidCAddress(address)) {
-      results.push({ address, symbol, description, row, error: `Row ${row}: invalid Stellar address "${address}"` });
+      results.push({
+        address,
+        ...(symbol !== undefined && { symbol }),
+        ...(description !== undefined && { description }),
+        row,
+        error: `Row ${row}: invalid Stellar address "${address}"`,
+      });
       return;
     }
 
     if (seen.has(address)) {
-      results.push({ address, symbol, description, row, error: `Row ${row}: duplicate address "${address}"` });
+      results.push({
+        address,
+        ...(symbol !== undefined && { symbol }),
+        ...(description !== undefined && { description }),
+        row,
+        error: `Row ${row}: duplicate address "${address}"`,
+      });
       return;
     }
 
     seen.add(address);
-    results.push({ address, symbol, description, row });
+    results.push({
+      address,
+      ...(symbol !== undefined && { symbol }),
+      ...(description !== undefined && { description }),
+      row,
+    });
   });
 
   return results;

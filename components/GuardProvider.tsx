@@ -69,6 +69,7 @@ import {
   type NetworkSwitchOutcome,
 } from "../lib/guard/networkSwitch.ts";
 import { isObserverSession, readSourceFor } from "../lib/guard/observerMode.ts";
+import { memoryWiper } from "../lib/guard/memoryWiper.ts";
 import type { WalletSigner } from "../lib/guard/submit.ts";
 import {
   useIdleTimer,
@@ -266,6 +267,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   // `?demo=true` is only visible in the browser, so demo mode is settled here.
   useEffect(() => {
     if (demoFlagFromQuery(window.location.search)) setDemo(true);
+    return memoryWiper.registerBrowserEvents();
   }, []);
 
   // In demo mode the feed is seeded and watching immediately: a visitor should
@@ -387,6 +389,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setNetworkMismatch(null);
     tabSync.broadcast("WALLET_DISCONNECTED", { guard: guardRef.current });
+    memoryWiper.wipe();
   }, [tabSync]);
 
   const notifyTabs = useCallback(
@@ -487,7 +490,11 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const timer = setInterval(() => void refresh(), SNAPSHOT_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const unregister = memoryWiper.add(() => clearInterval(timer));
+    return () => {
+      clearInterval(timer);
+      unregister();
+    };
   }, [refresh]);
 
   const selectGuard = useCallback(
@@ -657,9 +664,11 @@ export function GuardProvider({ children }: { children: ReactNode }) {
         }));
       };
       const demoTimer = setInterval(emit, 4_000);
+      const unregister = memoryWiper.add(() => clearInterval(demoTimer));
       return () => {
         demoCancelled = true;
         clearInterval(demoTimer);
+        unregister();
       };
     }
 
@@ -688,9 +697,14 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     };
     void tick();
     const timer = setInterval(() => void tick(), FEED_INTERVAL_MS);
+    const unregister = memoryWiper.add(() => {
+      cancelled = true;
+      clearInterval(timer);
+    });
     return () => {
       cancelled = true;
       clearInterval(timer);
+      unregister();
     };
   }, [feed.watching, pushEvents, demo]);
 

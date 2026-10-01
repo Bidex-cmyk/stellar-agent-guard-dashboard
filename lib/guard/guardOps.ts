@@ -322,7 +322,7 @@ export async function deployGuard(params: {
   const predicted = await predictContractId({
     deployerPublicKey: signer.address,
     salt,
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
 
   // ── Ensure the exact bytecode is a live code entry ─────────────────────
@@ -341,7 +341,7 @@ export async function deployGuard(params: {
       signer,
       operation: Operation.uploadContractWasm({ wasm }),
       label: "upload_contract_wasm",
-      passphrase: params.passphrase,
+      ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
     });
     record(`upload_contract_wasm (${PHASE1_ARTIFACT.wasmBytes} bytes)`, upload);
     if (upload.kind !== "submitted") {
@@ -359,7 +359,7 @@ export async function deployGuard(params: {
       constructorArgs: [],
     }),
     label: "create_custom_contract",
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
   record(
     `create_custom_contract (wasm ${PHASE1_ARTIFACT.wasmHash.slice(0, 12)}…) → ${predicted}`,
@@ -405,7 +405,7 @@ export async function initializeGuard(params: {
     fn: "initialize",
     args: [addressToScVal(params.signer.address), xdr.ScVal.scvBytes(pubkey)],
     signer: params.signer,
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
 }
 
@@ -428,8 +428,8 @@ export async function installPolicy(params: {
     fn: "set_policy",
     args: [built.scval],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
   return { kind: "invoked", result };
 }
@@ -448,8 +448,8 @@ export function freezeGuard(params: {
     fn: "freeze",
     args: [],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
 }
 
@@ -639,8 +639,8 @@ export function unfreezeGuard(params: {
     fn: "unfreeze",
     args: [],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
 }
 
@@ -658,8 +658,8 @@ export function revokePolicy(params: {
     fn: "revoke_policy",
     args: [],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
 }
 
@@ -686,7 +686,7 @@ export async function rotateAgentKey(params: {
     fn: "rotate_agent_key",
     args: [xdr.ScVal.scvBytes(pubkey)],
     signer: params.signer,
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
 }
 

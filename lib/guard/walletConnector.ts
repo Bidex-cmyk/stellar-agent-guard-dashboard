@@ -446,7 +446,10 @@ export function createFreighterConnector(loader: (() => Promise<FreighterApiModu
       const freighter = await api();
       const details = await freighter.getNetworkDetails();
       assertFreighterOk(details, "read the wallet network");
-      return normalizeWalletNetwork({ name: details.network, passphrase: details.networkPassphrase });
+      return normalizeWalletNetwork({
+        ...(details.network === undefined ? {} : { name: details.network }),
+        ...(details.networkPassphrase === undefined ? {} : { passphrase: details.networkPassphrase }),
+      });
     },
     async signTransaction(transactionXdr, options) {
       const freighter = await api();
@@ -492,7 +495,9 @@ export function createXbullConnector(provider: XbullProvider | null): WalletConn
         const connected = await wallet.connect();
         const address =
           typeof connected === "string" ? connected : requireAddress(connected.publicKey ?? connected.address, id);
-        const network = normalizeWalletNetwork({ name: typeof connected === "string" ? null : connected.network });
+        const network = normalizeWalletNetwork(
+          typeof connected === "string" ? { name: null } : connected.network === undefined ? {} : { name: connected.network },
+        );
         return { address, network: network.passphrase ? network : await this.getNetwork() };
       } catch (error) {
         throw mapConnectorError(error, id, "connect");
@@ -579,7 +584,9 @@ export function createAlbedoConnector(provider: AlbedoProvider | null): WalletCo
                 });
         });
         const address = requireAddress(answer.address, id);
-        const network = normalizeWalletNetwork({ name: answer.network });
+        const network = normalizeWalletNetwork(
+          answer.network === undefined ? {} : { name: answer.network },
+        );
         return { address, network: network.passphrase ? network : await this.getNetwork() };
       } catch (error) {
         throw mapConnectorError(error, id, "connect");

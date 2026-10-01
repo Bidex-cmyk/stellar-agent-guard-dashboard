@@ -35,7 +35,10 @@ function ev(ledger: number, overrides: Partial<GuardEvent> = {}): GuardEvent {
 const ledgers = (events: readonly GuardEvent[]) => events.map((event) => event.ledger);
 
 function apply(buffer: StreamBuffer, batches: GuardEvent[][], limit?: number): StreamBuffer {
-  return batches.reduce((current, batch) => ingestEvents(current, batch, { limit }), buffer);
+  return batches.reduce(
+    (current, batch) => ingestEvents(current, batch, limit === undefined ? {} : { limit }),
+    buffer,
+  );
 }
 
 describe("live ingest", () => {
@@ -135,7 +138,7 @@ describe("resume reconciliation", () => {
         batches.forEach((batch, index) => {
           if (index === pauseAt) buffer = pauseStream(buffer);
           if (index === resumeAt) buffer = resumeStream(buffer, limit);
-          buffer = ingestEvents(buffer, batch, { limit });
+          buffer = ingestEvents(buffer, batch, limit === undefined ? {} : { limit });
         });
         buffer = resumeStream(buffer, limit);
         assert.deepEqual(ledgers(buffer.rows), ledgers(unpaused.rows), `pause@${pauseAt} resume@${resumeAt}`);
@@ -174,7 +177,10 @@ describe("with the real poller", () => {
     const server = {
       getLatestLedger: async () => ({ sequence: 100 }),
       getEvents: async (request: { cursor?: string; startLedger?: number }) => {
-        requests.push({ cursor: request.cursor, startLedger: request.startLedger });
+        requests.push({
+          ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+          ...(request.startLedger === undefined ? {} : { startLedger: request.startLedger }),
+        });
         const page = pages[call] ?? [];
         call += 1;
         const events = page.map(

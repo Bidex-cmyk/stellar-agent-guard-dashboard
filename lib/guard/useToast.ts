@@ -95,8 +95,8 @@ export class ToastStore {
         id,
         kind: input.kind,
         title: input.title,
-        detail: input.detail,
-        error: input.error,
+        ...(input.detail !== undefined ? { detail: input.detail } : {}),
+        ...(input.error !== undefined ? { error: input.error } : {}),
         createdAt: Date.now(),
       },
     ];
@@ -156,11 +156,11 @@ export function useToast(store: ToastStore = toastStore): UseToast {
   return {
     toasts,
     toast: (input) => store.dispatch(input),
-    success: (title, detail) => store.dispatch({ kind: "success", title, detail }),
-    warning: (title, detail) => store.dispatch({ kind: "warning", title, detail }),
-    info: (title, detail) => store.dispatch({ kind: "info", title, detail }),
+    success: (title, detail) => store.dispatch({ kind: "success", title, ...(detail !== undefined ? { detail } : {}) }),
+    warning: (title, detail) => store.dispatch({ kind: "warning", title, ...(detail !== undefined ? { detail } : {}) }),
+    info: (title, detail) => store.dispatch({ kind: "info", title, ...(detail !== undefined ? { detail } : {}) }),
     error: (title, error, detail) =>
-      store.dispatch({ kind: "error", title, detail, error }),
+      store.dispatch({ kind: "error", title, error, ...(detail !== undefined ? { detail } : {}) }),
     dismiss: (id) => store.dismiss(id),
     clear: () => store.clear(),
   };

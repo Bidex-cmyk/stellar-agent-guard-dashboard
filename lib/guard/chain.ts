@@ -99,7 +99,7 @@ export async function readPersistentEntry<T = unknown>(
       }),
     );
     const response = await server.getLedgerEntries(key);
-    const entry = response.entries[0] as unknown as {
+    const entry = response.entries?.[0] as unknown as {
       val?: { contractData?: { val?: Xdr.ScVal } | (() => { val?: () => Xdr.ScVal }) };
     } | undefined;
     if (!entry?.val) return { ok: true, value: null };

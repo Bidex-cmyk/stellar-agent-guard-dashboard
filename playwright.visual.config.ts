@@ -28,7 +28,7 @@ export default defineConfig({
   // A regression run that flakes teaches the team to ignore it, so CI gets one
   // retry and nothing more; a genuine diff survives a retry.
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  ...(process.env.CI ? { workers: 1 } : {}),
   reporter: process.env.CI
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],

@@ -147,7 +147,7 @@ export function createSaltAddressPredictor(params: {
     predict({
       deployerPublicKey: params.deployerPublicKey,
       salt,
-      passphrase: params.passphrase,
+      ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
     });
 }
 

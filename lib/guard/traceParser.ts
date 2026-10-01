@@ -160,12 +160,16 @@ function normalize(event: unknown): Normalized | null {
   }
   if (kind === "error" || kind === "diagnostic") {
     const code = record.error;
-    if (typeof code === "number") return { kind: "error", error: decodeGuardError(code), contractId, functionName };
-    if (typeof code === "string") return { kind: "error", error: code, contractId, functionName };
-    return { kind: "error", error: describeError(record.errorScVal, record.message ?? record.data), contractId, functionName };
+    if (typeof code === "number") {
+      return { kind: "error", error: decodeGuardError(code), ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
+    }
+    if (typeof code === "string") {
+      return { kind: "error", error: code, ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
+    }
+    return { kind: "error", error: describeError(record.errorScVal, record.message ?? record.data), ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
   }
   if (kind === "log") {
-    return { kind: "log", message: String(record.message ?? record.data ?? ""), contractId, functionName };
+    return { kind: "log", message: String(record.message ?? record.data ?? ""), ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
   }
 
   return normalizeContractEvent(event);

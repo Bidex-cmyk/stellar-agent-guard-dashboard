@@ -214,7 +214,15 @@ describe("xBull connector", () => {
   });
 
   it("says plainly when a provider cannot sign a Soroban auth entry", async () => {
-    const connector = createXbullConnector(createFakeXbull({ signAuthEntry: undefined }));
+    // A provider whose injected API has no signAuthEntry at all (as some xBull
+    // builds do not): the absent method must read as "unsupported", not crash.
+    // It is spelled as an omitted property because exactOptionalPropertyTypes
+    // forbids assigning an explicit `undefined` over the fake's default.
+    const connector = createXbullConnector({
+      connect: async () => ({ publicKey: ADDRESS, network: "testnet" }),
+      getNetwork: async () => "testnet",
+      signTransaction: async (xdr) => `xbull:${xdr}`,
+    });
     await assert.rejects(
       () => connector.signAuthEntry("AUTH"),
       (error: unknown) =>
@@ -367,7 +375,7 @@ describe("provider detection and selection", () => {
 
   it("reads the injected wallet objects off a window-like scope", () => {
     const xbull = createFakeXbull();
-    const scope = readWalletScope({ xbull, albedo: undefined }, null);
+    const scope = readWalletScope({ xbull }, null);
     assert.equal(scope.xbull, xbull);
     assert.equal(scope.albedo, null);
   });
