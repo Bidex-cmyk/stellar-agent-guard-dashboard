@@ -70,7 +70,10 @@ test("the target schema is the contract's own field list", () => {
       "dms_grace_secs",
     ],
   );
-  assert.equal(new Set(TARGET_POLICY_FIELDS.map((field) => field.name)).size, TARGET_POLICY_FIELDS.length);
+  assert.equal(
+    new Set(TARGET_POLICY_FIELDS.map((field) => field.name)).size,
+    TARGET_POLICY_FIELDS.length,
+  );
   // Nothing may be optional: a defaulted field is a silent policy change.
   assert.ok(TARGET_POLICY_FIELDS.every((field) => field.required));
 });
@@ -105,9 +108,17 @@ test("an alternative spelling folds too, so an explorer dump is portable", () =>
   const report = validateSourcePolicy(
     source({ per_tx_limit: 500n, windowlengthsecs: 30n, recipientallowlist: [RECIPIENT] }),
   );
-  assert.ok(report.renamed.some((entry) => entry.from === "per_tx_limit" && entry.to === "per_tx_cap"));
-  assert.ok(report.renamed.some((entry) => entry.from === "windowlengthsecs" && entry.to === "window_secs"));
-  assert.ok(report.renamed.some((entry) => entry.from === "recipientallowlist" && entry.to === "recipients"));
+  assert.ok(
+    report.renamed.some((entry) => entry.from === "per_tx_limit" && entry.to === "per_tx_cap"),
+  );
+  assert.ok(
+    report.renamed.some((entry) => entry.from === "windowlengthsecs" && entry.to === "window_secs"),
+  );
+  assert.ok(
+    report.renamed.some(
+      (entry) => entry.from === "recipientallowlist" && entry.to === "recipients",
+    ),
+  );
 });
 
 test("a field this build has no place for is reported, not quietly dropped", () => {
@@ -167,7 +178,10 @@ test("a protocol rule without its function list is flagged", () => {
   assert.match(loose.typeIssues.join("; "), /at least one entry is not a \{ contract, fns \} rule/);
 
   // `fns: null` means "every function", which is a real rule and must pass.
-  assert.equal(validateSourcePolicy(source({ protocols: [{ contract: TOKEN, fns: null }] })).ok, true);
+  assert.equal(
+    validateSourcePolicy(source({ protocols: [{ contract: TOKEN, fns: null }] })).ok,
+    true,
+  );
 });
 
 test("numeric strings migrate into exact bigints", () => {
@@ -190,7 +204,10 @@ test("two spellings of one field keep the first and say which", () => {
   const plan = planMigration({ ...exported(), per_tx_cap: 4242n });
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
-  assert.match(plan.report.notes.join(" "), /Both "perTxCap" and "per_tx_cap" map to per_tx_cap; the first one is used/);
+  assert.match(
+    plan.report.notes.join(" "),
+    /Both "perTxCap" and "per_tx_cap" map to per_tx_cap; the first one is used/,
+  );
   assert.equal(plan.source.per_tx_cap, 1000n, "documented precedence beats a silent guess");
 });
 
@@ -207,7 +224,10 @@ test("a migration goes through the same validator as a hand-typed policy", () =>
   assert.equal(windowless.ok, false);
   if (windowless.ok) return;
   assert.match(windowless.message, /fails this build's validation/);
-  assert.match(windowless.message, /windowSecs: A rolling-window cap needs a non-zero window length/);
+  assert.match(
+    windowless.message,
+    /windowSecs: A rolling-window cap needs a non-zero window length/,
+  );
 
   const expired = planMigration(source({ active_from: 500n, active_until: 400n }));
   assert.equal(expired.ok, false);
@@ -256,7 +276,16 @@ test("a clean plan hands over an installable draft and an honest summary", () =>
 
 test("disabled rules migrate as blank, not as zero", () => {
   const plan = planMigration(
-    source({ per_tx_cap: 0n, window_cap: 0n, window_secs: 0n, dms_grace_secs: 0n, assets: [], allow_any_recipient: true, recipients: [], protocols: [] }),
+    source({
+      per_tx_cap: 0n,
+      window_cap: 0n,
+      window_secs: 0n,
+      dms_grace_secs: 0n,
+      assets: [],
+      allow_any_recipient: true,
+      recipients: [],
+      protocols: [],
+    }),
   );
   assert.equal(plan.ok, true, plan.ok ? "" : plan.message);
   if (!plan.ok) return;
@@ -278,7 +307,14 @@ test("a paused guard stays paused after the move", () => {
 });
 
 test("the review rows describe the policy the target will get", () => {
-  const plan = planMigration(source({ protocols: [{ contract: TOKEN, fns: null }, { contract: OTHER_TOKEN, fns: ["borrow", "repay"] }] }));
+  const plan = planMigration(
+    source({
+      protocols: [
+        { contract: TOKEN, fns: null },
+        { contract: OTHER_TOKEN, fns: ["borrow", "repay"] },
+      ],
+    }),
+  );
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
 

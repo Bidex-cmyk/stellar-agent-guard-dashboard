@@ -30,18 +30,25 @@ test("assembleFromSimulation correctly builds transaction without prompting for 
 
   assert.ok(assembled.transaction, "Assembly should return a transaction object");
   // Total fee = 100 (base INCLUSION_FEE) + 115 (minResourceFee 100 padded +15% Standard headroom)
-  assert.equal(assembled.transaction.fee, "215", "Total fee should be 100 base + 115 padded resource fee (Standard +15%)");
-  
+  assert.equal(
+    assembled.transaction.fee,
+    "215",
+    "Total fee should be 100 base + 115 padded resource fee (Standard +15%)",
+  );
+
   const xdr = assembled.transaction.toXDR();
   assert.ok(typeof xdr === "string", "Exported XDR should be a string");
   assert.ok(xdr.length > 0, "Exported XDR should not be empty");
-  
+
   // Verify the base64 XDR can be properly deserialized into the expected transaction
-  const deserializedTx = TransactionBuilder.fromXDR(xdr, passphrase) as import("@stellar/stellar-sdk").Transaction;
+  const deserializedTx = TransactionBuilder.fromXDR(
+    xdr,
+    passphrase,
+  ) as import("@stellar/stellar-sdk").Transaction;
   assert.equal(deserializedTx.source, sourceAccountId, "Source account should match");
   assert.equal(deserializedTx.sequence, "12346", "Sequence number should be incremented");
   assert.equal(deserializedTx.operations.length, 1, "Should contain exactly one operation");
-  
+
   const op = deserializedTx.operations[0] as any;
   assert.equal(op.type, "invokeHostFunction", "Operation should be an invokeHostFunction");
 });

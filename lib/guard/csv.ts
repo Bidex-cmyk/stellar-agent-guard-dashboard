@@ -7,11 +7,11 @@ export interface ParsedAddress {
 }
 
 function isValidGAddress(addr: string): boolean {
-  return addr.startsWith('G') && addr.length === 56 && /^[A-Z2-7]+$/.test(addr);
+  return addr.startsWith("G") && addr.length === 56 && /^[A-Z2-7]+$/.test(addr);
 }
 
 function isValidCAddress(addr: string): boolean {
-  return addr.startsWith('C') && addr.length === 56 && /^[A-Z2-7]+$/.test(addr);
+  return addr.startsWith("C") && addr.length === 56 && /^[A-Z2-7]+$/.test(addr);
 }
 
 export function parseAddressList(csv: string): ParsedAddress[] {
@@ -25,8 +25,8 @@ export function parseAddressList(csv: string): ParsedAddress[] {
     if (!trimmed) return;
 
     // Support both simple address lines and "address,symbol,description" CSV format
-    const parts = trimmed.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
-    const address = parts[0] ?? '';
+    const parts = trimmed.split(",").map((p) => p.trim().replace(/^"|"$/g, ""));
+    const address = parts[0] ?? "";
     const symbol = parts[1];
     const description = parts[2];
 
@@ -65,5 +65,5 @@ export function parseAddressList(csv: string): ParsedAddress[] {
 }
 
 export function exportRFC4180(addresses: string[]): string {
-  return addresses.map(a => `"${a}"`).join('\r\n');
+  return addresses.map((a) => `"${a}"`).join("\r\n");
 }

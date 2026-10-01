@@ -7,10 +7,7 @@ import { RetryableError, withBackoff } from "../../lib/guard/retry.ts";
  * delays can be captured without actually waiting, and with jitter made
  * deterministic.
  */
-async function captureDelays(
-  random: number,
-  operation: () => Promise<unknown>,
-): Promise<number[]> {
+async function captureDelays(random: number, operation: () => Promise<unknown>): Promise<number[]> {
   const delays: number[] = [];
   const realSetTimeout = globalThis.setTimeout;
   const realRandom = Math.random;

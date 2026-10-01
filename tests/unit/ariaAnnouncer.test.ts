@@ -155,10 +155,7 @@ test("rapid distinct messages queue and drain one at a time, in order", async ()
       () => mounted.polite.textContent === "third message",
       "the third message to be spoken",
     );
-    await waitFor(
-      () => pendingAnnouncements().length === 0,
-      "the queue to drain",
-    );
+    await waitFor(() => pendingAnnouncements().length === 0, "the queue to drain");
     assert.equal(mounted.polite.textContent, "third message");
   } finally {
     await mounted.unmount();

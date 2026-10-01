@@ -17,7 +17,7 @@ export class RpcPool {
     try {
       const response = await fetch(`${this.currentUrl}${endpoint}`, options);
       this.rtt = Date.now() - start;
-      
+
       if (response.status === 429 || response.status === 503) {
         this.handleFailure();
       } else {
@@ -49,7 +49,7 @@ export class RpcPool {
   startHealthCheck(interval: number = 10000) {
     if (this.healthCheckTimer) clearTimeout(this.healthCheckTimer);
     this.healthCheckTimer = setTimeout(() => {
-      this.fetch('/health').catch(() => {});
+      this.fetch("/health").catch(() => {});
       this.startHealthCheck(interval);
     }, interval);
   }

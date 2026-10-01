@@ -35,8 +35,7 @@ export default defineConfig({
 
   // The project name is part of the snapshot path, so a desktop baseline can
   // never be compared against a mobile one by accident.
-  snapshotPathTemplate:
-    "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}{ext}",
+  snapshotPathTemplate: "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}{ext}",
 
   expect: {
     toHaveScreenshot: {

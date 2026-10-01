@@ -127,7 +127,9 @@ export function upsertContact(
   const address = input.address.trim();
   const label = input.label.trim();
   if (!isValidAddress(address)) {
-    throw new Error(`"${address || "(empty)"}" is not a valid Stellar address (a G… or C… account).`);
+    throw new Error(
+      `"${address || "(empty)"}" is not a valid Stellar address (a G… or C… account).`,
+    );
   }
   if (label === "") {
     throw new Error("A contact needs a label.");
@@ -135,9 +137,7 @@ export function upsertContact(
   const existing = loadAddressBook(storage);
   const prior = existing.find((contact) => contact.address === address);
   const next = prior
-    ? existing.map((contact) =>
-        contact.address === address ? { ...contact, label } : contact,
-      )
+    ? existing.map((contact) => (contact.address === address ? { ...contact, label } : contact))
     : [{ address, label, addedAt: new Date().toISOString() }, ...existing].slice(
         0,
         ADDRESS_BOOK_LIMIT,
@@ -206,7 +206,9 @@ export function parseAddressBook(source: string): Contact[] {
     const address = typeof value.address === "string" ? value.address.trim() : "";
     const label = typeof value.label === "string" ? value.label.trim() : "";
     if (!isValidAddress(address)) {
-      throw new Error(`Contact ${index + 1}: "${address || "(empty)"}" is not a valid Stellar address.`);
+      throw new Error(
+        `Contact ${index + 1}: "${address || "(empty)"}" is not a valid Stellar address.`,
+      );
     }
     if (label === "") {
       throw new Error(`Contact ${index + 1}: a label is required.`);

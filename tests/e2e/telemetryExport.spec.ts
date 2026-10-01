@@ -105,7 +105,9 @@ test.describe("telemetry feed: filtering and export", () => {
 
     const rows = feed(page).locator("table.events tbody tr");
     await expect(rows).toHaveCount(MIXED_FEED_TOTAL, { timeout: 30_000 });
-    await expect(feed(page)).toContainText(`Feed holds the most recent ${MIXED_FEED_TOTAL} event(s)`);
+    await expect(feed(page)).toContainText(
+      `Feed holds the most recent ${MIXED_FEED_TOTAL} event(s)`,
+    );
     expect(chain.deliveredEvents).toBe(MIXED_FEED_TOTAL);
 
     // ── Topic filter ───────────────────────────────────────────────────────
@@ -120,9 +122,7 @@ test.describe("telemetry feed: filtering and export", () => {
     await expect(rows).toHaveCount(MIXED_FEED_TOTAL);
     await contractSearch.fill("CNOTAREALCONTRACTADDRESS");
     await expect(rows).toHaveCount(0);
-    await expect(feed(page)).toContainText(
-      `The feed still holds ${MIXED_FEED_TOTAL} event(s)`,
-    );
+    await expect(feed(page)).toContainText(`The feed still holds ${MIXED_FEED_TOTAL} event(s)`);
     await contractSearch.fill("");
     await expect(rows).toHaveCount(MIXED_FEED_TOTAL);
 
@@ -206,8 +206,6 @@ test.describe("telemetry feed: filtering and export", () => {
     expect(decisions.filter((decision) => decision === "blocked")).toHaveLength(
       MIXED_FEED_COUNTS.blocked,
     );
-    expect(kinds.filter((kind) => kind === "heartbeat")).toHaveLength(
-      MIXED_FEED_COUNTS.heartbeat,
-    );
+    expect(kinds.filter((kind) => kind === "heartbeat")).toHaveLength(MIXED_FEED_COUNTS.heartbeat);
   });
 });

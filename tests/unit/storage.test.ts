@@ -41,7 +41,10 @@ describe("decodeStorageFootprint", () => {
     });
     const xdrBase64 = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "Policy", policy).data);
 
-    const decoded = decodeStorageFootprint<{ per_tx_cap: bigint; window_cap: bigint }>(xdrBase64, "Policy");
+    const decoded = decodeStorageFootprint<{ per_tx_cap: bigint; window_cap: bigint }>(
+      xdrBase64,
+      "Policy",
+    );
 
     const value = decoded.value as { per_tx_cap: bigint; window_cap: bigint };
     assert.equal(decoded.decoded, true);
@@ -60,12 +63,15 @@ describe("decodeStorageFootprint", () => {
     });
     const xdrBase64 = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "Window", window).data);
 
-    const decoded = decodeStorageFootprint<{ total: bigint; entries: Array<{ ts: bigint; amount: bigint }> }>(
-      xdrBase64,
-      "Window",
-    );
+    const decoded = decodeStorageFootprint<{
+      total: bigint;
+      entries: Array<{ ts: bigint; amount: bigint }>;
+    }>(xdrBase64, "Window");
 
-    const value = decoded.value as { total: bigint; entries: Array<{ ts: bigint; amount: bigint }> };
+    const value = decoded.value as {
+      total: bigint;
+      entries: Array<{ ts: bigint; amount: bigint }>;
+    };
     assert.equal(decoded.decoded, true);
     assert.equal(value.total, 30n);
     assert.deepEqual(value.entries, [
@@ -75,8 +81,12 @@ describe("decodeStorageFootprint", () => {
   });
 
   test("decodes DataKey::DeadManSwitch and DataKey::Paused scalars", () => {
-    const heartbeat = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "DeadManSwitch", u64(1_789_481_700n)).data);
-    const paused = asLedgerEntry(persistentDataEntry(MOCK_GUARD, "Paused", xdr.ScVal.scvBool(true)).data);
+    const heartbeat = asLedgerEntry(
+      persistentDataEntry(MOCK_GUARD, "DeadManSwitch", u64(1_789_481_700n)).data,
+    );
+    const paused = asLedgerEntry(
+      persistentDataEntry(MOCK_GUARD, "Paused", xdr.ScVal.scvBool(true)).data,
+    );
 
     assert.equal(decodeStorageFootprint<bigint>(heartbeat, "DeadManSwitch").value, 1_789_481_700n);
     assert.equal(decodeStorageFootprint<boolean>(paused, "Paused").value, true);

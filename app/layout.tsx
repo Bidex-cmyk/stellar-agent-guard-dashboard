@@ -71,7 +71,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div className="row">
                 <span className="pill">Soroban testnet</span>
-                <a href="https://github.com/aigbagbobila/stellar-agent-guard-contracts">contracts</a>
+                <a href="https://github.com/aigbagbobila/stellar-agent-guard-contracts">
+                  contracts
+                </a>
                 <a href="https://github.com/aigbagbobila/stellar-agent-guard-sdk">sdk</a>
               </div>
             </header>

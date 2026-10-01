@@ -31,10 +31,7 @@ import type { TelemetryEvent } from "./telemetry.ts";
 export type SimulationOutcome = "approved" | "throttled" | "rejected";
 
 /** Reasons a call was rejected outright. */
-export type SimulationRejectionReason =
-  | "policy_paused"
-  | "policy_not_active"
-  | "per_tx_cap";
+export type SimulationRejectionReason = "policy_paused" | "policy_not_active" | "per_tx_cap";
 
 /** Reasons a call was throttled (retryable, time-dependent). */
 export type SimulationThrottleReason = "window_cap_exceeded";
@@ -263,7 +260,8 @@ function summarize(
   }
   const notes: string[] = [];
   if (perTxCapBlocks > 0) notes.push(`${perTxCapBlocks} blocked due to per-tx cap`);
-  if (otherBlocks > 0) notes.push(`${otherBlocks} refused while paused or outside the active window`);
+  if (otherBlocks > 0)
+    notes.push(`${otherBlocks} refused while paused or outside the active window`);
   if (throttled > 0) notes.push(`${throttled} throttled by the rolling window`);
   const suffix = notes.length > 0 ? ` (${notes.join(", ")})` : "";
   return `Would have approved ${approvalRate}% of historical calls${suffix}`;

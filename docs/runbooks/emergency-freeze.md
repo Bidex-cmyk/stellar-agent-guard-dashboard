@@ -19,12 +19,12 @@ dashboard reads and writes.
 Stellar Agent Guard has **two independent freeze mechanisms**, and they are not
 the same event:
 
-| Mechanism | On-chain flag | Who triggers it | How it clears |
-| --- | --- | --- | --- |
-| **Admin freeze** | `admin_frozen = true` | The operator's panic button (wallet-signed `freeze()`) | Admin-signed `unfreeze()` |
+| Mechanism                        | On-chain flag                    | Who triggers it                                                               | How it clears                                 |
+| -------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------- |
+| **Admin freeze**                 | `admin_frozen = true`            | The operator's panic button (wallet-signed `freeze()`)                        | Admin-signed `unfreeze()`                     |
 | **Dead-man-switch (DMS) freeze** | derived from `heartbeat_expired` | The contract, automatically, when the agent misses its heartbeat grace window | Admin `unfreeze()` **or** agent `heartbeat()` |
 
-The UI renders these as separate states on purpose. A DMS freeze is *not* an
+The UI renders these as separate states on purpose. A DMS freeze is _not_ an
 intrusion — it is the switch working as configured, usually because the agent
 runtime stopped or lost its key. An admin freeze is always a deliberate human
 action.
@@ -39,13 +39,13 @@ whole point: freeze first, investigate second.
 
 Classify before you act. The class sets the timeline, not the other way around.
 
-| Class | Example | Response target | Freeze? |
-| --- | --- | --- | --- |
-| **SEV-1 — Active loss / key compromise** | Funds leaving the account to an unknown recipient; admin or agent key known or suspected leaked; `__check_auth` being bypassed | Freeze **immediately**, target < 2 minutes | **Yes, now** |
-| **SEV-2 — Suspected compromise, no loss yet** | Unusual `event_auth_checked` blocks from a source you did not deploy; unknown device holds a copy of the agent key | Freeze, target < 5 minutes | **Yes, then investigate** |
-| **SEV-3 — Abnormal agent behaviour** | Agent looping, calling unexpected protocols, spending near the cap, heartbeat late | Contain by tightening the policy ([policy runbook](./policy-updates.md)), freeze if the cause is unknown | Often |
-| **SEV-4 — DMS freeze, no intrusion** | `heartbeat_expired = true` after a deploy or a restart | No emergency; restore the agent or unfreeze | No |
-| **SEV-5 — Suspicious but benign** | Telemetry you cannot explain, no state change | Watch the feed, do not act | No |
+| Class                                         | Example                                                                                                                        | Response target                                                                                          | Freeze?                   |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **SEV-1 — Active loss / key compromise**      | Funds leaving the account to an unknown recipient; admin or agent key known or suspected leaked; `__check_auth` being bypassed | Freeze **immediately**, target < 2 minutes                                                               | **Yes, now**              |
+| **SEV-2 — Suspected compromise, no loss yet** | Unusual `event_auth_checked` blocks from a source you did not deploy; unknown device holds a copy of the agent key             | Freeze, target < 5 minutes                                                                               | **Yes, then investigate** |
+| **SEV-3 — Abnormal agent behaviour**          | Agent looping, calling unexpected protocols, spending near the cap, heartbeat late                                             | Contain by tightening the policy ([policy runbook](./policy-updates.md)), freeze if the cause is unknown | Often                     |
+| **SEV-4 — DMS freeze, no intrusion**          | `heartbeat_expired = true` after a deploy or a restart                                                                         | No emergency; restore the agent or unfreeze                                                              | No                        |
+| **SEV-5 — Suspicious but benign**             | Telemetry you cannot explain, no state change                                                                                  | Watch the feed, do not act                                                                               | No                        |
 
 Decision rule: **if you cannot name the cause of an unexplained state change,
 freeze.** An unnecessary freeze costs the agent uptime. A delayed freeze costs
@@ -55,15 +55,15 @@ funds. The freeze is reversible; a drained account is not.
 
 ## 3. Response timeline
 
-| Clock | Action |
-| --- | --- |
-| **T+0** | Notice the signal. Do not refresh repeatedly — read the chain once and write down what `status()` returned. |
-| **T+0..2 min** | Classify (section 2). Open the dashboard, connect the **admin** wallet. |
-| **T+2..5 min** | Execute the freeze (section 4). The write is wallet-signed; nothing else can do it for you. |
-| **T+5..15 min** | **Verify on chain** (section 5). The UI claiming success is not evidence. |
-| **T+15..60 min** | Preserve evidence (section 7): telemetry, transaction hashes, timestamps. |
-| **T+1h..48h** | Rotate keys if compromise is plausible (section 8). |
-| **T+48h+** | Root-cause analysis and the unfreeze checklist (sections 9–10). |
+| Clock            | Action                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| **T+0**          | Notice the signal. Do not refresh repeatedly — read the chain once and write down what `status()` returned. |
+| **T+0..2 min**   | Classify (section 2). Open the dashboard, connect the **admin** wallet.                                     |
+| **T+2..5 min**   | Execute the freeze (section 4). The write is wallet-signed; nothing else can do it for you.                 |
+| **T+5..15 min**  | **Verify on chain** (section 5). The UI claiming success is not evidence.                                   |
+| **T+15..60 min** | Preserve evidence (section 7): telemetry, transaction hashes, timestamps.                                   |
+| **T+1h..48h**    | Rotate keys if compromise is plausible (section 8).                                                         |
+| **T+48h+**       | Root-cause analysis and the unfreeze checklist (sections 9–10).                                             |
 
 Larger windows are acceptable for lower severities. **Never skip T+5 verification**,
 even when the freeze looks successful.
@@ -221,7 +221,7 @@ Freezing stops the bleeding; it does not explain it. Collect, in this order:
    the incident log. Include `last_heartbeat` and `now` — the DMS timeline is
    derived from them.
 3. **Telemetry**: the event feed is cursor-based polling of `event_auth_checked`
-   topics. Capture the window from *before* the first anomaly. Ledger-sourced rows
+   topics. Capture the window from _before_ the first anomaly. Ledger-sourced rows
    are settled history; **diagnostic** rows are local to the tab that produced them
    and are not on the ledger — export or screenshot them before closing that tab.
 4. **The policy that was installed at the time**: `stellar contract invoke … -- policy`.
@@ -229,7 +229,7 @@ Freezing stops the bleeding; it does not explain it. Collect, in this order:
    artifact. `npm run inspect` prints `is Phase 1 artifact`. If it reads `false`,
    you are not looking at the contract this dashboard deploys — escalate.
 
-Write a timestamp for every artifact. The sequence of *when you knew what* is part
+Write a timestamp for every artifact. The sequence of _when you knew what_ is part
 of the record.
 
 ---
@@ -266,7 +266,7 @@ is safe.
 
 ### 8b. Admin key compromise
 
-The contract has one admin. If the *admin* key is compromised, freeze and treat the
+The contract has one admin. If the _admin_ key is compromised, freeze and treat the
 account as hostile:
 
 1. Freeze immediately (section 4) — a compromised admin can `unfreeze()`, so this

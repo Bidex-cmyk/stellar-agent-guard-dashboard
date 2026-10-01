@@ -91,7 +91,9 @@ export function DateRangePicker({
             role="radio"
             aria-checked={preset === id}
             className="secondary"
-            style={preset === id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+            style={
+              preset === id ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined
+            }
             onClick={() => choosePreset(id)}
             disabled={disabled}
           >

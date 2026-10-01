@@ -22,7 +22,7 @@ configuration and has two consequences you must account for:
 
 1. **The rolling spend window resets.** The accumulated rolling spend is cleared.
    An agent that had already spent `N` units against a `2N` window cap starts again
-   from zero. If you are tightening a cap *because* spending is high, resetting the
+   from zero. If you are tightening a cap _because_ spending is high, resetting the
    window hands the agent a fresh full allowance — size the new cap for that, not
    for the current spend.
 2. **The dead-man-switch clock restarts.** `last_heartbeat` is reset, so the full
@@ -31,9 +31,9 @@ configuration and has two consequences you must account for:
    expecting a DMS freeze soon — it will not fire until the new grace window
    elapses.
 
-Both are shown in the form: *"Installing a policy resets the rolling window and
+Both are shown in the form: _"Installing a policy resets the rolling window and
 restarts the dead-man-switch clock, so a freshly installed policy always starts
-with full grace."*
+with full grace."_
 
 `revoke_policy` is the hard reset: the account keeps no policy and **refuses every
 call** (default deny). It is a rollback tool, not a neutral state.
@@ -95,19 +95,19 @@ over.
 
 Field by field:
 
-| Field | Meaning | Notes |
-| --- | --- | --- |
-| **Per-transaction cap** | Largest single SAC transfer allowed | Blank = no per-transaction cap. Whole units only. |
-| **Rolling-window cap** | Total spend allowed inside a genuinely rolling window | Blank = no rolling cap. |
-| **Rolling-window length (seconds)** | How far back the rolling sum looks | Must be non-zero whenever a rolling cap is set. |
-| **Dead-man grace (seconds)** | Auto-freeze if the agent has not heartbeated within this many seconds | Blank = DMS off. |
-| **Active from / until** | Unix seconds; restricts execution to an interval | Blank both for unrestricted. `until` must be later than `from`. |
-| **Assets** | SAC token contracts, one per line | Transfers of these tokens get **full recipient and amount enforcement**. |
-| **Per-asset cap overrides** | Bulk-edit asset addresses and positive stroop caps; import/export CSV or JSON | Imported rows are **merged by contract address**; the badge shows what each import changed. |
-| **Recipients** | One address per line | With the allowlist on, a transfer to an unlisted address is refused. |
-| **Allow any recipient** | Turns the recipient allowlist off | Caps still apply. |
-| **Protocols** | `C…`, or `C…:swap,deposit` for a per-function allowlist | One per line. No colon = any function on that contract. |
-| **Start paused** | Installs the policy but refuses every call until resumed | The safe way to stage a policy change. |
+| Field                               | Meaning                                                                       | Notes                                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Per-transaction cap**             | Largest single SAC transfer allowed                                           | Blank = no per-transaction cap. Whole units only.                                           |
+| **Rolling-window cap**              | Total spend allowed inside a genuinely rolling window                         | Blank = no rolling cap.                                                                     |
+| **Rolling-window length (seconds)** | How far back the rolling sum looks                                            | Must be non-zero whenever a rolling cap is set.                                             |
+| **Dead-man grace (seconds)**        | Auto-freeze if the agent has not heartbeated within this many seconds         | Blank = DMS off.                                                                            |
+| **Active from / until**             | Unix seconds; restricts execution to an interval                              | Blank both for unrestricted. `until` must be later than `from`.                             |
+| **Assets**                          | SAC token contracts, one per line                                             | Transfers of these tokens get **full recipient and amount enforcement**.                    |
+| **Per-asset cap overrides**         | Bulk-edit asset addresses and positive stroop caps; import/export CSV or JSON | Imported rows are **merged by contract address**; the badge shows what each import changed. |
+| **Recipients**                      | One address per line                                                          | With the allowlist on, a transfer to an unlisted address is refused.                        |
+| **Allow any recipient**             | Turns the recipient allowlist off                                             | Caps still apply.                                                                           |
+| **Protocols**                       | `C…`, or `C…:swap,deposit` for a per-function allowlist                       | One per line. No colon = any function on that contract.                                     |
+| **Start paused**                    | Installs the policy but refuses every call until resumed                      | The safe way to stage a policy change.                                                      |
 
 Two behaviours worth knowing:
 
@@ -122,7 +122,7 @@ There is no separate side-by-side diff view. The comparison is:
 
 1. **The form's `Review` line** — a one-line human summary of the **draft**
    (`describeDraft`), e.g. `per-transaction cap 1000, rolling cap 150 per 86400s ·
-   2 allowlisted recipient(s) · 1 protocol(s) · 1 asset · active · dead-man grace 3600s`.
+2 allowlisted recipient(s) · 1 protocol(s) · 1 asset · active · dead-man grace 3600s`.
 2. **The Overview screen's `Policy in force` line** — the same summary shape for what
    is **installed on chain**.
 
@@ -147,7 +147,7 @@ Validation rules you will hit:
 - **`Active until` must be later than `Active from`.**
 - **If assets are listed, the recipient allowlist is on, and no recipients are
   listed, every transfer is refused.** The form will say so. Add at least one
-  recipient, or tick *Allow any recipient*.
+  recipient, or tick _Allow any recipient_.
 - Protocol entries must be valid contract addresses.
 
 Do not work around a validation error by leaving a field blank: blank means

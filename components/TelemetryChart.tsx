@@ -85,7 +85,9 @@ export function TelemetryChart() {
     const y = PAD.top + PLOT_H - ratio(bucket.spend, maxSpend) * PLOT_H;
     return [x, y] as const;
   });
-  const spendLine = spendPoints.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const spendLine = spendPoints
+    .map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ");
   const baseline = PAD.top + PLOT_H;
   const spendArea =
     spendPoints.length > 0
@@ -97,12 +99,17 @@ export function TelemetryChart() {
     const last = buckets.length - 1;
     const current = active ?? last;
     const next =
-      event.key === "ArrowRight" ? Math.min(last, current + 1)
-      : event.key === "ArrowLeft" ? Math.max(0, current - 1)
-      : event.key === "Home" ? 0
-      : event.key === "End" ? last
-      : event.key === "Escape" ? null
-      : undefined;
+      event.key === "ArrowRight"
+        ? Math.min(last, current + 1)
+        : event.key === "ArrowLeft"
+          ? Math.max(0, current - 1)
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : event.key === "Escape"
+                ? null
+                : undefined;
     if (next === undefined) return;
     event.preventDefault();
     setActive(next);
@@ -132,9 +139,15 @@ export function TelemetryChart() {
       </div>
 
       <div className="row tiny" style={{ marginTop: 6, gap: 14 }} aria-hidden="true">
-        <span><span className="tchart-key tchart-allowed" /> allowed</span>
-        <span><span className="tchart-key tchart-blocked" /> blocked</span>
-        <span><span className="tchart-key tchart-spend" /> settled spend (stroops)</span>
+        <span>
+          <span className="tchart-key tchart-allowed" /> allowed
+        </span>
+        <span>
+          <span className="tchart-key tchart-blocked" /> blocked
+        </span>
+        <span>
+          <span className="tchart-key tchart-spend" /> settled spend (stroops)
+        </span>
       </div>
 
       <div className="tchart-frame">
@@ -172,7 +185,13 @@ export function TelemetryChart() {
             return (
               <g key={bucket.start}>
                 {bucket.allowed > 0 && (
-                  <rect className="tchart-allowed" x={x} width={barWidth} y={baseline - allowedH} height={allowedH} />
+                  <rect
+                    className="tchart-allowed"
+                    x={x}
+                    width={barWidth}
+                    y={baseline - allowedH}
+                    height={allowedH}
+                  />
                 )}
                 {bucket.blocked > 0 && (
                   <rect
@@ -184,12 +203,23 @@ export function TelemetryChart() {
                   />
                 )}
                 {index % labelEvery === 0 && (
-                  <text className="tchart-axis" x={x + barWidth / 2} y={HEIGHT - 8} textAnchor="middle">
+                  <text
+                    className="tchart-axis"
+                    x={x + barWidth / 2}
+                    y={HEIGHT - 8}
+                    textAnchor="middle"
+                  >
                     {bucket.label}
                   </text>
                 )}
                 {active === index && (
-                  <rect className="tchart-cursor" x={PAD.left + slot * index} width={slot} y={PAD.top} height={PLOT_H} />
+                  <rect
+                    className="tchart-cursor"
+                    x={PAD.left + slot * index}
+                    width={slot}
+                    y={PAD.top}
+                    height={PLOT_H}
+                  />
                 )}
                 {/* Hit area: the whole column, so thin or empty bars are still easy to hover. */}
                 <rect
@@ -203,7 +233,13 @@ export function TelemetryChart() {
               </g>
             );
           })}
-          <line className="tchart-baseline" x1={PAD.left} x2={WIDTH - PAD.right} y1={baseline} y2={baseline} />
+          <line
+            className="tchart-baseline"
+            x1={PAD.left}
+            x2={WIDTH - PAD.right}
+            y1={baseline}
+            y2={baseline}
+          />
         </svg>
 
         {focused && active !== null && (
@@ -252,7 +288,9 @@ export function TelemetryChart() {
             <tbody>
               {buckets.map((bucket) => (
                 <tr key={bucket.start}>
-                  <th scope="row" className="mono tiny">{formatInstant(bucket.start, aggregate.timeZone)}</th>
+                  <th scope="row" className="mono tiny">
+                    {formatInstant(bucket.start, aggregate.timeZone)}
+                  </th>
                   <td>{bucket.allowed}</td>
                   <td>{bucket.blocked}</td>
                   <td>{bucket.other}</td>
@@ -281,8 +319,10 @@ function BucketReadout({ bucket, timeZone }: { bucket: ChartBucket; timeZone: st
         <span className="tchart-key tchart-blocked" /> {bucket.blocked} blocked
       </div>
       <div>
-        <span className="tchart-key tchart-spend" /> <span className="mono">{formatStroops(bucket.spend)}</span> stroops
-        {bucket.spendCount > 0 && ` (${bucket.spendCount} spend${bucket.spendCount === 1 ? "" : "s"})`}
+        <span className="tchart-key tchart-spend" />{" "}
+        <span className="mono">{formatStroops(bucket.spend)}</span> stroops
+        {bucket.spendCount > 0 &&
+          ` (${bucket.spendCount} spend${bucket.spendCount === 1 ? "" : "s"})`}
       </div>
     </>
   );

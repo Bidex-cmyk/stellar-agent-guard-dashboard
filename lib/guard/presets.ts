@@ -67,16 +67,14 @@ export interface PolicyPreset {
 }
 
 /** Placeholder SAC token contract — replace with the token the agent may move. */
-export const PRESET_PLACEHOLDER_ASSET =
-  "CDCYDGBGS5AZ5BZS6XY2SK2PHJHSOEGTN3N4INCK34KF6GU2BGC7Z6MB";
+export const PRESET_PLACEHOLDER_ASSET = "CDCYDGBGS5AZ5BZS6XY2SK2PHJHSOEGTN3N4INCK34KF6GU2BGC7Z6MB";
 
 /** Placeholder recipient — replace with an address you control before installing. */
 export const PRESET_PLACEHOLDER_RECIPIENT =
   "GAOBCRXTCO4ZCBNHALJUMJJ5JDXNOUZ7U6VZJX4UBTXAHQEO66IPU6PH";
 
 /** Placeholder DEX contract — replace with the protocol the agent may call. */
-export const PRESET_PLACEHOLDER_DEX =
-  "CDPPYSSNYEEUBHASLCLTPGGP7W573NUK6KZETVX5AAAJX32TYMCXRIWC";
+export const PRESET_PLACEHOLDER_DEX = "CDPPYSSNYEEUBHASLCLTPGGP7W573NUK6KZETVX5AAAJX32TYMCXRIWC";
 
 /** Second placeholder protocol, so per-function and any-function rules both appear. */
 export const PRESET_PLACEHOLDER_DEX_ALT =

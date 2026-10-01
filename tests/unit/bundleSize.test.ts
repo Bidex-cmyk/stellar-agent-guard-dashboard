@@ -217,7 +217,18 @@ test("the compare CLI exits 1 when a page bundle is over budget", () => {
   const run = (budgetKb: string, out: string) =>
     spawnSync(
       process.execPath,
-      [SCRIPT, "compare", "--current", current, "--budget-kb", budgetKb, "--metric", "page", "--out", out],
+      [
+        SCRIPT,
+        "compare",
+        "--current",
+        current,
+        "--budget-kb",
+        budgetKb,
+        "--metric",
+        "page",
+        "--out",
+        out,
+      ],
       { encoding: "utf8" },
     );
 

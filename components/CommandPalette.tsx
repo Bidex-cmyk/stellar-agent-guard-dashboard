@@ -9,7 +9,7 @@ export function CommandPaletteInner({
   router,
   guard,
   instances,
-  selectGuard
+  selectGuard,
 }: {
   router: { push: (url: string) => void };
   guard: string | null;
@@ -45,9 +45,25 @@ export function CommandPaletteInner({
 
   const commands = useMemo(() => {
     const cmds: CommandAction[] = [
-      { id: "nav-console", name: "Go to Console", category: "Navigation", action: () => router.push("/") },
-      { id: "nav-configure", name: "Go to Configure", category: "Navigation", action: () => router.push("/configure") },
-      { id: "doc-spec", name: "View Documentation", category: "Docs", action: () => window.open("https://github.com/aigbagbobila/stellar-agent-guard-sdk", "_blank") },
+      {
+        id: "nav-console",
+        name: "Go to Console",
+        category: "Navigation",
+        action: () => router.push("/"),
+      },
+      {
+        id: "nav-configure",
+        name: "Go to Configure",
+        category: "Navigation",
+        action: () => router.push("/configure"),
+      },
+      {
+        id: "doc-spec",
+        name: "View Documentation",
+        category: "Docs",
+        action: () =>
+          window.open("https://github.com/aigbagbobila/stellar-agent-guard-sdk", "_blank"),
+      },
     ];
 
     if (guard) {
@@ -55,26 +71,26 @@ export function CommandPaletteInner({
         id: "act-copy",
         name: "Copy Guard Address",
         category: "Actions",
-        action: () => navigator.clipboard.writeText(guard)
+        action: () => navigator.clipboard.writeText(guard),
       });
       cmds.push({
         id: "act-freeze",
         name: "Trigger Emergency Freeze",
         category: "Actions",
-        action: () => alert("Emergency freeze triggered")
+        action: () => alert("Emergency freeze triggered"),
       });
     }
 
-    instances.forEach(inst => {
+    instances.forEach((inst) => {
       cmds.push({
         id: `guard-${inst.guard}`,
         name: `Switch to ${inst.label} (${inst.guard.slice(0, 6)}...)`,
         category: "Guard",
-        action: () => selectGuard(inst.guard)
+        action: () => selectGuard(inst.guard),
       });
     });
 
-    return cmds.filter(c => fuzzyMatch(query, c.name));
+    return cmds.filter((c) => fuzzyMatch(query, c.name));
   }, [query, router, guard, instances, selectGuard]);
 
   useEffect(() => {
@@ -88,10 +104,10 @@ export function CommandPaletteInner({
       setOpen(false);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex(i => (i + 1) % commands.length);
+      setActiveIndex((i) => (i + 1) % commands.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex(i => (i - 1 + commands.length) % commands.length);
+      setActiveIndex((i) => (i - 1 + commands.length) % commands.length);
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (commands[activeIndex]) {
@@ -115,13 +131,13 @@ export function CommandPaletteInner({
       <div
         className="modal"
         style={{ padding: 0, marginTop: "10vh", alignSelf: "flex-start", maxWidth: "600px" }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div style={{ padding: "12px" }}>
           <input
             ref={inputRef}
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search commands..."
             role="combobox"
@@ -129,10 +145,28 @@ export function CommandPaletteInner({
             aria-controls="command-list"
             aria-autocomplete="list"
             aria-activedescendant={commands[activeIndex]?.id}
-            style={{ fontSize: "16px", padding: "12px", border: "none", outline: "none", width: "100%", background: "transparent", borderBottom: "1px solid var(--line)" }}
+            style={{
+              fontSize: "16px",
+              padding: "12px",
+              border: "none",
+              outline: "none",
+              width: "100%",
+              background: "transparent",
+              borderBottom: "1px solid var(--line)",
+            }}
           />
         </div>
-        <ul id="command-list" ref={listRef} style={{ listStyle: "none", padding: "0 0 12px 0", margin: 0, maxHeight: "400px", overflowY: "auto" }}>
+        <ul
+          id="command-list"
+          ref={listRef}
+          style={{
+            listStyle: "none",
+            padding: "0 0 12px 0",
+            margin: 0,
+            maxHeight: "400px",
+            overflowY: "auto",
+          }}
+        >
           {commands.map((cmd, i) => (
             <li
               key={cmd.id}
@@ -149,14 +183,24 @@ export function CommandPaletteInner({
               }}
               onMouseEnter={() => setActiveIndex(i)}
             >
-              <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent)", marginBottom: "4px" }}>
+              <div
+                style={{
+                  fontSize: "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "var(--accent)",
+                  marginBottom: "4px",
+                }}
+              >
                 {cmd.category}
               </div>
               <div style={{ fontSize: "14px" }}>{cmd.name}</div>
             </li>
           ))}
           {commands.length === 0 && (
-            <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)" }}>No commands found.</div>
+            <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)" }}>
+              No commands found.
+            </div>
           )}
         </ul>
       </div>
@@ -167,7 +211,7 @@ export function CommandPaletteInner({
 export function CommandPalette() {
   const router = useRouter();
   const { guard, instances, selectGuard } = useGuard();
-  
+
   return (
     <CommandPaletteInner
       router={router}

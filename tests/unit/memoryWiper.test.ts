@@ -31,7 +31,11 @@ describe("memoryWiper", () => {
   it("clears sessionStorage if available", () => {
     let cleared = false;
     global.window = {
-      sessionStorage: { clear: () => { cleared = true; } },
+      sessionStorage: {
+        clear: () => {
+          cleared = true;
+        },
+      },
       addEventListener: () => {},
       removeEventListener: () => {},
     } as any;

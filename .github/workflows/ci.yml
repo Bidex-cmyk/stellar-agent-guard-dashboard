@@ -38,6 +38,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Formatting is a separate gate from linting: eslint-config-next carries
+      # no stylistic rules, so prettier is the only thing that can catch
+      # whitespace/line-ending drift. It runs before the tests so a format
+      # failure reads as style, not as a broken build.
+      - name: Format
+        run: npm run format:check
+
       # Unit tests only. The integration proof (scripts/prove-phase3.ts) spends
       # real testnet funds and needs funded testnet keys, so it is run
       # deliberately and is not part of the CI gate.

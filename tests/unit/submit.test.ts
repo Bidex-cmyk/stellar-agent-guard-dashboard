@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createTransactionEnvelope,
-  detectExpiration,
-} from "../../lib/guard/submit.ts";
+import { createTransactionEnvelope, detectExpiration } from "../../lib/guard/submit.ts";
 
 describe("createTransactionEnvelope", () => {
   it("sets default TimeBounds of -60s / +300s around the current time", () => {

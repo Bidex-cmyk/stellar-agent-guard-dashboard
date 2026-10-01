@@ -19,7 +19,7 @@ class MemoryWiper {
     if (typeof window !== "undefined" && window.sessionStorage) {
       window.sessionStorage.clear();
     }
-    
+
     for (const cb of this.callbacks) {
       try {
         cb();

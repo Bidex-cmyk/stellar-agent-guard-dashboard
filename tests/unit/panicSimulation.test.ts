@@ -127,10 +127,7 @@ test("a freeze dry run reports resources and refuses to sign or broadcast", asyn
   assert.equal(result.resourceFeeStroops, "100");
   assert.equal(result.inclusionFeeStroops, INCLUSION_FEE);
   const paddedResourceFee = calculateFeeHeadroom(0, BigInt(result.resourceFeeStroops)).fee;
-  assert.equal(
-    result.totalFeeStroops,
-    (BigInt(INCLUSION_FEE) + paddedResourceFee).toString(),
-  );
+  assert.equal(result.totalFeeStroops, (BigInt(INCLUSION_FEE) + paddedResourceFee).toString());
   assert.equal(result.latestLedger, 4242);
   assert.ok(result.footprintEntries >= 0);
 

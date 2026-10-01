@@ -55,7 +55,9 @@ function isEntry(value: unknown): value is TxHistoryEntry {
     typeof entry.operation === "string" &&
     (entry.status === "confirmed" || entry.status === "failed") &&
     typeof entry.recordedAt === "string" &&
-    (entry.feeStroops === null || entry.feeStroops === undefined || typeof entry.feeStroops === "string")
+    (entry.feeStroops === null ||
+      entry.feeStroops === undefined ||
+      typeof entry.feeStroops === "string")
   );
 }
 

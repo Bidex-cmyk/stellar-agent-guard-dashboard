@@ -59,6 +59,6 @@ export const ENFORCEMENT_SCOPE_STATEMENT =
 export const SALT_BYTES = 32;
 
 export async function getHealthyRpcEndpoints(urls: string[]) {
-    // Health racing logic
-    return urls;
+  // Health racing logic
+  return urls;
 }

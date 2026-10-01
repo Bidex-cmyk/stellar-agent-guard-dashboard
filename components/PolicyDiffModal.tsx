@@ -57,7 +57,12 @@ export function PolicyDiffModal({
           <div
             className="warning-badge"
             role="alert"
-            style={{ background: "#fff8c5", border: "1px solid #d4a72c", padding: "8px 10px", margin: "10px 0" }}
+            style={{
+              background: "#fff8c5",
+              border: "1px solid #d4a72c",
+              padding: "8px 10px",
+              margin: "10px 0",
+            }}
           >
             {diff.warnings.map((warning, index) => (
               <div key={index}>⚠ {warning}</div>

@@ -57,9 +57,7 @@ export function TxHistoryTable() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    announce(
-      `Exported ${filtered.length} transaction${filtered.length === 1 ? "" : "s"} as CSV`,
-    );
+    announce(`Exported ${filtered.length} transaction${filtered.length === 1 ? "" : "s"} as CSV`);
   }
 
   return (

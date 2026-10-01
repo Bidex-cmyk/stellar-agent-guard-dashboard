@@ -9,14 +9,15 @@ This guide provides end-to-end instructions for connecting custom AI agent runti
 Stellar Agent Guard provides an on-chain spending firewall for autonomous AI agents. Rather than holding funds in a standard private-key wallet or relying on centralized off-chain intermediaries, an autonomous agent operates as a Soroban **Custom Account**.
 
 Every action requiring the account's authorization is routed by the Stellar network through the contract's `__check_auth` entrypoint. The contract enforces granular policy guardrails on-chain:
-* Per-transaction spend caps
-* Rolling-window spend limits and duration
-* Asset and SAC token allowlists
-* Recipient address allowlists
-* Non-asset protocol and function allowlists
-* Active execution time windows and pause flags
-* Dead-man switch heartbeat grace periods
-* Instant operator admin freeze
+
+- Per-transaction spend caps
+- Rolling-window spend limits and duration
+- Asset and SAC token allowlists
+- Recipient address allowlists
+- Non-asset protocol and function allowlists
+- Active execution time windows and pause flags
+- Dead-man switch heartbeat grace periods
+- Instant operator admin freeze
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -60,40 +61,50 @@ Every action requiring the account's authorization is routed by the Stellar netw
 Before an agent can operate under a guard, an operator must deploy and initialize a Guard custom account instance.
 
 ### Step 1: Connect the Admin Wallet
+
 1. Open the dashboard console in a browser with the [Freighter](https://www.freighter.app/) extension installed.
 2. Ensure Freighter is switched to **Testnet**.
 3. In the top [`WalletBar`](../../components/WalletBar.tsx), click **Connect admin wallet** and approve connection.
 
 ### Step 2: Navigate to the Configurator
+
 Click the **Configure** tab in the navigation header (URL: `/configure`).
 
 ### Step 3: Verify the Pinned Artifact
+
 The [`DeployPanel`](../../components/DeployPanel.tsx) automatically reads the bytecode from Stellar Testnet and verifies its SHA-256 hash against the pinned Phase 1 artifact:
-* **Pinned WASM Hash**: `f47919f92e78fdd034836aa61955fc338dd56a218c448c37df1867a8c3da0f63`
-* **WASM Size**: `39673 bytes`
-* **Identity Status**: Must display `matches` (`var(--ok)`). If an artifact mismatch occurs, the dashboard strictly refuses to deploy.
+
+- **Pinned WASM Hash**: `f47919f92e78fdd034836aa61955fc338dd56a218c448c37df1867a8c3da0f63`
+- **WASM Size**: `39673 bytes`
+- **Identity Status**: Must display `matches` (`var(--ok)`). If an artifact mismatch occurs, the dashboard strictly refuses to deploy.
 
 ### Step 4: Review Predicted Guard Address & Deploy
+
 1. The dashboard derives a cryptographic salt and computes the predicted contract address (`C...`) before any transaction is signed.
 2. Click **Deploy guard**.
 3. Freighter will prompt to sign:
-   * `upload_contract_wasm` (if the pinned bytecode is not already live on the ledger).
-   * `create_custom_contract` using the admin address and computed salt.
+   - `upload_contract_wasm` (if the pinned bytecode is not already live on the ledger).
+   - `create_custom_contract` using the admin address and computed salt.
 4. Once submitted, the dashboard re-reads the contract from the ledger and verifies the deployed instance byte-for-byte.
 
 ### Step 5: Obtain & Copy the Contract Address
+
 Upon confirmation, the success banner displays:
+
 ```
 Deployed and verified against the pinned artifact
 CC6VDBH5M473O4XUPD5GNRVIPB6CJ4U6IZCITF7XLKNLMWZPP3U5BMTK
 ```
+
 Copy this **56-character contract address** (starting with `C`). This is your `GUARD_CONTRACT_ADDRESS`.
 
 ### Step 6: Initialize the Guard with the Agent Key
+
 Below the deploy card, locate the **Initialize a guard** section:
+
 1. Generate or retrieve your agent's Ed25519 keypair.
 2. The contract requires the agent's **32 raw Ed25519 public key bytes in hex** (not the `G...` strkey format).
-   * *In TypeScript*:
+   - _In TypeScript_:
      ```ts
      import { Keypair, StrKey } from "@stellar/stellar-sdk";
      const agentKeypair = Keypair.fromSecret("S...");
@@ -105,21 +116,25 @@ Below the deploy card, locate the **Initialize a guard** section:
 4. Click **Sign and initialize**. Freighter will sign the `initialize(admin, agent_pubkey)` transaction.
 
 ### Step 7: Configure Initial Policy Rules
+
 In the **Policy Form** on the same `/configure` page:
+
 1. Define your initial policy constraints:
-   * **Per-transaction cap**: Maximum amount allowed in a single transaction (in stroops or human XLM).
-   * **Rolling-window cap & duration**: Spend ceiling over a rolling duration (e.g., 200 XLM over 3600 seconds).
-   * **Allowed Assets**: Contract addresses for allowlisted SAC tokens.
-   * **Allowed Recipients**: Public keys (`G...`) for approved transfer destinations.
-   * **Dead-man grace period**: Time in seconds (e.g., `3600`) before an inactive agent auto-freezes.
+   - **Per-transaction cap**: Maximum amount allowed in a single transaction (in stroops or human XLM).
+   - **Rolling-window cap & duration**: Spend ceiling over a rolling duration (e.g., 200 XLM over 3600 seconds).
+   - **Allowed Assets**: Contract addresses for allowlisted SAC tokens.
+   - **Allowed Recipients**: Public keys (`G...`) for approved transfer destinations.
+   - **Dead-man grace period**: Time in seconds (e.g., `3600`) before an inactive agent auto-freezes.
 2. Click **Save policy configuration** and sign in Freighter.
 
 ### Step 8: Verify Readiness
+
 Return to the **Console** tab (`/`):
-* Confirm `StatusPanel` shows:
-  * **Admin freeze**: `clear` (tone `ok`)
-  * **Dead-man switch**: `within grace` (tone `ok`)
-  * **Policy installed**: `yes`
+
+- Confirm `StatusPanel` shows:
+  - **Admin freeze**: `clear` (tone `ok`)
+  - **Dead-man switch**: `within grace` (tone `ok`)
+  - **Policy installed**: `yes`
 
 The Guard is now live and waiting for agent transactions.
 
@@ -131,14 +146,14 @@ The AI agent runtime communicates with Soroban RPC and the Guard using environme
 
 ### Environment Variable Specification
 
-| Variable Name | Required | Type | Description |
-| :--- | :--- | :--- | :--- |
-| `STELLAR_RPC_URL` | **Yes** | URL (Public) | Soroban RPC endpoint (e.g., `https://soroban-testnet.stellar.org`). |
-| `STELLAR_NETWORK_PASSPHRASE` | **Yes** | String (Public) | Passphrase identifying the network (`Test SDF Network ; September 2015`). |
-| `GUARD_CONTRACT_ADDRESS` | **Yes** | String (Public) | 56-character Soroban contract address (`C...`) obtained from dashboard deployment. |
-| `AGENT_SECRET` | **Yes** | Secret (`S...`) | Secret seed of the agent key registered during `initialize`. Used for auth entry signatures. |
-| `SOURCE_SECRET` | **Yes** | Secret (`S...`) | Secret seed of a funded classic Stellar account used to pay transaction gas fees and supply sequence numbers. Can be the same as agent key if funded. |
-| `MAX_FEE_STROOPS` | No | Integer | Maximum acceptable resource fee in stroops (default: uncapped pre-check). |
+| Variable Name                | Required | Type            | Description                                                                                                                                           |
+| :--------------------------- | :------- | :-------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STELLAR_RPC_URL`            | **Yes**  | URL (Public)    | Soroban RPC endpoint (e.g., `https://soroban-testnet.stellar.org`).                                                                                   |
+| `STELLAR_NETWORK_PASSPHRASE` | **Yes**  | String (Public) | Passphrase identifying the network (`Test SDF Network ; September 2015`).                                                                             |
+| `GUARD_CONTRACT_ADDRESS`     | **Yes**  | String (Public) | 56-character Soroban contract address (`C...`) obtained from dashboard deployment.                                                                    |
+| `AGENT_SECRET`               | **Yes**  | Secret (`S...`) | Secret seed of the agent key registered during `initialize`. Used for auth entry signatures.                                                          |
+| `SOURCE_SECRET`              | **Yes**  | Secret (`S...`) | Secret seed of a funded classic Stellar account used to pay transaction gas fees and supply sequence numbers. Can be the same as agent key if funded. |
+| `MAX_FEE_STROOPS`            | No       | Integer         | Maximum acceptable resource fee in stroops (default: uncapped pre-check).                                                                             |
 
 ### Example `.env` File
 
@@ -176,7 +191,8 @@ The official first-party SDK is [`stellar-agent-guard-sdk`](https://github.com/a
 ```bash
 npm install stellar-agent-guard-sdk @stellar/stellar-sdk
 ```
-*(Requires Node.js `>= 24.0.0`)*
+
+_(Requires Node.js `>= 24.0.0`)_
 
 ### Implementation (`agent.ts`)
 
@@ -192,7 +208,8 @@ import {
 
 // 1. Load configuration from environment
 const rpcUrl = process.env.STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org";
-const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015";
+const networkPassphrase =
+  process.env.STELLAR_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015";
 const guardAddress = process.env.GUARD_CONTRACT_ADDRESS!;
 const agentKeypair = Keypair.fromSecret(process.env.AGENT_SECRET!);
 const sourceKeypair = Keypair.fromSecret(process.env.SOURCE_SECRET!);
@@ -214,7 +231,7 @@ const interceptor = new PreFlightInterceptor({
  */
 export async function sendHeartbeat(): Promise<void> {
   console.log("Broadcasting agent heartbeat to Guard...");
-  
+
   const outcome = await invoke({
     server,
     source: sourceKeypair,
@@ -231,7 +248,9 @@ export async function sendHeartbeat(): Promise<void> {
   });
 
   if (outcome.kind === "allowed") {
-    console.log(`✓ Heartbeat confirmed on ledger ${outcome.submission.ledger} (tx: ${outcome.submission.hash})`);
+    console.log(
+      `✓ Heartbeat confirmed on ledger ${outcome.submission.ledger} (tx: ${outcome.submission.hash})`,
+    );
   } else if (outcome.kind === "blocked") {
     console.error(`✗ Heartbeat blocked by Guard: ${outcome.reason} (${outcome.detail})`);
   } else {
@@ -246,7 +265,7 @@ export async function sendHeartbeat(): Promise<void> {
 export async function transferTokens(
   tokenContractId: string,
   recipientAddress: string,
-  amountStroops: bigint
+  amountStroops: bigint,
 ): Promise<string> {
   const call: ContractCall = {
     contract: tokenContractId,
@@ -276,7 +295,9 @@ export async function transferTokens(
     }
   }
 
-  console.log(`✓ Pre-flight passed (estimated resource fee: ${decision.estimatedResourceFee} stroops)`);
+  console.log(
+    `✓ Pre-flight passed (estimated resource fee: ${decision.estimatedResourceFee} stroops)`,
+  );
 
   // Step B: Full Invocation Pipeline (atomic broadcast)
   const outcome = await invoke({
@@ -317,7 +338,7 @@ The official `stellar-agent-guard-sdk` is written in TypeScript for Node.js envi
 Because Soroban's Custom Account Abstraction requires building custom `SorobanAuthorizationEntry` objects with `sorobanCredentialsAddressV2` preimages, the cleanest architecture uses a lightweight Node.js sidecar running `stellar-agent-guard-sdk` exposing local endpoints:
 
 ```
-[ Python Agent Runtime ] 
+[ Python Agent Runtime ]
        │
        │ HTTP / IPC (`POST /check`, `POST /invoke`, `POST /heartbeat`)
        ▼
@@ -393,17 +414,17 @@ def run_heartbeat_loop(interval_seconds=900):
                 .set_timeout(60)
                 .build()
             )
-            
+
             # Prepare transaction with Soroban resource declarations
             prepared_tx = server.prepare_transaction(tx)
             prepared_tx.sign(source_keypair)
-            
+
             response = server.send_transaction(prepared_tx)
             print(f"Heartbeat submitted: tx hash {response.get('hash')}")
-            
+
         except Exception as e:
             print(f"Heartbeat failed: {e}")
-            
+
         time.sleep(interval_seconds)
 
 if __name__ == "__main__":
@@ -452,7 +473,7 @@ export const guardMiddleware = createLangChainGuardMiddleware({
 });
 ```
 
-* When blocked, the middleware returns a `LangChainToolMessage` with `status: "error"` containing the contract's block reason.
+- When blocked, the middleware returns a `LangChainToolMessage` with `status: "error"` containing the contract's block reason.
 
 ### 2. ElizaOS Action Validator (`createGuardValidator` / `guardAction`)
 
@@ -508,11 +529,12 @@ The dead-man switch provides an automated failsafe against abandoned or looping 
 ### Dashboard Verification
 
 When a heartbeat succeeds:
-* In [`StatusPanel`](../../components/StatusPanel.tsx):
-  * **Last heartbeat**: Updates to show the latest ledger timestamp.
-  * **Dead-man switch**: Displays `within grace` with active grace remaining (tone `ok`).
-* In [`TelemetryFeed`](../../components/TelemetryFeed.tsx):
-  * A new row appears with `Event: Agent heartbeat`, `Decision: —`, `Source: ledger`, and the associated ledger number.
+
+- In [`StatusPanel`](../../components/StatusPanel.tsx):
+  - **Last heartbeat**: Updates to show the latest ledger timestamp.
+  - **Dead-man switch**: Displays `within grace` with active grace remaining (tone `ok`).
+- In [`TelemetryFeed`](../../components/TelemetryFeed.tsx):
+  - A new row appears with `Event: Agent heartbeat`, `Decision: —`, `Source: ledger`, and the associated ledger number.
 
 ---
 
@@ -522,50 +544,54 @@ The dashboard's [`TelemetryFeed`](../../components/TelemetryFeed.tsx) and [`Stat
 
 ### Understanding Blocked Calls vs. System Errors
 
-| Property | Blocked Decision (`kind: "blocked"`) | System / Runtime Error (`kind: "error"`) |
-| :--- | :--- | :--- |
-| **What it means** | The Guard firewall operated correctly and intentionally blocked an unauthorized call. | A network, transport, syntax, or unexpected contract trap occurred. |
-| **Gas Fee Charged** | **0 stroops** (refused during simulation before broadcast). | None if in simulation; standard inclusion fee if rejected post-broadcast. |
-| **Transaction Hash** | **None** (never submitted to the network). | None (if simulation) or failure hash in [`TxHistoryTable`](../../components/TxHistoryTable.tsx). |
-| **Telemetry Appearance** | Rendered with `pill danger` displaying the specific reason name. | Rendered in [`ErrorBlock`](../../components/bits.tsx) banner with diagnostic trace. |
+| Property                 | Blocked Decision (`kind: "blocked"`)                                                  | System / Runtime Error (`kind: "error"`)                                                         |
+| :----------------------- | :------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------------- |
+| **What it means**        | The Guard firewall operated correctly and intentionally blocked an unauthorized call. | A network, transport, syntax, or unexpected contract trap occurred.                              |
+| **Gas Fee Charged**      | **0 stroops** (refused during simulation before broadcast).                           | None if in simulation; standard inclusion fee if rejected post-broadcast.                        |
+| **Transaction Hash**     | **None** (never submitted to the network).                                            | None (if simulation) or failure hash in [`TxHistoryTable`](../../components/TxHistoryTable.tsx). |
+| **Telemetry Appearance** | Rendered with `pill danger` displaying the specific reason name.                      | Rendered in [`ErrorBlock`](../../components/bits.tsx) banner with diagnostic trace.              |
 
 ### Contract Block Reasons Reference (`GUARD_REASON_CODES`)
 
 When a call is blocked, the Guard returns a specific reason code. The SDK translates these via `explainReason()`:
 
-| Numeric Code | Symbol Name | Meaning | Common Cause & Resolution |
-| :---: | :--- | :--- | :--- |
-| `1` | `unauthorized` | Signature verification failed in `__check_auth`. | `AGENT_SECRET` does not match the public key registered during `initialize`. |
-| `2` | `already_initialized` | `initialize` called on an already configured guard. | Contract is already initialized. Do not re-run `initialize`. |
-| `3` | `not_initialized` | Guard has not been initialized with admin/agent keys. | Complete Step 6 in Deploy Panel before running agent. |
-| `10` | `admin_frozen` | Account is frozen by operator panic button. | Operator clicked "Freeze this account". Reversible by `unfreeze()`. |
-| `11` | `heartbeat_expired` | Dead-man switch grace period elapsed. | Agent heartbeat loop stopped or was delayed. Send `heartbeat()`. |
-| `12` | `no_policy` | Guard has no policy installed (default-deny). | Install policy rules via `/configure` before agent transactions. |
-| `13` | `paused` | Policy switch is set to paused. | Operator paused the account in policy settings. |
-| `14` | `outside_active_window` | Current ledger time is outside `active_from` / `active_until`. | Adjust policy active execution window. |
-| `20` | `asset_not_allowed` | Target SAC token is not in `assets` allowlist. | Add the token contract ID to policy allowlist. |
-| `21` | `recipient_not_allowed` | Destination address is not in `recipients` allowlist. | Add recipient `G...` to policy allowlist or enable `allow_any_recipient`. |
-| `22` | `per_tx_cap_exceeded` | Transfer amount exceeds `per_tx_cap`. | Amount requested is higher than allowed per single transaction. |
-| `23` | `window_cap_exceeded` | Cumulative spend exceeds `window_cap` within `window_secs`. | Agent spent its rolling limit. Wait for older window entries to expire. |
-| `24` | `protocol_not_allowed` | Contract call target is not in `protocols` allowlist. | Allowlist contract in policy. |
-| `25` | `function_not_allowed` | Contract function name is not permitted. | Allowlist specific function name in protocol rule. |
+| Numeric Code | Symbol Name             | Meaning                                                        | Common Cause & Resolution                                                    |
+| :----------: | :---------------------- | :------------------------------------------------------------- | :--------------------------------------------------------------------------- |
+|     `1`      | `unauthorized`          | Signature verification failed in `__check_auth`.               | `AGENT_SECRET` does not match the public key registered during `initialize`. |
+|     `2`      | `already_initialized`   | `initialize` called on an already configured guard.            | Contract is already initialized. Do not re-run `initialize`.                 |
+|     `3`      | `not_initialized`       | Guard has not been initialized with admin/agent keys.          | Complete Step 6 in Deploy Panel before running agent.                        |
+|     `10`     | `admin_frozen`          | Account is frozen by operator panic button.                    | Operator clicked "Freeze this account". Reversible by `unfreeze()`.          |
+|     `11`     | `heartbeat_expired`     | Dead-man switch grace period elapsed.                          | Agent heartbeat loop stopped or was delayed. Send `heartbeat()`.             |
+|     `12`     | `no_policy`             | Guard has no policy installed (default-deny).                  | Install policy rules via `/configure` before agent transactions.             |
+|     `13`     | `paused`                | Policy switch is set to paused.                                | Operator paused the account in policy settings.                              |
+|     `14`     | `outside_active_window` | Current ledger time is outside `active_from` / `active_until`. | Adjust policy active execution window.                                       |
+|     `20`     | `asset_not_allowed`     | Target SAC token is not in `assets` allowlist.                 | Add the token contract ID to policy allowlist.                               |
+|     `21`     | `recipient_not_allowed` | Destination address is not in `recipients` allowlist.          | Add recipient `G...` to policy allowlist or enable `allow_any_recipient`.    |
+|     `22`     | `per_tx_cap_exceeded`   | Transfer amount exceeds `per_tx_cap`.                          | Amount requested is higher than allowed per single transaction.              |
+|     `23`     | `window_cap_exceeded`   | Cumulative spend exceeds `window_cap` within `window_secs`.    | Agent spent its rolling limit. Wait for older window entries to expire.      |
+|     `24`     | `protocol_not_allowed`  | Contract call target is not in `protocols` allowlist.          | Allowlist contract in policy.                                                |
+|     `25`     | `function_not_allowed`  | Contract function name is not permitted.                       | Allowlist specific function name in protocol rule.                           |
 
 ---
 
 ## Phase 8: Troubleshooting
 
 ### 1. `heartbeat()` fails with `unauthorized` (Code 1)
-* **Cause**: The keypair loaded into `AGENT_SECRET` does not correspond to the public key registered in `DeployPanel`.
-* **Fix**: Ensure the hex string supplied to `initialize` was created from `StrKey.decodeEd25519PublicKey(agentKeypair.publicKey())`. If necessary, execute `rotate_agent_key` from the admin wallet.
+
+- **Cause**: The keypair loaded into `AGENT_SECRET` does not correspond to the public key registered in `DeployPanel`.
+- **Fix**: Ensure the hex string supplied to `initialize` was created from `StrKey.decodeEd25519PublicKey(agentKeypair.publicKey())`. If necessary, execute `rotate_agent_key` from the admin wallet.
 
 ### 2. Pre-flight returns `PreFlightUndeterminedError`
-* **Cause**: The contract call failed for a reason unrelated to the policy check (e.g., recipient account lacks a trustline for the asset, insufficient token balance, or invalid contract ID).
-* **Fix**: Inspect the simulation error detail. Ensure the Guard contract address holds sufficient SAC token balance (`mint` or `transfer` funds to the Guard address).
+
+- **Cause**: The contract call failed for a reason unrelated to the policy check (e.g., recipient account lacks a trustline for the asset, insufficient token balance, or invalid contract ID).
+- **Fix**: Inspect the simulation error detail. Ensure the Guard contract address holds sufficient SAC token balance (`mint` or `transfer` funds to the Guard address).
 
 ### 3. Blocked calls do not appear in the Dashboard Telemetry Feed
-* **Cause**: In Soroban, blocked transactions never reach ledger history. They only appear in telemetry if captured via simulation diagnostics from the console or sent via a local monitoring hook.
-* **Fix**: Check `TelemetryFeed.tsx` notice: *"Refused decisions cannot reach this feed from the ledger."* The feed marks simulation refusals as `diagnostic`. For production runtime visibility, log `decision.reason` in your agent application.
+
+- **Cause**: In Soroban, blocked transactions never reach ledger history. They only appear in telemetry if captured via simulation diagnostics from the console or sent via a local monitoring hook.
+- **Fix**: Check `TelemetryFeed.tsx` notice: _"Refused decisions cannot reach this feed from the ledger."_ The feed marks simulation refusals as `diagnostic`. For production runtime visibility, log `decision.reason` in your agent application.
 
 ### 4. Post-inclusion failure: `scecExceededLimit`
-* **Cause**: Stale-ledger resource declaration when consecutive writes occur on the same ledger sequence.
-* **Fix**: `stellar-agent-guard-sdk`'s `invoke()` has built-in retry handling for `isStaleLedgerResourceFailure`. If handling transactions manually, re-simulate against the latest ledger and resubmit.
+
+- **Cause**: Stale-ledger resource declaration when consecutive writes occur on the same ledger sequence.
+- **Fix**: `stellar-agent-guard-sdk`'s `invoke()` has built-in retry handling for `isStaleLedgerResourceFailure`. If handling transactions manually, re-simulate against the latest ledger and resubmit.

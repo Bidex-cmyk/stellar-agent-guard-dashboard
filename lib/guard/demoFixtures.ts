@@ -25,7 +25,7 @@
  */
 
 import type { GuardEvent, GuardStatus, PolicyConfig, ProtocolRule } from "stellar-agent-guard-sdk";
-import { GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
+import { GUARD_EVENT_TOPICS, guardEventId } from "stellar-agent-guard-sdk";
 import type { GuardSnapshot } from "./guardOps.ts";
 import type { WindowState, WasmIdentity } from "./chain.ts";
 import type { GuardInstance } from "./instance.ts";
@@ -74,7 +74,9 @@ export const DEMO_INSTANCE: GuardInstance = {
 // ── Demo-mode detection ────────────────────────────────────────────────────
 
 /** `true` when the environment flag is set to an affirmative value. */
-export function demoFlagFromEnv(value: string | undefined = process.env.NEXT_PUBLIC_DEMO_MODE): boolean {
+export function demoFlagFromEnv(
+  value: string | undefined = process.env.NEXT_PUBLIC_DEMO_MODE,
+): boolean {
   return value === "true" || value === "1";
 }
 
@@ -185,7 +187,39 @@ function demoHash(sequence: number): string {
 }
 
 /** The refusal reasons the demo feed cycles through. */
-const DEMO_BLOCKED_REASONS = ["per_tx_cap_exceeded", "recipient_not_allowed", "window_cap_exceeded"] as const;
+const DEMO_BLOCKED_REASONS = [
+  "per_tx_cap_exceeded",
+  "recipient_not_allowed",
+  "window_cap_exceeded",
+] as const;
+
+/**
+ * Complete a synthetic event with the SDK's own identity fields.
+ *
+ * One event exists per sequence number, so a blocked diagnostic borrows that
+ * sequence as its batch position: its `id` stays stable across re-renders and
+ * never collides with another demo refusal's, exactly as a real batch's
+ * position keeps two refusals apart.
+ */
+function demoEvent(
+  bare: Omit<GuardEvent, "id" | "stream" | "observedAt">,
+  sequence: number,
+): GuardEvent {
+  return {
+    ...bare,
+    stream: bare.source === "ledger" ? "committed" : "diagnostic",
+    observedAt: null,
+    id: guardEventId({
+      source: bare.source,
+      topics: [bare.topic],
+      data: bare.data,
+      contractId: bare.contractId,
+      ledger: bare.ledger,
+      transactionHash: bare.transactionHash,
+      simulationIndex: bare.source === "ledger" ? null : sequence,
+    }),
+  };
+}
 
 /**
  * One synthetic event, as a function of a monotonically increasing sequence.
@@ -201,48 +235,57 @@ export function syntheticDemoEvent(sequence: number, now: number = Date.now()): 
   const closedAt = new Date(now).toISOString();
 
   if (position === 2) {
-    return {
-      kind: "auth_checked",
-      topic: GUARD_EVENT_TOPICS.authChecked,
-      source: "diagnostic",
-      contractId: DEMO_GUARD,
-      ledger: null,
-      ledgerClosedAt: null,
-      transactionHash: null,
-      decision: {
-        result: "blocked",
-        reason: DEMO_BLOCKED_REASONS[sequence % DEMO_BLOCKED_REASONS.length]!,
+    return demoEvent(
+      {
+        kind: "auth_checked",
+        topic: GUARD_EVENT_TOPICS.authChecked,
         source: "diagnostic",
+        contractId: DEMO_GUARD,
+        ledger: null,
+        ledgerClosedAt: null,
+        transactionHash: null,
+        decision: {
+          result: "blocked",
+          reason: DEMO_BLOCKED_REASONS[sequence % DEMO_BLOCKED_REASONS.length]!,
+          source: "diagnostic",
+        },
+        data: {},
       },
-      data: {},
-    };
+      sequence,
+    );
   }
 
   if (position === 3) {
-    return {
-      kind: "heartbeat",
-      topic: GUARD_EVENT_TOPICS.heartbeat,
+    return demoEvent(
+      {
+        kind: "heartbeat",
+        topic: GUARD_EVENT_TOPICS.heartbeat,
+        source: "ledger",
+        contractId: DEMO_GUARD,
+        ledger: DEMO_BASE_LEDGER + sequence,
+        ledgerClosedAt: closedAt,
+        transactionHash: null,
+        decision: null,
+        data: { at: Math.floor(now / 1000) },
+      },
+      sequence,
+    );
+  }
+
+  return demoEvent(
+    {
+      kind: "auth_checked",
+      topic: GUARD_EVENT_TOPICS.authChecked,
       source: "ledger",
       contractId: DEMO_GUARD,
       ledger: DEMO_BASE_LEDGER + sequence,
       ledgerClosedAt: closedAt,
-      transactionHash: null,
-      decision: null,
-      data: { at: Math.floor(now / 1000) },
-    };
-  }
-
-  return {
-    kind: "auth_checked",
-    topic: GUARD_EVENT_TOPICS.authChecked,
-    source: "ledger",
-    contractId: DEMO_GUARD,
-    ledger: DEMO_BASE_LEDGER + sequence,
-    ledgerClosedAt: closedAt,
-    transactionHash: demoHash(sequence),
-    decision: { result: "allowed", reason: null, source: "ledger" },
-    data: {},
-  };
+      transactionHash: demoHash(sequence),
+      decision: { result: "allowed", reason: null, source: "ledger" },
+      data: {},
+    },
+    sequence,
+  );
 }
 
 /**

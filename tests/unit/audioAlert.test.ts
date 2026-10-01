@@ -26,6 +26,7 @@ import {
   type NotificationApi,
   type OscillatorLike,
 } from "../../lib/guard/audioAlert.ts";
+import { withIdentity } from "../mocks/eventFixtures.ts";
 
 /**
  * Alerting is the one feature here that interrupts a human being, so the tests
@@ -35,7 +36,7 @@ import {
  */
 
 function event(overrides: Partial<GuardEvent> = {}): GuardEvent {
-  return {
+  return withIdentity({
     kind: "auth_checked",
     topic: "event_auth_checked",
     source: "ledger",
@@ -46,7 +47,7 @@ function event(overrides: Partial<GuardEvent> = {}): GuardEvent {
     decision: { result: "allowed", reason: null, source: "ledger" },
     data: {},
     ...overrides,
-  };
+  });
 }
 
 // ── A fake AudioContext that records exactly what was scheduled ────────────
@@ -126,26 +127,52 @@ function fakeNotificationApi(
 describe("alert condition matching", () => {
   it("sounds for a blocked decision, which is the case the operator must not miss", () => {
     assert.equal(
-      alertReasonFor(event({ decision: { result: "blocked", reason: "cap_exceeded", source: "diagnostic" } })),
+      alertReasonFor(
+        event({
+          decision: { result: "blocked", reason: "per_tx_cap_exceeded", source: "diagnostic" },
+        }),
+      ),
       "blocked",
     );
-    assert.equal(isSecurityCritical(event({ decision: { result: "blocked", reason: null, source: "ledger" } })), true);
+    assert.equal(
+      isSecurityCritical(
+        event({ decision: { result: "blocked", reason: null, source: "ledger" } }),
+      ),
+      true,
+    );
   });
 
   it("treats an admin freeze and a revoked policy as security-critical", () => {
-    assert.equal(alertReasonFor(event({ kind: "frozen", topic: "event_frozen", decision: null })), "frozen");
     assert.equal(
-      alertReasonFor(event({ kind: "policy_revoked", topic: "event_policy_revoked", decision: null })),
+      alertReasonFor(event({ kind: "frozen", topic: "event_frozen", decision: null })),
+      "frozen",
+    );
+    assert.equal(
+      alertReasonFor(
+        event({ kind: "policy_revoked", topic: "event_policy_revoked", decision: null }),
+      ),
       "policy_revoked",
     );
   });
 
   it("stays quiet for routine events, which is what keeps the alert unmuted", () => {
     assert.equal(alertReasonFor(event()), null);
-    assert.equal(alertReasonFor(event({ kind: "heartbeat", topic: "event_heartbeat", decision: null })), null);
-    assert.equal(alertReasonFor(event({ kind: "policy_set", topic: "event_policy_set", decision: null })), null);
-    assert.equal(alertReasonFor(event({ kind: "unfrozen", topic: "event_unfrozen", decision: null })), null);
-    assert.equal(alertReasonFor(event({ kind: "initialized", topic: "event_initialized", decision: null })), null);
+    assert.equal(
+      alertReasonFor(event({ kind: "heartbeat", topic: "event_heartbeat", decision: null })),
+      null,
+    );
+    assert.equal(
+      alertReasonFor(event({ kind: "policy_set", topic: "event_policy_set", decision: null })),
+      null,
+    );
+    assert.equal(
+      alertReasonFor(event({ kind: "unfrozen", topic: "event_unfrozen", decision: null })),
+      null,
+    );
+    assert.equal(
+      alertReasonFor(event({ kind: "initialized", topic: "event_initialized", decision: null })),
+      null,
+    );
   });
 
   it("tolerates a missing event rather than inventing an alert", () => {
@@ -171,7 +198,10 @@ describe("the chime", () => {
     const plan = alertTonePlan();
     assert.equal(plan.length, BEEP_COUNT);
     assert.equal(plan[0]!.startMs, 0);
-    assert.ok(plan[1]!.startMs > plan[0]!.startMs + plan[0]!.durationMs, "the beeps are separated by silence");
+    assert.ok(
+      plan[1]!.startMs > plan[0]!.startMs + plan[0]!.durationMs,
+      "the beeps are separated by silence",
+    );
     assert.ok(
       alertPlanDurationMs(plan) < MAX_ALERT_AUDIO_MS,
       `a ${alertPlanDurationMs(plan)}ms chime is an interrupt, not a jingle`,
@@ -201,7 +231,12 @@ describe("the chime", () => {
 
     const report = alerter.play();
     assert.deepEqual(
-      { played: report.played, reason: report.reason, beeps: report.beeps, durationMs: report.durationMs },
+      {
+        played: report.played,
+        reason: report.reason,
+        beeps: report.beeps,
+        durationMs: report.durationMs,
+      },
       { played: true, reason: "played", beeps: 2, durationMs: alertPlanDurationMs() },
     );
     assert.equal(fake.oscillators.length, 2);
@@ -209,7 +244,10 @@ describe("the chime", () => {
     fake.oscillators.forEach((oscillator, index) => {
       assert.equal(oscillator.frequency.value, tones[index]!.frequencyHz);
       assert.equal(oscillator.startedAt[0], 42 + tones[index]!.startMs / 1000);
-      assert.equal(oscillator.stoppedAt[0], 42 + (tones[index]!.startMs + tones[index]!.durationMs) / 1000);
+      assert.equal(
+        oscillator.stoppedAt[0],
+        42 + (tones[index]!.startMs + tones[index]!.durationMs) / 1000,
+      );
     });
   });
 
@@ -218,7 +256,11 @@ describe("the chime", () => {
     const alerter = new AudioAlerter({ contextFactory: () => fake.context, volume: 1 });
     alerter.unlock();
     alerter.play();
-    assert.equal(fake.gains.length, 1, "one shared gain, so volume changes apply to the whole chime");
+    assert.equal(
+      fake.gains.length,
+      1,
+      "one shared gain, so volume changes apply to the whole chime",
+    );
     assert.equal(fake.gains[0]!.gain.value, 1);
 
     alerter.setVolume(0);
@@ -269,20 +311,32 @@ describe("notification payload generation", () => {
 
   it("names the refusal and the guard, so a notification on its own is actionable", () => {
     const payload = buildNotificationPayload(
-      event({ decision: { result: "blocked", reason: "cap_exceeded", source: "diagnostic" } }),
+      event({
+        decision: { result: "blocked", reason: "per_tx_cap_exceeded", source: "diagnostic" },
+      }),
       GUARD,
     );
     assert.ok(payload);
     assert.equal(payload.title, "Agent Guard: transfer blocked");
-    assert.match(payload.body, /refused a call \(cap_exceeded\)/);
-    assert.ok(payload.body.includes(GUARD.slice(0, 6)), "the guard is identified, not just described");
-    assert.equal(payload.tag, "agent-guard-blocked", "a stable tag collapses repeats into one notification");
+    assert.match(payload.body, /refused a call \(per_tx_cap_exceeded\)/);
+    assert.ok(
+      payload.body.includes(GUARD.slice(0, 6)),
+      "the guard is identified, not just described",
+    );
+    assert.equal(
+      payload.tag,
+      "agent-guard-blocked",
+      "a stable tag collapses repeats into one notification",
+    );
     assert.equal(payload.requireInteraction, true);
   });
 
   it("words an admin action differently from a refusal", () => {
     const frozen = buildNotificationPayload(event({ kind: "frozen", decision: null }), "CABC");
-    const revoked = buildNotificationPayload(event({ kind: "policy_revoked", decision: null }), "CABC");
+    const revoked = buildNotificationPayload(
+      event({ kind: "policy_revoked", decision: null }),
+      "CABC",
+    );
     assert.equal(frozen?.title, "Agent Guard: account frozen");
     assert.match(frozen!.body, /frozen by an admin/);
     assert.equal(revoked?.title, "Agent Guard: policy revoked");
@@ -290,7 +344,10 @@ describe("notification payload generation", () => {
   });
 
   it("produces nothing for a non-critical event, so a caller cannot notify on a heartbeat", () => {
-    assert.equal(buildNotificationPayload(event({ kind: "heartbeat", decision: null }), "CABC"), null);
+    assert.equal(
+      buildNotificationPayload(event({ kind: "heartbeat", decision: null }), "CABC"),
+      null,
+    );
     assert.equal(buildNotificationPayload(event(), "CABC"), null);
   });
 });
@@ -308,7 +365,10 @@ describe("notification permission and delivery", () => {
   it("refuses to construct a notification the browser would not show", () => {
     const api = fakeNotificationApi("denied");
     assert.equal(notificationPermissionState(api), "denied");
-    const delivery = deliverNotification({ title: "t", body: "b", tag: "g", requireInteraction: true }, api);
+    const delivery = deliverNotification(
+      { title: "t", body: "b", tag: "g", requireInteraction: true },
+      api,
+    );
     assert.deepEqual(delivery, { delivered: false, reason: "not-allowed" });
     assert.equal(api.shown.length, 0, "an ungranted permission must not even attempt construction");
   });
@@ -316,7 +376,12 @@ describe("notification permission and delivery", () => {
   it("delivers once permission is granted, passing the payload through", () => {
     const api = fakeNotificationApi("granted");
     assert.equal(notificationPermissionState(api), "granted");
-    const payload = { title: "Agent Guard: transfer blocked", body: "b", tag: "agent-guard-blocked", requireInteraction: true };
+    const payload = {
+      title: "Agent Guard: transfer blocked",
+      body: "b",
+      tag: "agent-guard-blocked",
+      requireInteraction: true,
+    };
     assert.deepEqual(deliverNotification(payload, api), { delivered: true, reason: "delivered" });
     assert.deepEqual(api.shown, [{ title: payload.title, options: payload }]);
   });
@@ -324,7 +389,9 @@ describe("notification permission and delivery", () => {
   it("maps a permission request onto the browser's answer", async () => {
     assert.equal(await requestNotificationPermission(fakeNotificationApi("granted")), "granted");
     assert.equal(
-      await requestNotificationPermission(fakeNotificationApi("default", { requestPermission: async () => "denied" })),
+      await requestNotificationPermission(
+        fakeNotificationApi("default", { requestPermission: async () => "denied" }),
+      ),
       "denied",
     );
     assert.equal(
@@ -357,21 +424,36 @@ describe("notification permission and delivery", () => {
 describe("not re-alerting on an event that was already announced", () => {
   it("reports each event once across repeated polls", () => {
     const tracker = createAlertTracker();
-    const blocked = event({ ledger: 7, decision: { result: "blocked", reason: "paused", source: "ledger" } });
+    const blocked = event({
+      ledger: 7,
+      decision: { result: "blocked", reason: "paused", source: "ledger" },
+    });
     const allowed = event({ ledger: 8 });
 
-    assert.deepEqual(tracker.unseen([blocked, allowed]).map((entry) => entry.ledger), [7, 8]);
+    assert.deepEqual(
+      tracker.unseen([blocked, allowed]).map((entry) => entry.ledger),
+      [7, 8],
+    );
     assert.deepEqual(tracker.unseen([blocked, allowed]), [], "the same rows must not chime twice");
     assert.equal(tracker.unseen([blocked]).length, 0);
 
     const later = event({ ledger: 9, transactionHash: "b".repeat(64) });
-    assert.deepEqual(tracker.unseen([later, blocked]).map((entry) => entry.ledger), [9]);
+    assert.deepEqual(
+      tracker.unseen([later, blocked]).map((entry) => entry.ledger),
+      [9],
+    );
   });
 
   it("keys on the decision, not only the topic", () => {
     const tracker = createAlertTracker();
-    const first = event({ ledger: 1, decision: { result: "allowed", reason: null, source: "ledger" } });
-    const second = event({ ledger: 1, decision: { result: "blocked", reason: "cap_exceeded", source: "ledger" } });
+    const first = event({
+      ledger: 1,
+      decision: { result: "allowed", reason: null, source: "ledger" },
+    });
+    const second = event({
+      ledger: 1,
+      decision: { result: "blocked", reason: "per_tx_cap_exceeded", source: "ledger" },
+    });
     assert.equal(tracker.unseen([first, second]).length, 2);
   });
 

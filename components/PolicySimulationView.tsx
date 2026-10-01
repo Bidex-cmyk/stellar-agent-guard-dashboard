@@ -61,8 +61,7 @@ export function PolicySimulationView({ policy = null }: Props) {
 
   const toX = (time: number) => PADDING + ((time - minTime) / span) * (WIDTH - 2 * PADDING);
   // BigInt math keeps i128-sized caps from overflowing the pixel projection.
-  const toY = (value: bigint) =>
-    HEIGHT - PADDING - Number((value * BigInt(PLOT_HEIGHT)) / yMax);
+  const toY = (value: bigint) => HEIGHT - PADDING - Number((value * BigInt(PLOT_HEIGHT)) / yMax);
 
   const pathD = simulation.curve
     .map(

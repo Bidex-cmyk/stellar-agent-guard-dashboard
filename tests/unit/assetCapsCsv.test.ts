@@ -26,8 +26,14 @@ test("CSV parsing validates addresses and positive stroop caps", () => {
 
 test("CSV parsing rejects malformed rows, duplicate addresses, and bad headers", () => {
   assert.throws(() => parseAssetCapsCsv("wrong,header,symbol\n"), /Expected header/);
-  assert.throws(() => parseAssetCapsCsv(`${exportAssetCapsCsv(rows)}${ASSET},7,USD\n`), /duplicate/);
-  assert.throws(() => parseAssetCapsCsv(`${exportAssetCapsCsv(rows)}${ASSET},7\n`), /three columns/);
+  assert.throws(
+    () => parseAssetCapsCsv(`${exportAssetCapsCsv(rows)}${ASSET},7,USD\n`),
+    /duplicate/,
+  );
+  assert.throws(
+    () => parseAssetCapsCsv(`${exportAssetCapsCsv(rows)}${ASSET},7\n`),
+    /three columns/,
+  );
 });
 
 test("JSON round trips through the same validated row model", () => {

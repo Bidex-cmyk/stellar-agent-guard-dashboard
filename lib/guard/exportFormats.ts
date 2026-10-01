@@ -19,6 +19,7 @@
  * the exact bytes.
  */
 
+import { toHex } from "stellar-agent-guard-sdk";
 import type { TelemetryEvent } from "./telemetry.ts";
 import { EMPTY_TELEMETRY_FILTER, type TelemetryFilter } from "./telemetryExport.ts";
 
@@ -49,7 +50,7 @@ export function toJsonSafe(value: unknown): unknown {
       : String(value);
   }
   if (typeof value === "string" || typeof value === "boolean") return value;
-  if (value instanceof Uint8Array) return { hex: bytesToHex(value) };
+  if (value instanceof Uint8Array) return { hex: toHex(value) };
   if (value instanceof Date) return value.toISOString();
   if (value instanceof Map) {
     const out: Record<string, unknown> = {};
@@ -61,7 +62,10 @@ export function toJsonSafe(value: unknown): unknown {
     // Objects that know how to render themselves (SDK `Address`, `Contract`, …)
     // are recorded as their canonical string, not as their internals.
     const ownToString = (value as { toString?: () => string }).toString;
-    if (Object.getPrototypeOf(value) !== Object.prototype && ownToString !== Object.prototype.toString) {
+    if (
+      Object.getPrototypeOf(value) !== Object.prototype &&
+      ownToString !== Object.prototype.toString
+    ) {
       return String(value);
     }
     const out: Record<string, unknown> = {};
@@ -197,15 +201,15 @@ export function telemetryToAuditLog(params: NdjsonExportParams): string {
 }
 
 /** `guard-audit-log-2026-09-25T14-03-07Z.ndjson`: sortable, and safe on every filesystem. */
-export function auditLogFilename(exportedAt: Date = new Date(), scope: "full" | "filtered" = "full"): string {
-  const stamp = exportedAt.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/:/g, "-");
+export function auditLogFilename(
+  exportedAt: Date = new Date(),
+  scope: "full" | "filtered" = "full",
+): string {
+  const stamp = exportedAt
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace(/:/g, "-");
   return `guard-audit-log-${scope === "filtered" ? "filtered-" : ""}${stamp}.ndjson`;
 }
 
 export const NDJSON_MIME = "application/x-ndjson";
-
-function bytesToHex(bytes: Uint8Array): string {
-  let out = "";
-  for (const byte of bytes) out += byte.toString(16).padStart(2, "0");
-  return out;
-}

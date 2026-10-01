@@ -39,8 +39,7 @@ export function AriaAnnouncer() {
   const current = queue[0];
   useEffect(() => {
     if (current === undefined) return;
-    const region =
-      current.priority === "assertive" ? assertiveRef.current : politeRef.current;
+    const region = current.priority === "assertive" ? assertiveRef.current : politeRef.current;
     if (!region) return;
 
     region.textContent = "";
@@ -57,12 +56,7 @@ export function AriaAnnouncer() {
 
   return (
     <>
-      <div
-        ref={politeRef}
-        className="visually-hidden"
-        aria-live="polite"
-        aria-atomic="true"
-      />
+      <div ref={politeRef} className="visually-hidden" aria-live="polite" aria-atomic="true" />
       <div
         ref={assertiveRef}
         className="visually-hidden"

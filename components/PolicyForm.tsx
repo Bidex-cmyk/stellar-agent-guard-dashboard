@@ -161,13 +161,18 @@ export function PolicyForm() {
 
   async function importAssetCaps(file: File, format: "csv" | "json") {
     try {
-      const imported = format === "csv" ? parseAssetCapsCsv(await file.text()) : parseAssetCapsJson(await file.text());
+      const imported =
+        format === "csv"
+          ? parseAssetCapsCsv(await file.text())
+          : parseAssetCapsJson(await file.text());
       const merged = mergeAssetCapOverrides(effective.assetCaps, imported);
       updateAssetCaps(merged.rows);
       setAssetCapChanges((current) => ({ ...current, ...merged.changes }));
       setError(null);
     } catch (caught) {
-      setError(`Asset-cap import failed: ${caught instanceof Error ? caught.message : String(caught)}`);
+      setError(
+        `Asset-cap import failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+      );
     }
   }
 
@@ -202,7 +207,13 @@ export function PolicyForm() {
     setError(null);
     setOutcome(null);
     try {
-      const result = await installPolicy({ server, signer: signer(), guard, draft: effective, exportOnly });
+      const result = await installPolicy({
+        server,
+        signer: signer(),
+        guard,
+        draft: effective,
+        exportOnly,
+      });
       setOutcome(result);
       if (result.kind === "invoked" && result.result.kind === "refused") {
         pushEvents(refusedEventsFromDiagnostics(result.result.diagnosticEvents, guard));
@@ -311,7 +322,8 @@ export function PolicyForm() {
               placeholder="150"
             />
             <span className="hint">
-              Total spend allowed inside a genuinely rolling window — not a fixed bucket that resets.
+              Total spend allowed inside a genuinely rolling window — not a fixed bucket that
+              resets.
             </span>
           </label>
 
@@ -376,19 +388,35 @@ export function PolicyForm() {
           <div className="field">
             <span className="lbl">Per-asset cap overrides</span>
             <span className="hint">
-              Bulk-edit asset contract addresses and positive stroop caps. Imported rows are merged by contract address.
+              Bulk-edit asset contract addresses and positive stroop caps. Imported rows are merged
+              by contract address.
             </span>
             <div className="row" style={{ margin: "8px 0" }}>
-              <button className="secondary" type="button" onClick={() => csvInput.current?.click()} disabled={busy}>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => csvInput.current?.click()}
+                disabled={busy}
+              >
                 Import CSV
               </button>
-              <button className="secondary" type="button" onClick={() => jsonInput.current?.click()} disabled={busy}>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => jsonInput.current?.click()}
+                disabled={busy}
+              >
                 Import JSON
               </button>
               <button
                 className="secondary"
                 type="button"
-                onClick={() => downloadAssetCaps("asset-cap-overrides.csv", exportAssetCapsCsv(effective.assetCaps))}
+                onClick={() =>
+                  downloadAssetCaps(
+                    "asset-cap-overrides.csv",
+                    exportAssetCapsCsv(effective.assetCaps),
+                  )
+                }
                 disabled={busy || effective.assetCaps.length === 0}
               >
                 Export CSV
@@ -396,7 +424,12 @@ export function PolicyForm() {
               <button
                 className="secondary"
                 type="button"
-                onClick={() => downloadAssetCaps("asset-cap-overrides.json", exportAssetCapsJson(effective.assetCaps))}
+                onClick={() =>
+                  downloadAssetCaps(
+                    "asset-cap-overrides.json",
+                    exportAssetCapsJson(effective.assetCaps),
+                  )
+                }
                 disabled={busy || effective.assetCaps.length === 0}
               >
                 Export JSON
@@ -448,7 +481,9 @@ export function PolicyForm() {
                           }}
                         />
                         {assetCapChanges[row.assetContractAddress] && (
-                          <span className="pill ok asset-cap-badge">{assetCapChanges[row.assetContractAddress]}</span>
+                          <span className="pill ok asset-cap-badge">
+                            {assetCapChanges[row.assetContractAddress]}
+                          </span>
                         )}
                       </td>
                       <td>
@@ -479,7 +514,11 @@ export function PolicyForm() {
                           className="secondary"
                           type="button"
                           aria-label={`Remove ${row.symbol || "asset override"}`}
-                          onClick={() => updateAssetCaps(effective.assetCaps.filter((_, itemIndex) => itemIndex !== index))}
+                          onClick={() =>
+                            updateAssetCaps(
+                              effective.assetCaps.filter((_, itemIndex) => itemIndex !== index),
+                            )
+                          }
                         >
                           Remove
                         </button>
@@ -525,8 +564,8 @@ export function PolicyForm() {
               placeholder="C…  or  C…:swap,deposit   (no colon = any function)"
             />
             <span className="hint">
-              Calls to contracts outside this list are refused. Window and pause state still apply to
-              these calls; per-call amount and recipient limits do not.
+              Calls to contracts outside this list are refused. Window and pause state still apply
+              to these calls; per-call amount and recipient limits do not.
             </span>
           </label>
 
@@ -539,7 +578,9 @@ export function PolicyForm() {
             />
             <label htmlFor="paused">
               Start paused
-              <span className="hint">Installs the policy but refuses every call until resumed.</span>
+              <span className="hint">
+                Installs the policy but refuses every call until resumed.
+              </span>
             </label>
           </div>
         </div>
@@ -585,12 +626,22 @@ export function PolicyForm() {
         >
           Revoke policy (default deny)
         </button>
-        <button className="secondary" onClick={() => { setDraft(EMPTY_DRAFT); setAssetCapChanges({}); }} disabled={busy}>
+        <button
+          className="secondary"
+          onClick={() => {
+            setDraft(EMPTY_DRAFT);
+            setAssetCapChanges({});
+          }}
+          disabled={busy}
+        >
           Clear form
         </button>
         <button
           className="secondary"
-          onClick={() => { setDraft(null); setAssetCapChanges({}); }}
+          onClick={() => {
+            setDraft(null);
+            setAssetCapChanges({});
+          }}
           disabled={busy || draft === null}
           title="Discard edits and load the policy currently installed on chain"
         >
@@ -619,8 +670,8 @@ export function PolicyForm() {
             </p>
             <p className="tiny mono">{describeDraft(draftFromPreset(pendingPreset))}</p>
             <p className="tiny muted">
-              The placeholder asset, recipient and protocol addresses in this preset must be replaced
-              with your own before installing.
+              The placeholder asset, recipient and protocol addresses in this preset must be
+              replaced with your own before installing.
             </p>
             <div className="row">
               <button onClick={() => applyPreset(pendingPreset)}>Replace draft</button>
@@ -634,7 +685,9 @@ export function PolicyForm() {
 
       {error && <ErrorBlock title="The policy write did not complete" detail={error} />}
 
-      {outcome?.kind === "invoked" && <OutcomeBlock result={outcome.result} verb="set_policy" onClose={() => setOutcome(null)} />}
+      {outcome?.kind === "invoked" && (
+        <OutcomeBlock result={outcome.result} verb="set_policy" onClose={() => setOutcome(null)} />
+      )}
       {outcome?.kind === "invalid" && (
         <ErrorBlock
           title="The policy was rejected before signing"
@@ -667,14 +720,33 @@ function SecurityProfileBadge({ profile }: { profile: SecurityProfile }) {
   );
 }
 
-export function OutcomeBlock({ result, verb, onClose }: { result: InvokeResult; verb: string; onClose?: () => void }) {
+export function OutcomeBlock({
+  result,
+  verb,
+  onClose,
+}: {
+  result: InvokeResult;
+  verb: string;
+  onClose?: () => void;
+}) {
   if (result.kind === "exported") {
     return (
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "16px",
+            }}
+          >
             <h2 style={{ margin: 0 }}>Exported Transaction XDR</h2>
-            {onClose && <button className="secondary" onClick={onClose}>Close</button>}
+            {onClose && (
+              <button className="secondary" onClick={onClose}>
+                Close
+              </button>
+            )}
           </div>
           <p className="tiny" style={{ marginBottom: "16px" }}>
             This unsigned transaction envelope is ready for external multi-sig signing.
@@ -682,10 +754,18 @@ export function OutcomeBlock({ result, verb, onClose }: { result: InvokeResult; 
           <textarea
             readOnly
             value={result.xdr}
-            style={{ width: "100%", height: "120px", marginBottom: "16px", fontSize: "12px", fontFamily: "monospace" }}
+            style={{
+              width: "100%",
+              height: "120px",
+              marginBottom: "16px",
+              fontSize: "12px",
+              fontFamily: "monospace",
+            }}
           />
           <div className="row">
-            <button onClick={() => navigator.clipboard.writeText(result.xdr)}>Copy to Clipboard</button>
+            <button onClick={() => navigator.clipboard.writeText(result.xdr)}>
+              Copy to Clipboard
+            </button>
             <button
               onClick={() => {
                 const blob = new Blob([result.xdr], { type: "text/plain" });
@@ -711,8 +791,9 @@ export function OutcomeBlock({ result, verb, onClose }: { result: InvokeResult; 
           {verb} landed on chain — {starLink(result.hash)}
         </strong>
         <span className="tiny">
-          Ledger {result.ledger ?? "—"}. The panel above re-reads the contract to show the policy that
-          is actually installed; this receipt proves the write, not that it did what you expected.
+          Ledger {result.ledger ?? "—"}. The panel above re-reads the contract to show the policy
+          that is actually installed; this receipt proves the write, not that it did what you
+          expected.
         </span>
       </div>
     );
@@ -729,9 +810,7 @@ export function OutcomeBlock({ result, verb, onClose }: { result: InvokeResult; 
   }
   return (
     <div className="error">
-      <span className="t">
-        Broadcast but rejected on chain — {starLink(result.hash)}
-      </span>
+      <span className="t">Broadcast but rejected on chain — {starLink(result.hash)}</span>
       <span className="mono tiny">{result.detail}</span>
     </div>
   );

@@ -44,8 +44,7 @@ test("README and SPEC.md carry the same statement as the code", () => {
   // across lines and may emphasis it, so the comparison normalises whitespace and
   // strips markdown emphasis markers — but keeps backticks, because the code
   // spans around `transfer`/`transfer_from` are part of the required wording.
-  const normalise = (text: string): string =>
-    text.replace(/\*/g, "").replace(/\s+/g, " ").trim();
+  const normalise = (text: string): string => text.replace(/\*/g, "").replace(/\s+/g, " ").trim();
   const wanted = normalise(REQUIRED);
 
   for (const path of ["README.md", "SPEC.md"]) {

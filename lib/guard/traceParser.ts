@@ -58,8 +58,7 @@ function render(value: unknown): string {
 /** Decode a `Error(Contract, #N)` / `Error(Auth, …)` topic, falling back to text. */
 function describeError(errorScVal: unknown, message: unknown): string {
   const decoded = native(errorScVal) as
-    | { type?: string; code?: number; value?: string }
-    | undefined;
+    { type?: string; code?: number; value?: string } | undefined;
   if (decoded && typeof decoded === "object") {
     if (decoded.type === "contract" && typeof decoded.code === "number") {
       return decodeGuardError(decoded.code);
@@ -152,7 +151,11 @@ function normalize(event: unknown): Normalized | null {
       kind: "call",
       contractId: contractId ?? "C_UNKNOWN",
       functionName: functionName ?? "unknown",
-      args: Array.isArray(record.arguments) ? record.arguments : Array.isArray(record.args) ? record.args : [],
+      args: Array.isArray(record.arguments)
+        ? record.arguments
+        : Array.isArray(record.args)
+          ? record.args
+          : [],
     };
   }
   if (kind === "fn_return") {
@@ -161,15 +164,35 @@ function normalize(event: unknown): Normalized | null {
   if (kind === "error" || kind === "diagnostic") {
     const code = record.error;
     if (typeof code === "number") {
-      return { kind: "error", error: decodeGuardError(code), ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
+      return {
+        kind: "error",
+        error: decodeGuardError(code),
+        ...(contractId !== undefined && { contractId }),
+        ...(functionName !== undefined && { functionName }),
+      };
     }
     if (typeof code === "string") {
-      return { kind: "error", error: code, ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
+      return {
+        kind: "error",
+        error: code,
+        ...(contractId !== undefined && { contractId }),
+        ...(functionName !== undefined && { functionName }),
+      };
     }
-    return { kind: "error", error: describeError(record.errorScVal, record.message ?? record.data), ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
+    return {
+      kind: "error",
+      error: describeError(record.errorScVal, record.message ?? record.data),
+      ...(contractId !== undefined && { contractId }),
+      ...(functionName !== undefined && { functionName }),
+    };
   }
   if (kind === "log") {
-    return { kind: "log", message: String(record.message ?? record.data ?? ""), ...(contractId !== undefined && { contractId }), ...(functionName !== undefined && { functionName }) };
+    return {
+      kind: "log",
+      message: String(record.message ?? record.data ?? ""),
+      ...(contractId !== undefined && { contractId }),
+      ...(functionName !== undefined && { functionName }),
+    };
   }
 
   return normalizeContractEvent(event);

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PolicyConfig } from "stellar-agent-guard-sdk";
-import {
-  simulatePolicy,
-  type SimulatedEvent,
-} from "../../lib/guard/policySimulator.ts";
+import type { GuardAuthDecision, PolicyConfig } from "stellar-agent-guard-sdk";
+import { simulatePolicy, type SimulatedEvent } from "../../lib/guard/policySimulator.ts";
 import type { TelemetryEvent } from "../../lib/guard/telemetry.ts";
 
 const NOW = Date.parse("2026-09-29T12:00:00Z");
 const HOUR_MS = 3_600_000;
+
+/** Monotonic filler for the SDK-required `id`; the simulator never reads it. */
+let sequence = 0;
 
 /** A permissive policy: nothing blocks, so only amounts and windows matter. */
 function policy(overrides: Partial<PolicyConfig> = {}): PolicyConfig {
@@ -29,21 +29,26 @@ function policy(overrides: Partial<PolicyConfig> = {}): PolicyConfig {
 }
 
 /** A minimal judgeable auth event: an `auth_checked` decision with an amount. */
-function authEvent(overrides: {
-  time?: number;
-  amount?: bigint | number | string;
-  decision?: "allowed" | "blocked";
-  reason?: string | null;
-  ledger?: number;
-} = {}): TelemetryEvent {
+function authEvent(
+  overrides: {
+    time?: number;
+    amount?: bigint | number | string;
+    decision?: "allowed" | "blocked";
+    reason?: GuardAuthDecision["reason"];
+    ledger?: number;
+  } = {},
+): TelemetryEvent {
   const { time = NOW, amount = 100n, ...rest } = overrides;
   return {
+    id: `sim:auth:${sequence++}`,
     kind: "auth_checked",
     topic: "event_auth_checked",
     source: "ledger",
+    stream: "committed",
     contractId: "CTEST",
     ledger: rest.ledger ?? null,
     ledgerClosedAt: new Date(time).toISOString(),
+    observedAt: null,
     transactionHash: null,
     decision: {
       result: rest.decision ?? "allowed",
@@ -57,12 +62,15 @@ function authEvent(overrides: {
 /** A non-auth event (heartbeat / admin) — never judgeable. */
 function otherEvent(kind: TelemetryEvent["kind"], time = NOW): TelemetryEvent {
   return {
+    id: `sim:${kind}:${sequence++}`,
     kind,
     topic: `event_${kind}`,
     source: "ledger",
+    stream: "committed",
     contractId: "CTEST",
     ledger: null,
     ledgerClosedAt: new Date(time).toISOString(),
+    observedAt: null,
     transactionHash: null,
     decision: null,
     data: {},
@@ -123,10 +131,7 @@ test("the rolling window drains: an old call stops counting against the cap", ()
   // Window is 1h. A 200 call 2h ago, then a 200 call now, cap 300: the old
   // spend has left the window, so the second call is approved.
   const result = simulatePolicy(
-    [
-      authEvent({ time: NOW - 2 * HOUR_MS, amount: 200n }),
-      authEvent({ time: NOW, amount: 200n }),
-    ],
+    [authEvent({ time: NOW - 2 * HOUR_MS, amount: 200n }), authEvent({ time: NOW, amount: 200n })],
     policy({ window_secs: 3_600n, window_cap: 300n }),
     { now: NOW },
   );
@@ -149,11 +154,9 @@ test("rejected and throttled calls do not add spend to the window", () => {
 });
 
 test("rejects calls while the policy is paused", () => {
-  const result = simulatePolicy(
-    [authEvent({ amount: 10n })],
-    policy({ paused: true }),
-    { now: NOW },
-  );
+  const result = simulatePolicy([authEvent({ amount: 10n })], policy({ paused: true }), {
+    now: NOW,
+  });
 
   assert.equal(result.rejected, 1);
   assert.equal((result.events[0] as SimulatedEvent).reason, "policy_paused");
@@ -185,7 +188,7 @@ test("rejects calls outside the policy's active window", () => {
     { now: NOW },
   );
   assert.equal(inside.approved, 1);
-});;
+});
 
 test("passes through non-auth events as unjudged without failing", () => {
   const result = simulatePolicy(
@@ -254,7 +257,9 @@ test("the curve records cumulative window spend at each judged call", () => {
 test("the issue's example: 94% approval with 6 blocked reads correctly", () => {
   // 100 calls, 94 small and approved, 6 over the per-tx cap.
   const events = [
-    ...Array.from({ length: 94 }, (_, i) => authEvent({ time: NOW - (100 - i) * 1_000, amount: 10n })),
+    ...Array.from({ length: 94 }, (_, i) =>
+      authEvent({ time: NOW - (100 - i) * 1_000, amount: 10n }),
+    ),
     ...Array.from({ length: 6 }, (_, i) => authEvent({ time: NOW - i * 1_000, amount: 9_999n })),
   ];
   const result = simulatePolicy(events, policy({ per_tx_cap: 100n }), { now: NOW });
@@ -263,7 +268,10 @@ test("the issue's example: 94% approval with 6 blocked reads correctly", () => {
   assert.equal(result.approved, 94);
   assert.equal(result.rejected, 6);
   assert.equal(result.approvalRate, 94);
-  assert.equal(result.summary, "Would have approved 94% of historical calls (6 blocked due to per-tx cap)");
+  assert.equal(
+    result.summary,
+    "Would have approved 94% of historical calls (6 blocked due to per-tx cap)",
+  );
 });
 
 test("preserves the chain's own reason on replayed blocked diagnostics", () => {

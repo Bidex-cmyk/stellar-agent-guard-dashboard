@@ -23,7 +23,11 @@ export function Tabs() {
   return (
     <nav className="tabs">
       {tabs.map((tab) => (
-        <Link key={tab.href} href={tab.href} aria-current={pathname === tab.href ? "page" : undefined}>
+        <Link
+          key={tab.href}
+          href={tab.href}
+          aria-current={pathname === tab.href ? "page" : undefined}
+        >
           {tab.label}
         </Link>
       ))}
@@ -94,7 +98,10 @@ export function Stat({
   return (
     <div className="stat">
       <div className="k">{label}</div>
-      <div className={`v${tone ? ` ${tone}` : ""}`} style={tone ? { color: `var(--${tone})` } : undefined}>
+      <div
+        className={`v${tone ? ` ${tone}` : ""}`}
+        style={tone ? { color: `var(--${tone})` } : undefined}
+      >
         {value}
       </div>
       {note !== undefined && <div className="n">{note}</div>}
@@ -169,7 +176,10 @@ export function relativeTime(iso: string | null): string {
 export function OutcomeList({
   steps,
 }: {
-  steps: Array<{ label: string; result: { kind: string; hash?: string; ledger?: number | null; detail?: string } }>;
+  steps: Array<{
+    label: string;
+    result: { kind: string; hash?: string; ledger?: number | null; detail?: string };
+  }>;
 }) {
   return (
     <div style={{ marginTop: 8 }}>
@@ -216,14 +226,19 @@ export interface AmountDisplayProps extends FormatStroopsOptions {
  */
 export function AmountDisplay({ stroops, symbol, decimals }: AmountDisplayProps) {
   const [showRaw, setShowRaw] = useState(false);
-  const human = formatStroopsWithUnit(stroops, { ...(symbol !== undefined ? { symbol } : {}), ...(decimals !== undefined ? { decimals } : {}) });
+  const human = formatStroopsWithUnit(stroops, {
+    ...(symbol !== undefined ? { symbol } : {}),
+    ...(decimals !== undefined ? { decimals } : {}),
+  });
   const raw = formatRawStroops(stroops);
   return (
     <button
       type="button"
       className="mono"
       onClick={() => setShowRaw((v) => !v)}
-      aria-label={showRaw ? `Raw amount: ${raw}` : `Amount: ${human}. Activate to show raw stroops.`}
+      aria-label={
+        showRaw ? `Raw amount: ${raw}` : `Amount: ${human}. Activate to show raw stroops.`
+      }
       title={showRaw ? "Show human-readable amount" : "Show raw stroops"}
     >
       {showRaw ? raw : human}

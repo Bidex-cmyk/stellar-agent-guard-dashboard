@@ -21,8 +21,13 @@
  * instantaneous.
  */
 
-import { GuardTelemetryListener, guardEventsFromDiagnostics, topicSymbols } from "stellar-agent-guard-sdk";
-import type { GuardEvent } from "stellar-agent-guard-sdk";
+import {
+  GuardTelemetryListener,
+  guardEventsFromDiagnostics,
+  topicSymbols,
+  type GuardEvent,
+  type PollResult,
+} from "stellar-agent-guard-sdk";
 import { scValToNative, xdr, type rpc } from "@stellar/stellar-sdk";
 import { NETWORK } from "./network.ts";
 import { estimateLedgerAtTime, type LedgerAnchor, type TimeRange } from "./ledgerTime.ts";
@@ -47,18 +52,22 @@ export interface RawEventXdr {
   inSuccessfulContractCall: boolean | null;
 }
 
-/** A decoded guard event plus the raw XDR it came from and when this console saw it. */
+/**
+ * A decoded guard event plus the raw XDR it came from.
+ *
+ * The SDK owns the decoding (`GuardEvent`, including its `id`, `stream` and
+ * `observedAt`); the only field added here is `raw` — UI shape, not decode: an
+ * audit export has to hand the reviewer the original bytes, and the SDK's
+ * decoded view deliberately drops them (SDK #94 would carry them).
+ */
 export type TelemetryEvent = GuardEvent & {
   raw?: RawEventXdr | null;
-  /** ISO time this console decoded the event: the only timestamp a diagnostic has. */
-  observedAt?: string;
 };
 
-export interface TelemetryPage {
+/** One page of rows, carrying the SDK's own page fields (cursor, ledgers). */
+export type TelemetryPage = Omit<PollResult, "events"> & {
   events: TelemetryEvent[];
-  cursor: string;
-  latestLedger: number;
-}
+};
 
 /**
  * A cursor-carrying reader over one guard's event stream.
@@ -204,6 +213,9 @@ export class GuardFeed {
  * returned with `source: "diagnostic"` so the feed can say plainly that they were
  * never committed — a distinction that matters, because a rolled-back event is
  * evidence of a refusal, not of settled state.
+ *
+ * Decode is the SDK's (`guardEventsFromDiagnostics`); the wrapper stays because
+ * the feed shows *when this console saw the refusal* and exports its raw bytes.
  */
 export function refusedEventsFromDiagnostics(
   diagnosticEvents: readonly unknown[],
@@ -234,6 +246,9 @@ export function refusedEventsFromDiagnostics(
  * The listener drops unrecognised topics but keeps the order of the rest, so a
  * single forward walk matching ledger, transaction and name topic lines the two
  * lists up.
+ *
+ * Retained for UI shape only: the audit export needs the original base64 XDR,
+ * which the SDK's decoded `GuardEvent` does not carry (SDK #94 would).
  */
 export function attachLedgerXdr(
   decoded: readonly GuardEvent[],
@@ -266,6 +281,9 @@ export function attachLedgerXdr(
   });
 }
 
+// UI shape: pairing the raw `getEvents` page with the SDK's decoded rows needs
+// the name topic of an RPC event, and the SDK's `topicSymbols` reads a
+// `DiagnosticEvent`/base64 shape, not `rpc.Api.EventResponse`.
 function firstTopic(event: rpc.Api.EventResponse): string | null {
   const [first] = event.topic;
   if (!first) return null;
@@ -276,6 +294,8 @@ function firstTopic(event: rpc.Api.EventResponse): string | null {
   }
 }
 
+// UI shape: some RPC paths hand diagnostics back as base64 strings, and the
+// SDK's decoder reads decoded events only — normalise before handing them over.
 function decodeIfBase64(value: unknown): unknown {
   if (typeof value !== "string") return value;
   try {
@@ -293,14 +313,20 @@ function isXdrEncodable(value: unknown): value is XdrEncodable {
   return typeof (value as XdrEncodable | null)?.toXDR === "function";
 }
 
+// UI shape: raw bytes for the audit export — the SDK decodes and drops the XDR.
 /** Raw XDR for one diagnostic event, whether it arrived decoded or as base64. */
 function diagnosticXdr(value: unknown): RawEventXdr | null {
   try {
-    const event =
-      typeof value === "string" ? xdr.DiagnosticEvent.fromXDR(value, "base64") : value;
+    const event = typeof value === "string" ? xdr.DiagnosticEvent.fromXDR(value, "base64") : value;
     if (!(event instanceof xdr.DiagnosticEvent)) {
       return isXdrEncodable(value)
-        ? { eventId: null, topicXdr: [], valueXdr: null, diagnosticEventXdr: value.toXDR("base64"), inSuccessfulContractCall: null }
+        ? {
+            eventId: null,
+            topicXdr: [],
+            valueXdr: null,
+            diagnosticEventXdr: value.toXDR("base64"),
+            inSuccessfulContractCall: null,
+          }
         : null;
     }
     const body = event.event.body.v0;
@@ -335,7 +361,7 @@ export interface StreamBuffer {
   /** Events that arrived while paused, newest first. They are not shown until resume. */
   pending: TelemetryEvent[];
   paused: boolean;
-  /** Identities already accepted, so a re-polled page or re-pushed diagnostic is not shown twice. */
+  /** SDK event ids already accepted, so a re-polled page or re-pushed diagnostic is not shown twice. */
   seen: ReadonlySet<string>;
   /** Events that fell out of the pending queue while paused because it exceeded the buffer limit. */
   dropped: number;
@@ -346,25 +372,6 @@ export const STREAM_BUFFER_LIMIT = 250;
 
 export function emptyStreamBuffer(): StreamBuffer {
   return { rows: [], pending: [], paused: false, seen: new Set(), dropped: 0 };
-}
-
-/**
- * A stable identity for an event, so re-polling the same page cannot duplicate
- * rows. Decoded event data can hold bigints (a heartbeat's `at`), which plain
- * `JSON.stringify` rejects, so they are written as decimal strings.
- */
-export function eventKey(event: GuardEvent): string {
-  return [
-    event.source,
-    event.transactionHash ?? "-",
-    event.ledger ?? "-",
-    event.topic,
-    event.decision?.result ?? "-",
-    event.decision?.reason ?? "-",
-    typeof event.data === "object" && event.data !== null
-      ? JSON.stringify(event.data, (_key, value: unknown) => (typeof value === "bigint" ? `${value}n` : value))
-      : String(event.data),
-  ].join("|");
 }
 
 /**
@@ -385,7 +392,7 @@ export function ingestEvents(
   const fresh: TelemetryEvent[] = [];
   for (const event of incoming) {
     if (dedupe) {
-      const key = eventKey(event);
+      const key = event.id;
       if (seen.has(key)) continue;
       if (seen === buffer.seen) seen = new Set(buffer.seen);
       (seen as Set<string>).add(key);
@@ -412,7 +419,11 @@ export function ingestEvents(
  * not re-suppress events the window displayed, nor re-show ones it did.
  */
 export function historicalBuffer(events: readonly TelemetryEvent[]): StreamBuffer {
-  return { ...emptyStreamBuffer(), rows: [...events], seen: new Set(events.map(eventKey)) };
+  return {
+    ...emptyStreamBuffer(),
+    rows: [...events],
+    seen: new Set(events.map((event) => event.id)),
+  };
 }
 
 export function pauseStream(buffer: StreamBuffer): StreamBuffer {
@@ -420,7 +431,10 @@ export function pauseStream(buffer: StreamBuffer): StreamBuffer {
 }
 
 /** Put the queued events on top of the rows, in arrival order, and go live again. */
-export function resumeStream(buffer: StreamBuffer, limit: number = STREAM_BUFFER_LIMIT): StreamBuffer {
+export function resumeStream(
+  buffer: StreamBuffer,
+  limit: number = STREAM_BUFFER_LIMIT,
+): StreamBuffer {
   if (!buffer.paused) return buffer;
   return {
     ...buffer,

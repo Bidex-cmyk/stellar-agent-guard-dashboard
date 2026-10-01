@@ -1,24 +1,24 @@
-export type FeePreset = 'Economic' | 'Standard' | 'Fast';
+export type FeePreset = "Economic" | "Standard" | "Fast";
 
 export function calculateFeeHeadroom(
   cpu: number,
   baseFee: bigint,
-  preset: FeePreset = 'Standard',
-  maxFeeCap?: bigint
+  preset: FeePreset = "Standard",
+  maxFeeCap?: bigint,
 ) {
   let multiplier: bigint;
   let cpuMultiplier: number;
 
   switch (preset) {
-    case 'Economic':
+    case "Economic":
       multiplier = 105n;
       cpuMultiplier = 1.05;
       break;
-    case 'Fast':
+    case "Fast":
       multiplier = 130n;
-      cpuMultiplier = 1.30;
+      cpuMultiplier = 1.3;
       break;
-    case 'Standard':
+    case "Standard":
     default:
       multiplier = 115n;
       cpuMultiplier = 1.15;

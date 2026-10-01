@@ -24,10 +24,7 @@ test("caches results for the same contractId", async () => {
   const methods: string[] = [];
   // The module POSTs { contractId, method, args } per metadata field; answer
   // each method distinctly so decimals/symbol/name parsing is really exercised.
-  globalThis.fetch = (async (
-    _url: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     calls++;
     const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
     const method = body.method ?? "";

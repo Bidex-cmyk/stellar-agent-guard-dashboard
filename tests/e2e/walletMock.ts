@@ -37,7 +37,10 @@ export interface WalletMockOptions {
 }
 
 /** Install the Freighter message mock into the page before any app script runs. */
-export async function installFreighterMock(page: Page, options: WalletMockOptions = {}): Promise<void> {
+export async function installFreighterMock(
+  page: Page,
+  options: WalletMockOptions = {},
+): Promise<void> {
   const address = options.address ?? MOCK_ADMIN_ADDRESS;
   await page.addInitScript(
     ({ address, passphrase }: { address: string; passphrase: string }) => {

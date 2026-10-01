@@ -19,7 +19,7 @@
 import { useCallback, useState } from "react";
 import { TransactionBuilder } from "@stellar/stellar-sdk";
 import { NETWORK } from "../lib/guard/network.ts";
-import { bytesToHex } from "../lib/guard/scval.ts";
+import { toHex } from "stellar-agent-guard-sdk";
 import {
   approvalPercent,
   approvalSummary,
@@ -90,7 +90,7 @@ export function MultisigTracker() {
       // lives on the *source account* the envelope is signed against — the
       // enterprise account configured for co-signing.
       const envelope = TransactionBuilder.fromXDR(trimmed, NETWORK.passphrase);
-      const hash = bytesToHex(envelope.hash());
+      const hash = toHex(envelope.hash());
       const sourceAccount = (envelope as unknown as { source: string }).source;
 
       const server = createHorizonServer();
@@ -230,7 +230,9 @@ export function MultisigTracker() {
 
           {report.unmatched.length > 0 && (
             <div className="notice">
-              <strong>{report.unmatched.length} signature(s) match no current account signer</strong>
+              <strong>
+                {report.unmatched.length} signature(s) match no current account signer
+              </strong>
               <span className="tiny">
                 The envelope carries signatures whose hint does not match any signer Horizon lists
                 for the source account. The network would not count them either; they may be from

@@ -19,7 +19,9 @@ const CONTRACT = "CAPADGEK457RHKN4RYVUMDJTFHDSG7R5HREQONKLYK7MFKC5WFENPP44";
 const OTHER = "GBUQNML5TT5ZNFKXVLSGDWSYS3IWLTDKNS3RR5RQDR3VBQZ7ACLULG2F";
 
 /** An in-memory stand-in for `localStorage`, so tests inject their own storage. */
-function memoryStorage(initial: Record<string, string> = {}): StorageLike & { dump(): Record<string, string> } {
+function memoryStorage(
+  initial: Record<string, string> = {},
+): StorageLike & { dump(): Record<string, string> } {
   const data = new Map(Object.entries(initial));
   return {
     getItem: (key) => (data.has(key) ? (data.get(key) as string) : null),
@@ -84,11 +86,17 @@ test("deleteContact removes one and leaves the rest", () => {
   assert.equal(loaded.length, 1);
   assert.equal(loaded[0]?.address, OTHER);
   // Deleting an unknown address is a no-op, not an error.
-  assert.equal(deleteContact("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", storage).length, 1);
+  assert.equal(
+    deleteContact("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", storage).length,
+    1,
+  );
 });
 
 test("a corrupt or non-array payload loads as an empty book", () => {
-  assert.deepEqual(loadAddressBook(memoryStorage({ [ADDRESS_BOOK_STORAGE_KEY]: "{ not json" })), []);
+  assert.deepEqual(
+    loadAddressBook(memoryStorage({ [ADDRESS_BOOK_STORAGE_KEY]: "{ not json" })),
+    [],
+  );
   assert.deepEqual(loadAddressBook(memoryStorage({ [ADDRESS_BOOK_STORAGE_KEY]: '{"a":1}' })), []);
 });
 
@@ -110,14 +118,23 @@ test("the book round-trips through the JSON export/import format", () => {
   const exported = exportAddressBook(loadAddressBook(storage));
   const reparsed = parseAddressBook(exported);
   assert.equal(reparsed.length, 2);
-  assert.equal(lookupLabel(ACCOUNT, memoryStorage({ [ADDRESS_BOOK_STORAGE_KEY]: JSON.stringify(reparsed) })), "Treasury Multisig");
+  assert.equal(
+    lookupLabel(ACCOUNT, memoryStorage({ [ADDRESS_BOOK_STORAGE_KEY]: JSON.stringify(reparsed) })),
+    "Treasury Multisig",
+  );
 });
 
 test("parseAddressBook rejects invalid JSON, non-arrays, bad addresses and blank labels", () => {
   assert.throws(() => parseAddressBook("not json"), /valid JSON/);
   assert.throws(() => parseAddressBook('{"address":"x"}'), /array/);
-  assert.throws(() => parseAddressBook('[{"address":"nope","label":"x"}]'), /Contact 1.*valid Stellar/);
-  assert.throws(() => parseAddressBook(`[{"address":"${ACCOUNT}","label":""}]`), /label is required/);
+  assert.throws(
+    () => parseAddressBook('[{"address":"nope","label":"x"}]'),
+    /Contact 1.*valid Stellar/,
+  );
+  assert.throws(
+    () => parseAddressBook(`[{"address":"${ACCOUNT}","label":""}]`),
+    /label is required/,
+  );
 });
 
 test("parseAddressBook rejects a duplicate address within one import", () => {

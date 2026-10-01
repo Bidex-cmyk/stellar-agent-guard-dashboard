@@ -15,15 +15,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { installPolicy } from "../lib/guard/guardOps.ts";
 import { readPolicy } from "../lib/guard/chain.ts";
-import { planMigration, sourceRows, type MigrationPlan, type CompatibilityReport } from "../lib/guard/migration.ts";
+import {
+  planMigration,
+  sourceRows,
+  type MigrationPlan,
+  type CompatibilityReport,
+} from "../lib/guard/migration.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { ErrorBlock, starLink } from "./bits.tsx";
 
 /** Either the chain's policy, or why there is not one. */
 type SourceRead =
-  | { kind: "read"; plan: MigrationPlan }
-  | { kind: "empty" }
-  | { kind: "error"; message: string };
+  { kind: "read"; plan: MigrationPlan } | { kind: "empty" } | { kind: "error"; message: string };
 
 export function MigrationWizard({ target }: { target: string }) {
   const { server, signer, wallet, instances, refresh } = useGuard();
@@ -104,17 +107,27 @@ export function MigrationWizard({ target }: { target: string }) {
             </option>
           ))}
         </select>
-        <span className="hint">{instances.length === 1 ? "Only this instance is known; add another from the Deploy step." : undefined}</span>
+        <span className="hint">
+          {instances.length === 1
+            ? "Only this instance is known; add another from the Deploy step."
+            : undefined}
+        </span>
       </label>
 
       <div className="row">
-        <button className="secondary" disabled={reading || source === ""} onClick={() => void fetchSource()}>
+        <button
+          className="secondary"
+          disabled={reading || source === ""}
+          onClick={() => void fetchSource()}
+        >
           {reading ? "Reading source..." : "Read source policy"}
         </button>
         {!wallet && <span className="tiny muted">Connect the admin wallet to apply a policy.</span>}
       </div>
 
-      {read?.kind === "error" && <ErrorBlock title="The source could not be read" detail={read.message} />}
+      {read?.kind === "error" && (
+        <ErrorBlock title="The source could not be read" detail={read.message} />
+      )}
       {read?.kind === "empty" && (
         <div className="notice info">
           <strong>The source has no policy installed</strong>
@@ -192,8 +205,8 @@ export function MigrationWizard({ target }: { target: string }) {
               {applying ? "Preparing..." : "Apply policy to target"}
             </button>
             <span className="tiny muted">
-              The wallet is prompted once; the payload is this build&apos;s own validated encoding of
-              the source policy.
+              The wallet is prompted once; the payload is this build&apos;s own validated encoding
+              of the source policy.
             </span>
           </div>
         </div>
@@ -247,7 +260,12 @@ export function MigrationWizard({ target }: { target: string }) {
  * will enforce.
  */
 function CompatibilityView({ report }: { report: CompatibilityReport }) {
-  if (report.ok && report.unrecognised.length === 0 && report.renamed.length === 0 && report.notes.length === 0) {
+  if (
+    report.ok &&
+    report.unrecognised.length === 0 &&
+    report.renamed.length === 0 &&
+    report.notes.length === 0
+  ) {
     return (
       <div className="checkline">
         <span className="pill ok" aria-hidden="true">

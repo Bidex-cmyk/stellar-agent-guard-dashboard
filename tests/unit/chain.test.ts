@@ -127,13 +127,25 @@ describe("ledger reads", () => {
       persistentDataEntry(
         MOCK_GUARD,
         "Window",
-        windowScVal({ total: 30n, entries: [{ ts: 100n, amount: 10n }, { ts: 200n, amount: 20n }] }),
+        windowScVal({
+          total: 30n,
+          entries: [
+            { ts: 100n, amount: 10n },
+            { ts: 200n, amount: 20n },
+          ],
+        }),
       ),
     );
     const window = await readWindow(server, MOCK_GUARD);
     assert.deepEqual(window, {
       ok: true,
-      value: { total: 30n, entries: [{ amount: 10n, ts: 100n }, { amount: 20n, ts: 200n }] },
+      value: {
+        total: 30n,
+        entries: [
+          { amount: 10n, ts: 100n },
+          { amount: 20n, ts: 200n },
+        ],
+      },
     });
   });
 
@@ -147,7 +159,11 @@ describe("ledger reads", () => {
     assert.equal(await isInitialized(server, MOCK_GUARD), false);
 
     mock.setLedgerEntry(
-      contractInstanceEntry({ contractId: MOCK_GUARD, wasmHash: code.hash, storage: [initializedFlag()] }),
+      contractInstanceEntry({
+        contractId: MOCK_GUARD,
+        wasmHash: code.hash,
+        storage: [initializedFlag()],
+      }),
     );
     assert.equal(await isInitialized(server, MOCK_GUARD), true);
   });
@@ -184,7 +200,10 @@ describe("GuardFeed telemetry over getEvents", () => {
       [guardEvent.authChecked("allowed")],
     ]);
     const second = await feed.pollOnce();
-    assert.deepEqual(second.events.map((event) => event.kind), ["initialized", "policy_set", "auth_checked"]);
+    assert.deepEqual(
+      second.events.map((event) => event.kind),
+      ["initialized", "policy_set", "auth_checked"],
+    );
     assert.equal(second.events[2]!.decision?.result, "allowed");
     assert.equal(second.events[2]!.decision?.reason, null);
     assert.equal(second.events[0]!.source, "ledger");
@@ -195,7 +214,10 @@ describe("GuardFeed telemetry over getEvents", () => {
 
     mock.closeLedger([guardEvent.frozen(ADMIN)]);
     const third = await feed.pollOnce();
-    assert.deepEqual(third.events.map((event) => event.kind), ["frozen"]);
+    assert.deepEqual(
+      third.events.map((event) => event.kind),
+      ["frozen"],
+    );
   });
 
   test("only this guard's events are delivered", async () => {
@@ -221,7 +243,10 @@ describe("GuardFeed telemetry over getEvents", () => {
     assert.equal(feed.position().cursor, cursor);
 
     const resumed = await feed.pollOnce();
-    assert.deepEqual(resumed.events.map((event) => (event.data as { at: bigint }).at), [2n]);
+    assert.deepEqual(
+      resumed.events.map((event) => (event.data as { at: bigint }).at),
+      [2n],
+    );
   });
 
   test("refused decisions are decoded from simulation diagnostics", async () => {
@@ -230,14 +255,23 @@ describe("GuardFeed telemetry over getEvents", () => {
     assert.ok(rpc.Api.isSimulationError(simulation));
     const refused = refusedEventsFromDiagnostics(simulation.events, MOCK_GUARD);
     assert.equal(refused.length, 1);
-    assert.deepEqual(refused[0]!.decision, { result: "blocked", reason: "admin_frozen", source: "diagnostic" });
+    assert.deepEqual(refused[0]!.decision, {
+      result: "blocked",
+      reason: "admin_frozen",
+      source: "diagnostic",
+    });
   });
 });
 
 /** Any guarded call; the fixture answers by function name. */
 function guardedCall(fn: string) {
-  return new TransactionBuilder(new Account(ADMIN, "0"), { fee: "100", networkPassphrase: mock.passphrase })
-    .addOperation(Operation.invokeContractFunction({ contract: MOCK_GUARD, function: fn, args: [] }))
+  return new TransactionBuilder(new Account(ADMIN, "0"), {
+    fee: "100",
+    networkPassphrase: mock.passphrase,
+  })
+    .addOperation(
+      Operation.invokeContractFunction({ contract: MOCK_GUARD, function: fn, args: [] }),
+    )
     .setTimeout(30)
     .build();
 }

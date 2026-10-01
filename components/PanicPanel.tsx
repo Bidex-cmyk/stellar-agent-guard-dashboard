@@ -60,8 +60,9 @@ function DryRunReport({
 
       {simulation.kind === "refused" ? (
         <p className="tiny">
-          The simulation refused the call, so a real freeze would fail in pre-flight too. Nothing was
-          broadcast. The detail names the stage: <span className="mono">{simulation.detail}</span>
+          The simulation refused the call, so a real freeze would fail in pre-flight too. Nothing
+          was broadcast. The detail names the stage:{" "}
+          <span className="mono">{simulation.detail}</span>
         </p>
       ) : (
         <>
@@ -75,8 +76,8 @@ function DryRunReport({
           </p>
           {simulation.authorizations.length === 0 ? (
             <p className="tiny muted">
-              No separate authorization entries. The wallet&apos;s transaction-envelope signature (not
-              requested in a dry run) would be the only signature needed.
+              No separate authorization entries. The wallet&apos;s transaction-envelope signature
+              (not requested in a dry run) would be the only signature needed.
             </p>
           ) : (
             <ul className="tiny" style={{ margin: "0 0 6px 16px", padding: 0 }}>
@@ -276,7 +277,7 @@ export function PanicPanel() {
           result,
           adminFrozenAfter: null,
           confirmed: false,
-          note: "Transaction XDR exported for offline signing"
+          note: "Transaction XDR exported for offline signing",
         });
         setPhase("done");
         return;
@@ -321,15 +322,19 @@ export function PanicPanel() {
 
       <p className="tiny muted">
         Freezing sets the account&apos;s admin freeze, after which <code>__check_auth</code> refuses
-        every call the account would make — the agent stops being able to move anything. The freeze is
-        reversible: <code>unfreeze()</code> clears it and restarts the heartbeat clock, so it is also
-        the way back from a dead-man-switch freeze.
+        every call the account would make — the agent stops being able to move anything. The freeze
+        is reversible: <code>unfreeze()</code> clears it and restarts the heartbeat clock, so it is
+        also the way back from a dead-man-switch freeze.
       </p>
 
       {alreadyFrozen !== null && (
         <p className="tiny">
           Chain currently reports:{" "}
-          {alreadyFrozen ? <span className="pill danger">FROZEN</span> : <span className="pill ok">clear</span>}
+          {alreadyFrozen ? (
+            <span className="pill danger">FROZEN</span>
+          ) : (
+            <span className="pill ok">clear</span>
+          )}
         </p>
       )}
 
@@ -396,8 +401,8 @@ export function PanicPanel() {
             </strong>
             <p className="tiny">
               The agent will not be able to make any call that requires its authorization until the
-              account is unfrozen. This will prompt your wallet to sign an <code>unfreeze</code>-able{" "}
-              <code>freeze()</code> call on{" "}
+              account is unfrozen. This will prompt your wallet to sign an <code>unfreeze</code>
+              -able <code>freeze()</code> call on{" "}
               <span className="mono">{guard.slice(0, 10)}…</span>.
             </p>
             <div className="checkline">
@@ -408,15 +413,23 @@ export function PanicPanel() {
                 onChange={(event) => setAcknowledged(event.target.checked)}
               />
               <label htmlFor="ack-freeze">
-                I understand this halts the agent&apos;s spending, and that undoing it needs a second
-                signed <code>unfreeze()</code>.
+                I understand this halts the agent&apos;s spending, and that undoing it needs a
+                second signed <code>unfreeze()</code>.
               </label>
             </div>
             <div className="row">
-              <button className="danger" disabled={!acknowledged} onClick={() => void run("freeze")}>
+              <button
+                className="danger"
+                disabled={!acknowledged}
+                onClick={() => void run("freeze")}
+              >
                 Sign freeze
               </button>
-              <button className="secondary" disabled={!acknowledged} onClick={() => void run("freeze", true)}>
+              <button
+                className="secondary"
+                disabled={!acknowledged}
+                onClick={() => void run("freeze", true)}
+              >
                 Export XDR
               </button>
               <button className="secondary" onClick={() => setPhase("idle")}>
@@ -443,11 +456,32 @@ export function PanicPanel() {
       {simulation && <DryRunReport simulation={simulation} onDismiss={() => setSimulation(null)} />}
 
       {report?.result.kind === "exported" && (
-        <div className="modal-backdrop" onClick={() => { setReport(null); setPhase("idle"); }}>
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setReport(null);
+            setPhase("idle");
+          }}
+        >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+              }}
+            >
               <h2 style={{ margin: 0 }}>Exported Transaction XDR</h2>
-              <button className="secondary" onClick={() => { setReport(null); setPhase("idle"); }}>Close</button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setReport(null);
+                  setPhase("idle");
+                }}
+              >
+                Close
+              </button>
             </div>
             <p className="tiny" style={{ marginBottom: "16px" }}>
               This unsigned transaction envelope is ready for external multi-sig signing.
@@ -455,13 +489,30 @@ export function PanicPanel() {
             <textarea
               readOnly
               value={report.result.kind === "exported" ? report.result.xdr : ""}
-              style={{ width: "100%", height: "120px", marginBottom: "16px", fontSize: "12px", fontFamily: "monospace" }}
+              style={{
+                width: "100%",
+                height: "120px",
+                marginBottom: "16px",
+                fontSize: "12px",
+                fontFamily: "monospace",
+              }}
             />
             <div className="row">
-              <button onClick={() => navigator.clipboard.writeText(report.result.kind === "exported" ? report.result.xdr : "")}>Copy to Clipboard</button>
+              <button
+                onClick={() =>
+                  navigator.clipboard.writeText(
+                    report.result.kind === "exported" ? report.result.xdr : "",
+                  )
+                }
+              >
+                Copy to Clipboard
+              </button>
               <button
                 onClick={() => {
-                  const blob = new Blob([report.result.kind === "exported" ? report.result.xdr : ""], { type: "text/plain" });
+                  const blob = new Blob(
+                    [report.result.kind === "exported" ? report.result.xdr : ""],
+                    { type: "text/plain" },
+                  );
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
@@ -507,8 +558,8 @@ export function PanicPanel() {
 
           {report.result.kind !== "submitted" && (
             <p className="tiny muted" style={{ marginTop: 6 }}>
-              A refused call has no transaction hash by construction — it was never broadcast. That is
-              the pre-flight path working, not a missing receipt.
+              A refused call has no transaction hash by construction — it was never broadcast. That
+              is the pre-flight path working, not a missing receipt.
             </p>
           )}
         </div>

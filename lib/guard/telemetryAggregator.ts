@@ -30,7 +30,10 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 /** Window length and bucket size for each selectable window. */
-export const CHART_WINDOWS: Record<ChartWindow, { windowMs: number; bucketMs: number; label: string }> = {
+export const CHART_WINDOWS: Record<
+  ChartWindow,
+  { windowMs: number; bucketMs: number; label: string }
+> = {
   "1h": { windowMs: HOUR, bucketMs: 5 * MINUTE, label: "Last hour" },
   "6h": { windowMs: 6 * HOUR, bucketMs: 15 * MINUTE, label: "Last 6 hours" },
   "24h": { windowMs: 24 * HOUR, bucketMs: HOUR, label: "Last 24 hours" },
@@ -203,7 +206,12 @@ export function aggregateTelemetry(params: AggregateParams): TelemetryAggregate 
  * happens in the repeated hour when clocks go back, every label gets the
  * zone's short name (`01:00 EDT`, `01:00 EST`) so no two read the same.
  */
-export function bucketLabels(start: number, bucketMs: number, count: number, timeZone: string): string[] {
+export function bucketLabels(
+  start: number,
+  bucketMs: number,
+  count: number,
+  timeZone: string,
+): string[] {
   const time = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     hour: "2-digit",
@@ -214,7 +222,9 @@ export function bucketLabels(start: number, bucketMs: number, count: number, tim
   if (new Set(plain).size === plain.length) return plain;
   const zoned = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" });
   return plain.map((label, index) => {
-    const zone = zoned.formatToParts(start + index * bucketMs).find((part) => part.type === "timeZoneName");
+    const zone = zoned
+      .formatToParts(start + index * bucketMs)
+      .find((part) => part.type === "timeZoneName");
     return zone ? `${label} ${zone.value}` : label;
   });
 }
@@ -249,7 +259,10 @@ export function describeAggregate(aggregate: TelemetryAggregate): string {
   const size = minutes >= 60 ? `${minutes / 60}-hour` : `${minutes}-minute`;
   let busiest: ChartBucket | null = null;
   for (const bucket of aggregate.buckets) {
-    if (bucket.allowed + bucket.blocked > 0 && (!busiest || bucket.allowed + bucket.blocked > busiest.allowed + busiest.blocked)) {
+    if (
+      bucket.allowed + bucket.blocked > 0 &&
+      (!busiest || bucket.allowed + bucket.blocked > busiest.allowed + busiest.blocked)
+    ) {
       busiest = bucket;
     }
   }
@@ -258,6 +271,9 @@ export function describeAggregate(aggregate: TelemetryAggregate): string {
     `${totals.allowed} allowed and ${totals.blocked} blocked decision${totals.allowed + totals.blocked === 1 ? "" : "s"}`,
     `${formatStroops(totals.spend)} stroops settled across ${totals.spendCount} spend${totals.spendCount === 1 ? "" : "s"}`,
   ];
-  if (busiest) parts.push(`busiest interval starting ${busiest.label} with ${busiest.allowed + busiest.blocked}`);
+  if (busiest)
+    parts.push(
+      `busiest interval starting ${busiest.label} with ${busiest.allowed + busiest.blocked}`,
+    );
   return `${parts.join("; ")}.`;
 }

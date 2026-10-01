@@ -117,7 +117,10 @@ describe("traceParser", () => {
     const tree = parseDiagnosticLogs([
       diagnosticEventXdr({
         contractId: MOCK_GUARD,
-        topics: [sym("error"), xdr.ScVal.scvError(xdr.ScError.sceAuth(xdr.ScErrorCode.scecInvalidAction))],
+        topics: [
+          sym("error"),
+          xdr.ScVal.scvError(xdr.ScError.sceAuth(xdr.ScErrorCode.scecInvalidAction)),
+        ],
         value: xdr.ScVal.scvString("failed account authentication with error"),
       }),
     ]).tree;

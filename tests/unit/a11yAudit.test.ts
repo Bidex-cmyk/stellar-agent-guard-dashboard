@@ -204,11 +204,7 @@ test("the freeze dialog traps keyboard focus and cycles Tab in both directions",
 
     const dialog = rendered.container.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(dialog);
-    assert.equal(
-      document.activeElement,
-      dialog,
-      "opening the dialog must move focus into it",
-    );
+    assert.equal(document.activeElement, dialog, "opening the dialog must move focus into it");
 
     // Acknowledge so every control in the dialog is enabled, then walk the trap.
     const ack = rendered.container.querySelector<HTMLInputElement>("#ack-freeze");

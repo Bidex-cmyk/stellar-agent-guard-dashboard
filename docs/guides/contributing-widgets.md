@@ -12,8 +12,8 @@ This guide covers everything you need to know to create, style, test, and integr
 
 In this architecture:
 
-* **Panels** (e.g., [`StatusPanel.tsx`](../../components/StatusPanel.tsx), [`TelemetryFeed.tsx`](../../components/TelemetryFeed.tsx), [`PanicPanel.tsx`](../../components/PanicPanel.tsx), [`TxHistoryTable.tsx`](../../components/TxHistoryTable.tsx), [`DeployPanel.tsx`](../../components/DeployPanel.tsx)) are top-level functional cards rendered within pages. They encapsulate a distinct operational domain, such as account health, telemetry monitoring, policy management, or emergency controls.
-* **Widgets** are specialized, modular components designed to display specific guard metrics, telemetry visualizations, or interactive controls. They can exist as standalone panels or as subcomponents embedded within panels.
+- **Panels** (e.g., [`StatusPanel.tsx`](../../components/StatusPanel.tsx), [`TelemetryFeed.tsx`](../../components/TelemetryFeed.tsx), [`PanicPanel.tsx`](../../components/PanicPanel.tsx), [`TxHistoryTable.tsx`](../../components/TxHistoryTable.tsx), [`DeployPanel.tsx`](../../components/DeployPanel.tsx)) are top-level functional cards rendered within pages. They encapsulate a distinct operational domain, such as account health, telemetry monitoring, policy management, or emergency controls.
+- **Widgets** are specialized, modular components designed to display specific guard metrics, telemetry visualizations, or interactive controls. They can exist as standalone panels or as subcomponents embedded within panels.
 
 ### Architectural Fit
 
@@ -53,14 +53,14 @@ The dashboard follows a unidirectional, context-driven architecture:
 
 ### When to Create a New Widget vs. Modify an Existing Component
 
-* **Create a new widget or panel when**:
-  * You are adding a distinct functional capability (e.g., rate-limit monitoring, recipient activity breakdown, gas consumption analytics).
-  * The feature has its own lifecycle, telemetry filters, or user interactions.
-  * You want to keep existing panels focused and maintain high cohesion.
-* **Modify an existing component when**:
-  * You are fixing bugs or improving accuracy in how an existing on-chain field is rendered.
-  * You are adding complementary metadata directly related to an existing panel's core responsibility (e.g., adding an extra stat to [`StatusPanel.tsx`](../../components/StatusPanel.tsx)).
-  * You are refining styling or accessibility for existing controls.
+- **Create a new widget or panel when**:
+  - You are adding a distinct functional capability (e.g., rate-limit monitoring, recipient activity breakdown, gas consumption analytics).
+  - The feature has its own lifecycle, telemetry filters, or user interactions.
+  - You want to keep existing panels focused and maintain high cohesion.
+- **Modify an existing component when**:
+  - You are fixing bugs or improving accuracy in how an existing on-chain field is rendered.
+  - You are adding complementary metadata directly related to an existing panel's core responsibility (e.g., adding an extra stat to [`StatusPanel.tsx`](../../components/StatusPanel.tsx)).
+  - You are refining styling or accessibility for existing controls.
 
 ---
 
@@ -68,9 +68,9 @@ The dashboard follows a unidirectional, context-driven architecture:
 
 ### Prerequisites
 
-* **Node.js**: `>= 24.0.0` (as declared in [`package.json`](../../package.json) `"engines"`).
-* **npm**: `>= 10.0.0` (or the version bundled with Node 24).
-* **Freighter Wallet**: Browser extension configured for Stellar Testnet for manual verification.
+- **Node.js**: `>= 24.0.0` (as declared in [`package.json`](../../package.json) `"engines"`).
+- **npm**: `>= 10.0.0` (or the version bundled with Node 24).
+- **Freighter Wallet**: Browser extension configured for Stellar Testnet for manual verification.
 
 ### Local Development Commands
 
@@ -169,12 +169,12 @@ When authoring a new panel or widget, follow these established project patterns:
 
 ### 1. File & Component Naming
 
-* **File Name**: PascalCase with `.tsx` extension in `components/` (e.g., `components/RateLimitWidget.tsx`).
-* **Component Name**: PascalCase export matching the file name:
+- **File Name**: PascalCase with `.tsx` extension in `components/` (e.g., `components/RateLimitWidget.tsx`).
+- **Component Name**: PascalCase export matching the file name:
   ```tsx
   export function RateLimitWidget() { ... }
   ```
-* **Client Directive**: Add `"use client";` as the very first line of the file.
+- **Client Directive**: Add `"use client";` as the very first line of the file.
 
 ### 2. Component Structure
 
@@ -215,9 +215,9 @@ function formatMetric(...) { ... }
 
 ### 3. State Management Principles
 
-* **Global On-Chain State**: Consume exclusively via `useGuard()`. Never fetch contract state independently in widgets if `readGuardSnapshot` already provides it.
-* **Local UI State**: Use `useState` only for transient UI states (e.g., modal visibility, search inputs, pagination, view toggles).
-* **Never Duplicate Context State**: Do not copy snapshot data or telemetry events into local `useState`. Derive values dynamically using `useMemo`.
+- **Global On-Chain State**: Consume exclusively via `useGuard()`. Never fetch contract state independently in widgets if `readGuardSnapshot` already provides it.
+- **Local UI State**: Use `useState` only for transient UI states (e.g., modal visibility, search inputs, pagination, view toggles).
+- **Never Duplicate Context State**: Do not copy snapshot data or telemetry events into local `useState`. Derive values dynamically using `useMemo`.
 
 ---
 
@@ -268,19 +268,18 @@ When `snapshot` is not null, it provides four independent read results:
 ```ts
 export interface GuardSnapshot {
   guard: string;
-  fetchedAt: string;                         // ISO timestamp of last read
-  status: ReadResult<GuardStatus>;           // Admin freeze, dead-man switch, heartbeat
-  policy: ReadResult<PolicyConfig | null>;   // Installed policy caps, allowlists, pauses
-  window: ReadResult<WindowState | null>;    // Rolling-window spend history
-  identity: ReadResult<WasmIdentity>;        // Contract bytecode verification against pin
+  fetchedAt: string; // ISO timestamp of last read
+  status: ReadResult<GuardStatus>; // Admin freeze, dead-man switch, heartbeat
+  policy: ReadResult<PolicyConfig | null>; // Installed policy caps, allowlists, pauses
+  window: ReadResult<WindowState | null>; // Rolling-window spend history
+  identity: ReadResult<WasmIdentity>; // Contract bytecode verification against pin
 }
 ```
 
 Each field is wrapped in a `ReadResult<T>`:
+
 ```ts
-export type ReadResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+export type ReadResult<T> = { ok: true; value: T } | { ok: false; error: string };
 ```
 
 ### Consuming Snapshot Data with `<Read>`
@@ -300,7 +299,7 @@ import { Read, Stat } from "./bits.tsx";
       value={status.admin_frozen ? "FROZEN" : "clear"}
     />
   )}
-/>
+/>;
 ```
 
 If the read fails, `<Read>` automatically renders an accessible `<ErrorBlock>` stating which read failed and why. It will never render a misleading zero or empty state.
@@ -312,7 +311,7 @@ If the read fails, `<Read>` automatically renders an accessible `<ErrorBlock>` s
 Telemetry in `stellar-agent-guard` comes from two distinct sources:
 
 1. **Committed Ledger Events** (`source: "ledger"`): Allowed authorizations, heartbeats, and admin operations (`policy_set`, `frozen`, `unfrozen`). These are polled using the SDK's `GuardTelemetryListener` via `getEvents` with a cursor.
-2. **Diagnostic Events** (`source: "diagnostic"`): Blocked/refused decisions. Because Soroban rolls back transaction events when a contract returns `Err`, refused calls *never* commit to the ledger. Refusals initiated by this console are captured during simulation diagnostics and fed via `pushEvents`.
+2. **Diagnostic Events** (`source: "diagnostic"`): Blocked/refused decisions. Because Soroban rolls back transaction events when a contract returns `Err`, refused calls _never_ commit to the ledger. Refusals initiated by this console are captured during simulation diagnostics and fed via `pushEvents`.
 
 ### Accessing Events in a Widget
 
@@ -324,9 +323,7 @@ export function MyTelemetryWidget() {
 
   // Filter or aggregate events using useMemo
   const blockedDecisions = useMemo(() => {
-    return events.filter(
-      (e) => e.kind === "auth_checked" && e.decision?.result === "blocked"
-    );
+    return events.filter((e) => e.kind === "auth_checked" && e.decision?.result === "blocked");
   }, [events]);
 
   return (
@@ -340,9 +337,9 @@ export function MyTelemetryWidget() {
 
 ### Avoiding Stale Subscriptions and Re-render Storms
 
-* **Deduplication**: `GuardProvider` maintains a `seenRef` set with compound event keys (`source|txHash|ledger|topic|result|reason|data`). Events are deduplicated across polls.
-* **Memoization**: Always wrap calculations over `events` in `useMemo(..., [events])`.
-* **Bounded History**: The provider caps history to the 250 most recent events (newest first). Do not assume `events` is an infinite log.
+- **Deduplication**: `GuardProvider` maintains a `seenRef` set with compound event keys (`source|txHash|ledger|topic|result|reason|data`). Events are deduplicated across polls.
+- **Memoization**: Always wrap calculations over `events` in `useMemo(..., [events])`.
+- **Bounded History**: The provider caps history to the 250 most recent events (newest first). Do not assume `events` is an infinite log.
 
 ---
 
@@ -352,45 +349,45 @@ All styling adheres to the CSS variables in [`app/globals.css`](../../app/global
 
 ### 1. Palette & CSS Variables
 
-| Variable | Hex Value | Purpose |
-| :--- | :--- | :--- |
-| `--bg` | `#0a0d12` | Root page background |
-| `--panel` | `#12161d` | Card & panel background (`.panel`) |
-| `--panel-2` | `#171c25` | Nested stat card background (`.stat`, active tabs) |
-| `--line` | `#242c38` | Borders and dividers |
-| `--text` | `#e6ebf2` | Primary body text |
-| `--muted` | `#8b98ab` | Secondary text, field labels, metadata (`.muted`, `.tiny`) |
-| `--accent` | `#4da3ff` | Interactive highlights, links, focus ring outline |
-| `--ok` | `#37d67a` | Confirmed/success states, allowed decisions, clear flags |
-| `--warn` | `#ffb020` | Notices, expired heartbeats, paused states, demo flags |
-| `--danger` | `#ff5c5c` | Admin freeze, blocked authorizations, failed operations |
-| `--mono` | `ui-monospace, ...` | Addresses, hashes, stroop amounts, bytecode metadata |
+| Variable    | Hex Value           | Purpose                                                    |
+| :---------- | :------------------ | :--------------------------------------------------------- |
+| `--bg`      | `#0a0d12`           | Root page background                                       |
+| `--panel`   | `#12161d`           | Card & panel background (`.panel`)                         |
+| `--panel-2` | `#171c25`           | Nested stat card background (`.stat`, active tabs)         |
+| `--line`    | `#242c38`           | Borders and dividers                                       |
+| `--text`    | `#e6ebf2`           | Primary body text                                          |
+| `--muted`   | `#8b98ab`           | Secondary text, field labels, metadata (`.muted`, `.tiny`) |
+| `--accent`  | `#4da3ff`           | Interactive highlights, links, focus ring outline          |
+| `--ok`      | `#37d67a`           | Confirmed/success states, allowed decisions, clear flags   |
+| `--warn`    | `#ffb020`           | Notices, expired heartbeats, paused states, demo flags     |
+| `--danger`  | `#ff5c5c`           | Admin freeze, blocked authorizations, failed operations    |
+| `--mono`    | `ui-monospace, ...` | Addresses, hashes, stroop amounts, bytecode metadata       |
 
 ### 2. Layout & Utility Classes
 
-* `.panel`: Container card with rounded corners (`border-radius: 11px`), padding (`16px 18px`), and border `--line`.
-* `.panel h2`: Section header, uppercase, letter-spaced, `--muted` font.
-* `.row`: Horizontal flexbox with `gap: 12px` and `align-items: center`.
-* `.grid`: Responsive CSS grid (`grid-template-columns: repeat(auto-fit, minmax(190px, 1fr))`).
-* `.split`: Two-column grid collapsing to single-column on screens `< 720px`.
-* `.pill`: Inline status badge. Variants: `.pill.ok`, `.pill.warn`, `.pill.danger`.
-* `.mono`: Formatted with `--mono` and `word-break: break-all`.
-* `.tiny`: Reduced font size (`12px`).
-* `.scrolly`: Scrollable container with `max-height: 340px` and `overflow-y: auto`.
+- `.panel`: Container card with rounded corners (`border-radius: 11px`), padding (`16px 18px`), and border `--line`.
+- `.panel h2`: Section header, uppercase, letter-spaced, `--muted` font.
+- `.row`: Horizontal flexbox with `gap: 12px` and `align-items: center`.
+- `.grid`: Responsive CSS grid (`grid-template-columns: repeat(auto-fit, minmax(190px, 1fr))`).
+- `.split`: Two-column grid collapsing to single-column on screens `< 720px`.
+- `.pill`: Inline status badge. Variants: `.pill.ok`, `.pill.warn`, `.pill.danger`.
+- `.mono`: Formatted with `--mono` and `word-break: break-all`.
+- `.tiny`: Reduced font size (`12px`).
+- `.scrolly`: Scrollable container with `max-height: 340px` and `overflow-y: auto`.
 
 ### 3. Reusable Components in `components/bits.tsx`
 
-| Component | Props | Description |
-| :--- | :--- | :--- |
-| `<Stat />` | `label`, `value`, `note?`, `tone?` (`"ok"` \| `"warn"` \| `"danger"`) | Standard metric card inside a `.grid`. |
-| `<Read />` | `result: ReadResult<T>`, `label: string`, `render: (val: T) => ReactNode` | Strictly renders value or `<ErrorBlock>`. |
-| `<ErrorBlock />` | `title: string`, `detail: string` | Formatted error banner with red accent border. |
-| `<AmountDisplay />`| `stroops: bigint \| number \| string`, `symbol?`, `decimals?` | Accessible toggle button between human-readable and raw stroops. |
-| `<ScopeNotice />` | `compact?: boolean` | Standardized enforcement boundary notice. |
-| `<OutcomeList />` | `steps: Array<{ label, result }>` | Transaction progress and outcome log. |
-| `short()` | `(val: string, head = 6, tail = 4)` | Truncates addresses and hashes with ellipsis (`…`). |
-| `relativeTime()`| `(iso: string \| null)` | Converts ISO timestamps to relative `"Xs ago"` / `"Xm ago"`. |
-| `starLink()` | `(hash: string)` | Clickable link to StellarExpert Testnet explorer. |
+| Component           | Props                                                                     | Description                                                      |
+| :------------------ | :------------------------------------------------------------------------ | :--------------------------------------------------------------- |
+| `<Stat />`          | `label`, `value`, `note?`, `tone?` (`"ok"` \| `"warn"` \| `"danger"`)     | Standard metric card inside a `.grid`.                           |
+| `<Read />`          | `result: ReadResult<T>`, `label: string`, `render: (val: T) => ReactNode` | Strictly renders value or `<ErrorBlock>`.                        |
+| `<ErrorBlock />`    | `title: string`, `detail: string`                                         | Formatted error banner with red accent border.                   |
+| `<AmountDisplay />` | `stroops: bigint \| number \| string`, `symbol?`, `decimals?`             | Accessible toggle button between human-readable and raw stroops. |
+| `<ScopeNotice />`   | `compact?: boolean`                                                       | Standardized enforcement boundary notice.                        |
+| `<OutcomeList />`   | `steps: Array<{ label, result }>`                                         | Transaction progress and outcome log.                            |
+| `short()`           | `(val: string, head = 6, tail = 4)`                                       | Truncates addresses and hashes with ellipsis (`…`).              |
+| `relativeTime()`    | `(iso: string \| null)`                                                   | Converts ISO timestamps to relative `"Xs ago"` / `"Xm ago"`.     |
+| `starLink()`        | `(hash: string)`                                                          | Clickable link to StellarExpert Testnet explorer.                |
 
 ---
 
@@ -400,13 +397,14 @@ All components must comply with WCAG 2.1 AA standards. Automated audits (`axe-co
 
 ### 1. Semantic HTML & Labeling
 
-* Use native `<button type="button">` for interactive controls. Never attach click handlers to bare `<div>` or `<span>` elements.
-* Every form control must have an associated label. Use `<label className="field"><span className="lbl">...</span><input ... /></label>` or specify `aria-label`.
-* Use appropriate heading hierarchy (`<h2>` for panel titles, `<h3>` for subsections).
+- Use native `<button type="button">` for interactive controls. Never attach click handlers to bare `<div>` or `<span>` elements.
+- Every form control must have an associated label. Use `<label className="field"><span className="lbl">...</span><input ... /></label>` or specify `aria-label`.
+- Use appropriate heading hierarchy (`<h2>` for panel titles, `<h3>` for subsections).
 
 ### 2. High-Visibility Focus Indicators
 
 All interactive elements inherit the global `:focus-visible` rule from `globals.css`:
+
 ```css
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -414,6 +412,7 @@ All interactive elements inherit the global `:focus-visible` rule from `globals.
   box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.3);
 }
 ```
+
 Never override or remove `outline: none` without providing an equal or higher contrast focus ring.
 
 ### 3. Screen Reader Announcements (`useAnnounce`)
@@ -435,15 +434,16 @@ export function ExportButton() {
 }
 ```
 
-* Use `"polite"` (default) for routine status changes.
-* Use `"assertive"` exclusively for critical alerts (e.g., emergency freeze confirmation).
+- Use `"polite"` (default) for routine status changes.
+- Use `"assertive"` exclusively for critical alerts (e.g., emergency freeze confirmation).
 
 ### 4. Color-Independent Communication
 
 Never rely on color alone to communicate state:
-* Pair `--ok` with the word `"clear"` or `"allowed"`.
-* Pair `--danger` with `"FROZEN"` or `"blocked"`.
-* Pair `--warn` with `"PAUSED"` or `"expired"`.
+
+- Pair `--ok` with the word `"clear"` or `"allowed"`.
+- Pair `--danger` with `"FROZEN"` or `"blocked"`.
+- Pair `--warn` with `"PAUSED"` or `"expired"`.
 
 ---
 
@@ -454,15 +454,15 @@ Never rely on color alone to communicate state:
 > [!CAUTION]
 > Hardcoding mock numbers, fallback balances, or simulated events inside production widget code is strictly prohibited.
 
-* **No Fallback Zeros**: Never write `value ?? 0` or `snapshot?.status?.value || defaultStatus`. If an on-chain read fails or is pending, show the loading indicator or `<ErrorBlock>`. A fallback zero turns a network outage into what looks like an empty policy or a zero-balance account.
-* **Demo Mode Isolation**: Synthetic data exists solely in [`lib/guard/demoFixtures.ts`](../../lib/guard/demoFixtures.ts). It activates only when explicitly requested (`NEXT_PUBLIC_DEMO_MODE=true` or `?demo=true`). Production widgets must remain completely agnostic of demo mode and rely purely on the data provided by `useGuard()`.
+- **No Fallback Zeros**: Never write `value ?? 0` or `snapshot?.status?.value || defaultStatus`. If an on-chain read fails or is pending, show the loading indicator or `<ErrorBlock>`. A fallback zero turns a network outage into what looks like an empty policy or a zero-balance account.
+- **Demo Mode Isolation**: Synthetic data exists solely in [`lib/guard/demoFixtures.ts`](../../lib/guard/demoFixtures.ts). It activates only when explicitly requested (`NEXT_PUBLIC_DEMO_MODE=true` or `?demo=true`). Production widgets must remain completely agnostic of demo mode and rely purely on the data provided by `useGuard()`.
 
 ### 2. No Floating-Point Amounts
 
 Stellar amounts are denominated in 7-decimal integer stroops (`1 XLM = 10,000,000 stroops`). JavaScript's IEEE 754 floating-point `Number` loses precision on large 64-bit integer values.
 
-* **Always use `bigint`** for amounts, spend caps, and ledger sequence numbers.
-* Perform integer arithmetic using BigInt:
+- **Always use `bigint`** for amounts, spend caps, and ledger sequence numbers.
+- Perform integer arithmetic using BigInt:
   ```ts
   // Correct
   const percentage = cap > 0n ? Number((totalSpent * 100n) / cap) : 0;
@@ -470,7 +470,7 @@ Stellar amounts are denominated in 7-decimal integer stroops (`1 XLM = 10,000,00
   // WRONG - NEVER DO THIS:
   const percentage = (Number(totalSpent) / Number(cap)) * 100;
   ```
-* For UI display, always use [`AmountDisplay`](../../components/bits.tsx) or formatters from [`lib/guard/formatters.ts`](../../lib/guard/formatters.ts):
+- For UI display, always use [`AmountDisplay`](../../components/bits.tsx) or formatters from [`lib/guard/formatters.ts`](../../lib/guard/formatters.ts):
   ```tsx
   <AmountDisplay stroops={policy.per_tx_cap} symbol="XLM" decimals={7} />
   ```
@@ -506,14 +506,15 @@ export interface SpendingSummaryWidgetProps {
   title?: string;
 }
 
-export function SpendingSummaryWidget({ title = "Spending & Policy Summary" }: SpendingSummaryWidgetProps) {
+export function SpendingSummaryWidget({
+  title = "Spending & Policy Summary",
+}: SpendingSummaryWidgetProps) {
   const { snapshot, snapshotError, refreshing, refresh, events, feed } = useGuard();
 
   // Aggregate recent blocked events from telemetry
   const blockedCount = useMemo(() => {
-    return events.filter(
-      (e) => e.kind === "auth_checked" && e.decision?.result === "blocked"
-    ).length;
+    return events.filter((e) => e.kind === "auth_checked" && e.decision?.result === "blocked")
+      .length;
   }, [events]);
 
   return (
@@ -536,10 +537,7 @@ export function SpendingSummaryWidget({ title = "Spending & Policy Summary" }: S
 
       {/* 1. Global snapshot error */}
       {snapshotError && (
-        <ErrorBlock
-          title="Could not read on-chain spending data"
-          detail={snapshotError}
-        />
+        <ErrorBlock title="Could not read on-chain spending data" detail={snapshotError} />
       )}
 
       {/* 2. Loading state */}
@@ -614,7 +612,8 @@ export function SpendingSummaryWidget({ title = "Spending & Policy Summary" }: S
           </div>
 
           <p className="tiny muted" style={{ marginTop: 10 }}>
-            Snapshot read {relativeTime(snapshot.fetchedAt)}. All figures verified against Soroban RPC.
+            Snapshot read {relativeTime(snapshot.fetchedAt)}. All figures verified against Soroban
+            RPC.
           </p>
         </>
       )}
@@ -685,7 +684,9 @@ before(async () => {
 });
 
 // 2. Helper to construct a typed mock GuardContextValue
-function createMockContext(overrides: Partial<React.ComponentProps<typeof GuardContext.Provider>["value"]> = {}) {
+function createMockContext(
+  overrides: Partial<React.ComponentProps<typeof GuardContext.Provider>["value"]> = {},
+) {
   return {
     server: {} as any,
     wallet: null,
@@ -693,7 +694,9 @@ function createMockContext(overrides: Partial<React.ComponentProps<typeof GuardC
     connecting: false,
     connect: async () => {},
     disconnect: () => {},
-    signer: () => { throw new Error("not implemented"); },
+    signer: () => {
+      throw new Error("not implemented");
+    },
     instances: [],
     guard: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     selectGuard: () => {},
@@ -703,7 +706,12 @@ function createMockContext(overrides: Partial<React.ComponentProps<typeof GuardC
     refreshing: false,
     refresh: async () => {},
     events: [],
-    feed: { watching: true, latestLedger: 1000, error: null, lastPolledAt: new Date().toISOString() },
+    feed: {
+      watching: true,
+      latestLedger: 1000,
+      error: null,
+      lastPolledAt: new Date().toISOString(),
+    },
     startWatching: () => {},
     stopWatching: () => {},
     clearEvents: () => {},
@@ -719,7 +727,9 @@ interface RenderResult {
   unmount: () => Promise<void>;
 }
 
-async function renderWidget(contextValue: ReturnType<typeof createMockContext>): Promise<RenderResult> {
+async function renderWidget(
+  contextValue: ReturnType<typeof createMockContext>,
+): Promise<RenderResult> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   let root: ReturnType<typeof createRoot> | undefined;
@@ -730,8 +740,8 @@ async function renderWidget(contextValue: ReturnType<typeof createMockContext>):
       react.createElement(
         GuardContext.Provider,
         { value: contextValue },
-        react.createElement(SpendingSummaryWidget)
-      )
+        react.createElement(SpendingSummaryWidget),
+      ),
     );
   });
 
@@ -763,7 +773,10 @@ describe("SpendingSummaryWidget", () => {
   });
 
   it("renders error state when snapshotError is set", async () => {
-    const ctx = createMockContext({ snapshot: null, snapshotError: "Network timeout connecting to Soroban RPC" });
+    const ctx = createMockContext({
+      snapshot: null,
+      snapshotError: "Network timeout connecting to Soroban RPC",
+    });
     const { container, unmount } = await renderWidget(ctx);
     try {
       assert.ok(container.textContent?.includes("Could not read on-chain spending data"));
@@ -874,7 +887,16 @@ describe("SpendingSummaryWidget", () => {
       snapshot: {
         guard: "CAAA",
         fetchedAt: new Date().toISOString(),
-        status: { ok: true, value: { has_policy: true, admin_frozen: false, heartbeat_expired: false, last_heartbeat: 0n, now: 0n } },
+        status: {
+          ok: true,
+          value: {
+            has_policy: true,
+            admin_frozen: false,
+            heartbeat_expired: false,
+            last_heartbeat: 0n,
+            now: 0n,
+          },
+        },
         policy: { ok: true, value: null },
         window: { ok: true, value: null },
         identity: { reportedWasmHash: null, fetchedSha256: "", bytes: 0, match: false },
@@ -902,27 +924,35 @@ describe("SpendingSummaryWidget", () => {
 Before opening a pull request, run all verification commands locally:
 
 1. **Typecheck**:
+
    ```bash
    npm run typecheck
    ```
+
    Ensure zero TypeScript compilation errors (`tsc --noEmit`).
 
 2. **Lint**:
+
    ```bash
    npm run lint
    ```
+
    Ensure ESLint passes cleanly with no warnings or errors.
 
 3. **Unit Tests**:
+
    ```bash
    npm test
    ```
+
    All tests in `tests/unit/*.test.ts`, including your new widget tests and `scopeStatement.test.ts`, must pass.
 
 4. **Production Build**:
+
    ```bash
    npm run build
    ```
+
    Confirm Next.js builds the static production bundle without errors.
 
 5. **Diff Inspection**:
@@ -930,7 +960,7 @@ Before opening a pull request, run all verification commands locally:
    git status
    git diff
    ```
-   * Confirm that no unintended files or dependencies were modified.
-   * Verify zero mock data was committed to production code.
-   * Confirm all amount calculations use `bigint`.
-   * Confirm all buttons and interactive controls have accessible ARIA labels.
+   - Confirm that no unintended files or dependencies were modified.
+   - Verify zero mock data was committed to production code.
+   - Confirm all amount calculations use `bigint`.
+   - Confirm all buttons and interactive controls have accessible ARIA labels.

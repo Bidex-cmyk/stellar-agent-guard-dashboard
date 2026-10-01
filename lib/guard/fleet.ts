@@ -19,7 +19,7 @@ export interface FleetRow {
 export async function pollFleet(
   server: rpc.Server,
   contacts: Contact[],
-  _readSnapshot = guardOps.readGuardSnapshot
+  _readSnapshot = guardOps.readGuardSnapshot,
 ): Promise<FleetRow[]> {
   const promises = contacts.map(async (contact) => {
     try {
@@ -42,7 +42,7 @@ export async function pollFleet(
           const lastHb = snapshot.status.value.last_heartbeat;
           const now = snapshot.status.value.now;
           if (grace > 0n && lastHb > 0n) {
-            const remaining = (lastHb + grace) - now;
+            const remaining = lastHb + grace - now;
             dmsCountdownSecs = remaining > 0n ? remaining : 0n;
           }
         }
@@ -80,7 +80,7 @@ export function filterFleet(
   rows: FleetRow[],
   search: string,
   networkFilter: string | null,
-  statusFilter: DerivedStatus | null
+  statusFilter: DerivedStatus | null,
 ): FleetRow[] {
   const q = search.toLowerCase();
   return rows.filter((row) => {

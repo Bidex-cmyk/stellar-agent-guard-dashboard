@@ -15,6 +15,8 @@
     "export": "EXPORT_BUILD=true next build",
     "start": "next start",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/unit/*.test.ts",
     "test:visual": "playwright test --config=playwright.visual.config.ts",
@@ -30,7 +32,7 @@
     "next": "^16.3.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "stellar-agent-guard-sdk": "^0.1.0"
+    "stellar-agent-guard-sdk": "file:vendor/stellar-agent-guard-sdk-0.1.1.tgz"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.3.6",
@@ -44,6 +46,7 @@
     "eslint": "^9.39.0",
     "eslint-config-next": "^16.3.6",
     "jsdom": "^30.1.1",
+    "prettier": "^3.9.9",
     "tsx": "^4.23.15",
     "typescript": "^5.9.2"
   }

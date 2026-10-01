@@ -8,7 +8,7 @@
  */
 
 import { Account, Address, Operation, TransactionBuilder, rpc, xdr } from "@stellar/stellar-sdk";
-import type { GuardStatus, PolicyConfig } from "stellar-agent-guard-sdk";
+import { sha256Hex, type GuardStatus, type PolicyConfig } from "stellar-agent-guard-sdk";
 import { NETWORK, PHASE1_ARTIFACT } from "./network.ts";
 import { buildPolicyConfig, type PolicyDraft } from "./policyForm.ts";
 import {
@@ -33,7 +33,7 @@ import {
   type InvokeResult,
   type WalletSigner,
 } from "./submit.ts";
-import { addressToScVal, hexToBytes, sha256Hex } from "./scval.ts";
+import { addressToScVal, hexToBytes } from "./scval.ts";
 import { announce } from "./useAnnounce.ts";
 import { recordTx } from "./txHistory.ts";
 
@@ -225,8 +225,7 @@ export async function submitOperation(params: {
           result,
         )})`,
         feeStroops,
-        diagnosticEvents:
-          (result as { diagnosticEventsXdr?: unknown[] }).diagnosticEventsXdr ?? [],
+        diagnosticEvents: (result as { diagnosticEventsXdr?: unknown[] }).diagnosticEventsXdr ?? [],
       };
     }
   }
@@ -417,11 +416,10 @@ export async function installPolicy(params: {
   draft: PolicyDraft;
   passphrase?: string;
   exportOnly?: boolean;
-}): Promise<
-  { kind: "invalid"; issues: string[] } | { kind: "invoked"; result: InvokeResult }
-> {
+}): Promise<{ kind: "invalid"; issues: string[] } | { kind: "invoked"; result: InvokeResult }> {
   const built = buildPolicyConfig(params.draft);
-  if (!built.ok) return { kind: "invalid", issues: built.issues.map((i) => `${i.field}: ${i.message}`) };
+  if (!built.ok)
+    return { kind: "invalid", issues: built.issues.map((i) => `${i.field}: ${i.message}`) };
   const result = await invokeWithWallet({
     server: params.server,
     contract: params.guard,
@@ -507,7 +505,9 @@ function addressOfCredential(credentials: xdr.SorobanAddressCredentials): string
 }
 
 /** Classify one recorded authorization into the operator's terms. */
-export function describeAuthorization(entry: xdr.SorobanAuthorizationEntry): SimulatedAuthorization {
+export function describeAuthorization(
+  entry: xdr.SorobanAuthorizationEntry,
+): SimulatedAuthorization {
   const credentials = entry.credentials;
   if (credentials.type === "sorobanCredentialsSourceAccount") {
     return { kind: "source_account", address: null };

@@ -18,6 +18,7 @@ Read that first; this page only adds what is specific to the dashboard.
 npm ci
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
+npm run format:check # prettier --check (npm run format rewrites the tree)
 npm test            # node --test (unit suite)
 npm run test:e2e    # Playwright browser suites (npx playwright install chromium first)
 npm run build       # Next.js production build
@@ -47,15 +48,15 @@ point — see [Enforcement scope](README.md#enforcement-scope--read-this-before-
 Two documentation rules are part of the review, not optional polish:
 
 - **README claims are tracked, not asserted.** The top-level `README.md` describes what the console can
-do. Every behaviour claim there has a row in [`docs/readme-claims.md`](./docs/readme-claims.md) with
-the file or test that evidences it. When you add, rename or remove a screen, panel, script or
-capability bullet, update the matching row (and its "Last verified" date) in the same commit; a claim
-with no evidence row is treated as a stale claim.
+  do. Every behaviour claim there has a row in [`docs/readme-claims.md`](./docs/readme-claims.md) with
+  the file or test that evidences it. When you add, rename or remove a screen, panel, script or
+  capability bullet, update the matching row (and its "Last verified" date) in the same commit; a claim
+  with no evidence row is treated as a stale claim.
 - **State-model changes update `SPEC.md`.** The derived-vs-stored table and the write-surface inventory
-in [`SPEC.md` §8](./SPEC.md) are normative. If a change adds a persisted key, changes what is read from
-the chain, adds a write path, or changes when a value refreshes, update that table in the same change —
-the model and the code move together. This is this repo's adaptation of the contracts repo's "code and
-spec co-move" rule to a client-side app.
+  in [`SPEC.md` §8](./SPEC.md) are normative. If a change adds a persisted key, changes what is read from
+  the chain, adds a write path, or changes when a value refreshes, update that table in the same change —
+  the model and the code move together. This is this repo's adaptation of the contracts repo's "code and
+  spec co-move" rule to a client-side app.
 
 ## Supply chain
 
@@ -69,4 +70,3 @@ bumps for both `github-actions` and `npm`.
 - Backlog: <https://github.com/aigbagbobila/stellar-agent-guard-dashboard/issues>
 - The org-wide `tier:` / `scope:` label taxonomy is described in the shared
   CONTRIBUTING.md linked above; this repo's scope label is `scope:dashboard`.
-

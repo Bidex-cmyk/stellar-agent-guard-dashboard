@@ -161,10 +161,7 @@ export function AddressBookModal({ onClose }: { onClose: () => void }) {
           <button className="secondary" onClick={doExport} disabled={contacts.length === 0}>
             Export JSON
           </button>
-          <button
-            className="secondary"
-            onClick={() => fileInputRef.current?.click()}
-          >
+          <button className="secondary" onClick={() => fileInputRef.current?.click()}>
             Import JSON
           </button>
           <input
@@ -185,7 +182,11 @@ export function AddressBookModal({ onClose }: { onClose: () => void }) {
             <p className="tiny muted">No contacts yet. Add one above.</p>
           ) : (
             contacts.map((contact) => (
-              <div key={contact.address} className="checkline" style={{ justifyContent: "space-between" }}>
+              <div
+                key={contact.address}
+                className="checkline"
+                style={{ justifyContent: "space-between" }}
+              >
                 <span>
                   <strong style={{ fontSize: 13 }}>{contact.label}</strong>{" "}
                   <span className="mono tiny muted" title={contact.address}>
