@@ -25,6 +25,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import { NETWORK } from "./network.ts";
+import { POLLING } from "./polling.ts";
 import { guardStorageLedgerKeys, ledgerKeyId } from "./scval.ts";
 import { stringifyError } from "./chain.ts";
 import { announce } from "./useAnnounce.ts";
@@ -657,8 +658,8 @@ async function runInvocation(request: InvokeRequest): Promise<InvokeResult> {
   const included = await pollForInclusion(
     server,
     sent.hash,
-    request.pollAttempts ?? 30,
-    request.pollIntervalMs ?? 2_000,
+    request.pollAttempts ?? POLLING.txInclusionAttempts,
+    request.pollIntervalMs ?? POLLING.txInclusionMs,
   );
   if (!included.ok) {
     return {

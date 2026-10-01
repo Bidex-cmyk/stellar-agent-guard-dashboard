@@ -38,7 +38,6 @@ export function CommandPaletteInner({
       inputRef.current?.focus();
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveIndex(0);
     }
   }, [open]);

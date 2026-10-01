@@ -23,7 +23,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
       const initial = prefersLight ? "light" : "dark";
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setThemeState(initial);
       document.documentElement.setAttribute("data-theme", initial);
     }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatStroopsWithUnit } from "../lib/guard/formatters.ts";
+import { POLLING, jitteredInterval } from "../lib/guard/polling.ts";
 import {
   pollFleet,
   filterFleet,
@@ -48,7 +49,7 @@ export function FleetTable() {
     };
 
     fetchFleet();
-    const interval = setInterval(fetchFleet, 5000);
+    const interval = setInterval(fetchFleet, jitteredInterval(POLLING.fleetMs));
     return () => {
       mounted = false;
       clearInterval(interval);
