@@ -66,6 +66,75 @@ export function ErrorBlock({ title, detail }: { title: string; detail: string })
 }
 
 /**
+ * A read's label as a DOM-safe test id slug: `"status()"` → `"status-"`.
+ */
+function readSlug(label: string): string {
+  return label.replace(/[^a-z0-9]+/gi, "-");
+}
+
+/**
+ * Render a read's value, or its failure — with a retry that re-invokes only
+ * that read.
+ *
+ * There is no third branch on purpose: a read that did not succeed has no value
+ * to show, and substituting a zero would make an outage indistinguishable from a
+ * genuinely empty policy. While a retry is in flight the retry button is
+ * replaced by a status line — one re-read at a time, and a failing retry is
+ * never a dead end because the button comes back with the error.
+ */
+export function ReadWithRetry<T>({
+  result,
+  label,
+  onRetry,
+  retrying,
+  render,
+}: {
+  result: ReadResult<T>;
+  label: string;
+  onRetry: () => void;
+  retrying: boolean;
+  render: (value: T) => ReactNode;
+}) {
+  if (!result.ok) {
+    return (
+      <div className="error retryable" data-testid={`retryable-${readSlug(label)}`} role="alert">
+        <span className="t">{`${label}: read failed`}</span>
+        <span className="mono">{result.error}</span>
+        {retrying ? (
+          <span className="tiny" role="status">
+            Retrying…
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="secondary"
+            aria-label={`Retry ${label} fetch`}
+            onClick={onRetry}
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+  return <>{render(result.value)}</>;
+}
+
+/**
+ * The same read-with-retry component under the name call sites use when they
+ * are talking about the retry affordance itself; identical props.
+ */
+export const RetryableRead = ReadWithRetry;
+
+/**
+ * Inline pending state for one retried read, so the retried field can show
+ * progress without resetting the panels around it.
+ */
+export function ReadSkeleton({ label }: { label: string }) {
+  return <div className="skeleton-row" data-testid={`skeleton-${label}`} aria-hidden="true" />;
+}
+
+/**
  * Render a read's value, or its failure.
  *
  * There is no third branch on purpose: a read that did not succeed has no value

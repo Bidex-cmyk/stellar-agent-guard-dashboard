@@ -253,6 +253,31 @@ label.field .hint {
   flex-wrap: wrap;
 }
 
+/* Per-read retry (issue #36). The skeleton is the pending state a retry
+   re-enters: an indeterminate shimmer row, aria-hidden because the polite
+   "re-reading…" status already carries the state to screen readers. */
+.retry-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.skeleton-row {
+  height: 14px;
+  margin: 8px 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #18202b 25%, #222c3a 50%, #18202b 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
 .pill {
   display: inline-block;
   padding: 2.5px 9px;
