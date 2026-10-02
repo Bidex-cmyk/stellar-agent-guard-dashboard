@@ -29,6 +29,7 @@ import {
   type VerdictFilter,
 } from "../lib/guard/telemetryExport.ts";
 import { severityFor } from "../lib/guard/feedSeverity.ts";
+import { decodeUrlState, writeUrlState } from "../lib/guard/urlState.ts";
 
 /** Human names for the topic filter's options, keyed by the topic symbol. */
 const TOPIC_LABELS: Record<string, string> = {
@@ -94,7 +95,18 @@ export function TelemetryFeed() {
     queryRange,
     rangeLabel,
   } = useGuard();
-  const [filter, setFilter] = useState<TelemetryFilter>(EMPTY_TELEMETRY_FILTER);
+  // The verdict filter a shared link carried (issue #132), settled in the
+  // lazy initializer — the same convention the console's guard deep-link uses
+  // for `?guard=` — so the restore needs no effect and the first client render
+  // is the one that has it. `decodeUrlState` validates, so a malformed
+  // `?filter=` restores nothing rather than a value no option matches.
+  const [filter, setFilter] = useState<TelemetryFilter>(() => {
+    if (typeof window === "undefined") return EMPTY_TELEMETRY_FILTER;
+    const shared = decodeUrlState(window.location.search).filter;
+    return shared === undefined
+      ? EMPTY_TELEMETRY_FILTER
+      : { ...EMPTY_TELEMETRY_FILTER, verdict: shared };
+  });
   const announce = useAnnounce();
   const demo = useDemoMode();
 
@@ -248,9 +260,17 @@ export function TelemetryFeed() {
           <select
             aria-label="Verdict filter"
             value={filter.verdict}
-            onChange={(event) =>
-              setFilter((current) => ({ ...current, verdict: event.target.value as VerdictFilter }))
-            }
+            onChange={(event) => {
+              const verdict = event.target.value as VerdictFilter;
+              setFilter((current) => ({ ...current, verdict }));
+              // A filtered feed is the view a teammate should land on, so the
+              // URL carries both the filter and the tab it belongs to — the
+              // `?tab=telemetry&filter=blocked` of issue #132. Written with
+              // `replaceState` through the shared codec: the table re-renders
+              // from state, the page never reloads, and clearing the filter
+              // removes the parameter again.
+              writeUrlState({ filter: verdict, tab: verdict === "all" ? "console" : "telemetry" });
+            }}
           >
             <option value="all">All verdicts</option>
             <option value="allowed">Allowed Only</option>

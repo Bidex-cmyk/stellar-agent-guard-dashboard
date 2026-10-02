@@ -25,6 +25,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { rpc } from "@stellar/stellar-sdk";
 import { createServer } from "../lib/guard/chain.ts";
 import { readGuardSnapshot, type GuardSnapshot } from "../lib/guard/guardOps.ts";
@@ -45,6 +46,12 @@ import {
 } from "../lib/guard/telemetry.ts";
 import { createTabSync, type TabSyncEventType } from "../lib/guard/tabSync.ts";
 import { resolveGuardFromSearch } from "../lib/guard/deeplink.ts";
+import {
+  decodeUrlState,
+  routeForTab,
+  tabForPathname,
+  writeUrlState,
+} from "../lib/guard/urlState.ts";
 import { announce } from "../lib/guard/useAnnounce.ts";
 import {
   KNOWN_INSTANCES,
@@ -237,8 +244,10 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   );
   const [guard, setGuard] = useState<string>(() => {
     if (typeof window !== "undefined") {
-      const g = new URLSearchParams(window.location.search).get("guard");
-      if (g) return g;
+      // The shared link's guard, validated before it becomes state: a
+      // malformed or unsafe address is rejected here, not adopted (issue #132).
+      const shared = decodeUrlState(window.location.search).guard;
+      if (shared) return shared;
     }
     return isDemoMode() ? DEMO_GUARD : KNOWN_INSTANCES[0]!.guard;
   });
@@ -354,6 +363,45 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     setSnapshotError(null);
     resetEvents();
   }, [demo, resetEvents]);
+
+  // ── Shareable-view URL state (issue #132) ──────────────────────────────
+  // The address bar mirrors what the console shows — the guard and network
+  // here, the active tab below — through `history.replaceState`, never a
+  // navigation: a guard switch must not reload the page (a reload would drop
+  // the in-memory feed, the connected session and any form draft). Because a
+  // write merges into the current query and re-validates every owned
+  // parameter, it also *cleans* a shared link: a malformed `?guard=` or
+  // `?network=` that decode refused to adopt is dropped from the URL by this
+  // first write, while unrelated parameters (`?demo=true`) pass through.
+  useEffect(() => {
+    writeUrlState({ guard, network: NETWORK.name });
+  }, [guard]);
+
+  // The active tab, in both directions. On the first run a tab the shared URL
+  // already named is *preserved* — it is what the console page's restore reads
+  // — and a screen tab that disagrees with the path wins by navigating to its
+  // route, so `/?tab=fleet` restores the Fleet view. Every later run follows
+  // navigation: whatever route the operator lands on is the active tab.
+  const pathname = usePathname();
+  const router = useRouter();
+  const tabAdopted = useRef(false);
+  useEffect(() => {
+    if (!tabAdopted.current) {
+      tabAdopted.current = true;
+      const shared = decodeUrlState(window.location.search).tab;
+      if (shared !== undefined) {
+        const route = routeForTab(shared);
+        // Panel tabs only mean something on the console; anywhere else the
+        // path's own tab is the honest state.
+        if (route !== null || pathname === "/") {
+          writeUrlState({ tab: shared });
+          if (route !== null && route !== pathname) router.replace(route);
+          return;
+        }
+      }
+    }
+    writeUrlState({ tab: tabForPathname(pathname) });
+  }, [pathname, router]);
 
   // In demo mode the feed is seeded and watching immediately: a visitor should
   // see realistic telemetry without having to click "Start watching" first. The
