@@ -19,7 +19,7 @@
  * the exact bytes.
  */
 
-import { toHex } from "stellar-agent-guard-sdk";
+import { toHex } from "./scval.ts";
 import type { TelemetryEvent } from "./telemetry.ts";
 import { EMPTY_TELEMETRY_FILTER, type TelemetryFilter } from "./telemetryExport.ts";
 

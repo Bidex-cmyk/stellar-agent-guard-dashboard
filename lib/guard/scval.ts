@@ -10,7 +10,7 @@
  * Web Crypto and every byte field is a `Uint8Array`.
  */
 
-import { GUARD_STORAGE_KEYS, toHex } from "stellar-agent-guard-sdk";
+import { GUARD_STORAGE_KEYS } from "stellar-agent-guard-sdk";
 import { Address, xdr } from "@stellar/stellar-sdk";
 
 /**
@@ -29,6 +29,13 @@ async function getSubtleCrypto(): Promise<SubtleCrypto> {
     throw new Error("crypto.subtle is unavailable: hashing needs Web Crypto in this runtime");
   }
   return subtle;
+}
+
+/** SHA-256 of arbitrary bytes, as lowercase hex. */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const subtle = await getSubtleCrypto();
+  const digest = await subtle.digest("SHA-256", toArrayBuffer(bytes));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** SHA-256 as raw bytes. The SDK exports only the hex form, and the
@@ -57,6 +64,10 @@ export function hexToBytes(hex: string): Uint8Array {
     out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
+}
+
+export function toHex(bytes: Uint8Array): string {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** A contract/account `Address` as the `ScVal` a contract parameter expects. */

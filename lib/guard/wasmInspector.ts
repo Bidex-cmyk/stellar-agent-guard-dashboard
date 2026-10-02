@@ -15,7 +15,7 @@
  */
 
 import { PHASE1_ARTIFACT } from "./network.ts";
-import { sha256Hex } from "stellar-agent-guard-sdk";
+import { sha256Hex } from "./scval.ts";
 
 const MAGIC = [0x00, 0x61, 0x73, 0x6d] as const;
 

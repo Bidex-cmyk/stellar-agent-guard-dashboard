@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Address, StrKey } from "@stellar/stellar-sdk";
-import { GUARD_STORAGE_KEYS, sha256Hex, toHex } from "stellar-agent-guard-sdk";
+import { GUARD_STORAGE_KEYS } from "stellar-agent-guard-sdk";
+import { sha256Hex, toHex } from "../../lib/guard/scval.ts";
 import { guardStorageLedgerKeys, hashToHex, hexToBytes, sha256 } from "../../lib/guard/scval.ts";
 
 const PHASE1_WASM_SHA256 = "f47919f92e78fdd034836aa61955fc338dd56a218c448c37df1867a8c3da0f63";

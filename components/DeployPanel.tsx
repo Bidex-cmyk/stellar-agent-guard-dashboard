@@ -16,7 +16,7 @@ import type { ArtifactCheck, DeployOutcome, DeployPlan } from "../lib/guard/guar
 import type { InvokeResult } from "../lib/guard/submit.ts";
 import { NETWORK, PHASE1_ARTIFACT } from "../lib/guard/network.ts";
 import { fetchContractWasm, verifyWasmIdentity } from "../lib/guard/chain.ts";
-import { toHex } from "stellar-agent-guard-sdk";
+import { toHex } from "../lib/guard/scval.ts";
 import { validateInitParameters, type InitValidation } from "../lib/guard/initValidator.ts";
 import {
   contractAlreadyDeployed,

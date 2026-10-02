@@ -26,6 +26,7 @@
 
 import type { GuardEvent, GuardStatus, PolicyConfig, ProtocolRule } from "stellar-agent-guard-sdk";
 import { GUARD_EVENT_TOPICS, guardEventId } from "stellar-agent-guard-sdk";
+import type { TelemetryEvent } from "./telemetry.ts";
 import type { GuardSnapshot } from "./guardOps.ts";
 import type { WindowState, WasmIdentity } from "./chain.ts";
 import type { GuardInstance } from "./instance.ts";
@@ -204,11 +205,11 @@ const DEMO_BLOCKED_REASONS = [
 function demoEvent(
   bare: Omit<GuardEvent, "id" | "stream" | "observedAt">,
   sequence: number,
-): GuardEvent {
+): TelemetryEvent {
   return {
     ...bare,
     stream: bare.source === "ledger" ? "committed" : "diagnostic",
-    observedAt: null,
+    observedAt: new Date().toISOString(),
     id: guardEventId({
       source: bare.source,
       topics: [bare.topic],
@@ -230,7 +231,7 @@ function demoEvent(
  * event back. Rendering the demo feed with that distinction intact means the
  * feed's own honesty note stays true in demo mode too.
  */
-export function syntheticDemoEvent(sequence: number, now: number = Date.now()): GuardEvent {
+export function syntheticDemoEvent(sequence: number, now: number = Date.now()): TelemetryEvent {
   const position = ((sequence % 4) + 4) % 4;
   const closedAt = new Date(now).toISOString();
 
@@ -294,8 +295,8 @@ export function syntheticDemoEvent(sequence: number, now: number = Date.now()): 
  * Higher sequence numbers get higher ledger numbers, so the newest row is also
  * the most recent ledger — the ordering the live cursor-based feed produces.
  */
-export function demoEvents(now: number = Date.now(), count = 6): GuardEvent[] {
-  const events: GuardEvent[] = [];
+export function demoEvents(now: number = Date.now(), count = 6): TelemetryEvent[] {
+  const events: TelemetryEvent[] = [];
   for (let index = 0; index < count; index += 1) {
     events.push(syntheticDemoEvent(count - index, now - index * 6_000));
   }

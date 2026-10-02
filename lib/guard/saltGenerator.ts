@@ -13,7 +13,7 @@
  * deploy will produce", and those are exactly the kind of definitions that drift.
  */
 
-import { toHex } from "stellar-agent-guard-sdk";
+import { toHex } from "./scval.ts";
 import { StrKey } from "@stellar/stellar-sdk";
 import { predictContractId } from "./chain.ts";
 import { SALT_BYTES } from "./network.ts";

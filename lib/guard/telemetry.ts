@@ -27,9 +27,11 @@ import {
   topicSymbols,
   type GuardEvent,
   type PollResult,
+  guardEventId,
 } from "stellar-agent-guard-sdk";
 import { scValToNative, xdr, type rpc } from "@stellar/stellar-sdk";
 import { NETWORK } from "./network.ts";
+import { withTimeout } from "./timeout.ts";
 import { estimateLedgerAtTime, type LedgerAnchor, type TimeRange } from "./ledgerTime.ts";
 
 /**
@@ -110,20 +112,22 @@ export class GuardFeed {
 
   /** One page of committed ledger events. Advances the cursor. */
   async pollOnce(limit = 50): Promise<TelemetryPage> {
-    const params: { cursor?: string; limit: number; startLedger?: number } = { limit };
-    if (this.cursor) {
-      params.cursor = this.cursor;
-    } else if (this.latestLedger !== null) {
-      params.startLedger = this.latestLedger;
-    }
-    this.lastRawEvents = [];
-    const decoded = await this.listener.poll(params);
-    const page = { ...decoded, events: attachLedgerXdr(decoded.events, this.lastRawEvents) };
-    // A page with no events still advances the ledger pointer, so the next poll
-    // does not re-scan a stretch of empty ledgers.
-    this.latestLedger = Math.max(this.latestLedger ?? 0, page.latestLedger);
-    if (page.cursor) this.cursor = page.cursor;
-    return page;
+    return await withTimeout(async () => {
+      const params: { cursor?: string; limit: number; startLedger?: number } = { limit };
+      if (this.cursor) {
+        params.cursor = this.cursor;
+      } else if (this.latestLedger !== null) {
+        params.startLedger = this.latestLedger;
+      }
+      this.lastRawEvents = [];
+      const decoded = await this.listener.poll(params);
+      const page = { ...decoded, events: attachLedgerXdr(decoded.events, this.lastRawEvents) };
+      // A page with no events still advances the ledger pointer, so the next poll
+      // does not re-scan a stretch of empty ledgers.
+      this.latestLedger = Math.max(this.latestLedger ?? 0, page.latestLedger);
+      if (page.cursor) this.cursor = page.cursor;
+      return page;
+    });
   }
 
   /** Where the feed currently is, for display. */
@@ -299,14 +303,16 @@ export function refusedEventsFromDiagnostics(
   // The SDK skips events whose topics it does not recognise but keeps the
   // order of the rest, so walk both lists together and pair them by name topic.
   let cursor = 0;
-  return decoded.map((event) => {
+  return decoded.map((event, index) => {
+    const stream = "diagnostic";
+    const id = guardEventId({ ...event, topics: [event.topic], simulationIndex: index });
     while (cursor < normalised.length) {
       const candidate = normalised[cursor++];
       if (topicSymbols(candidate)[0] === event.topic) {
-        return { ...event, observedAt, raw: diagnosticXdr(candidate) };
+        return { ...event, observedAt, id, stream, raw: diagnosticXdr(candidate) };
       }
     }
-    return { ...event, observedAt, raw: null };
+    return { ...event, observedAt, id, stream, raw: null };
   });
 }
 
@@ -327,6 +333,8 @@ export function attachLedgerXdr(
   const observedAt = new Date().toISOString();
   let cursor = 0;
   return decoded.map((event) => {
+    const stream = "committed";
+    const id = guardEventId({ ...event, topics: [event.topic], simulationIndex: null });
     while (cursor < raw.length) {
       const candidate = raw[cursor++]!;
       if (
@@ -337,6 +345,8 @@ export function attachLedgerXdr(
         return {
           ...event,
           observedAt,
+          id,
+          stream,
           raw: {
             eventId: candidate.id,
             topicXdr: candidate.topic.map((topic) => topic.toXDR("base64")),
@@ -347,7 +357,7 @@ export function attachLedgerXdr(
         };
       }
     }
-    return { ...event, observedAt, raw: null };
+    return { ...event, observedAt, id, stream, raw: null };
   });
 }
 

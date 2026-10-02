@@ -19,7 +19,7 @@
 import { useCallback, useState } from "react";
 import { TransactionBuilder } from "@stellar/stellar-sdk";
 import { NETWORK } from "../lib/guard/network.ts";
-import { toHex } from "stellar-agent-guard-sdk";
+import { toHex } from "../lib/guard/scval.ts";
 import {
   approvalPercent,
   approvalSummary,

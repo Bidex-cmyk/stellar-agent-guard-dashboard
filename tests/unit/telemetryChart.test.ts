@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type axeCore from "axe-core";
-import type { GuardEvent } from "stellar-agent-guard-sdk";
+import type { TelemetryEvent } from "../../lib/guard/telemetry.ts";
 import { installDom, loadReact, sleep, type Act } from "./domHarness.ts";
 import { withIdentity } from "../mocks/eventFixtures.ts";
 import { TelemetryChart } from "../../components/TelemetryChart.tsx";
@@ -26,7 +26,7 @@ const GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
 // recent events always share the chart's last bucket whatever the wall clock.
 const BUCKET_START = Math.floor(Date.now() / 300_000) * 300_000;
 
-function event(minutesAgo: number, result: "allowed" | "blocked"): GuardEvent {
+function event(minutesAgo: number, result: "allowed" | "blocked"): TelemetryEvent {
   return withIdentity({
     kind: "auth_checked",
     topic: "event_auth_checked",
@@ -47,7 +47,7 @@ function event(minutesAgo: number, result: "allowed" | "blocked"): GuardEvent {
 const bucketSecs = BigInt(BUCKET_START / 1000);
 
 // Three in the current interval (offsets of seconds), one 40 minutes earlier.
-const EVENTS: GuardEvent[] = [
+const EVENTS: TelemetryEvent[] = [
   event(0, "allowed"),
   event(0.01, "allowed"),
   event(0.015, "blocked"),
