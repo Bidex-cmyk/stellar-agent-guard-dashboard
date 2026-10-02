@@ -228,12 +228,27 @@ export function AddressText({
   );
 }
 
-export function relativeTime(iso: string | null): string {
-  if (!iso) return "never";
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  return `${Math.round(seconds / 3600)}h ago`;
+import { formatTimeAgo } from "../lib/guard/time.ts";
+
+export function TimeAgo({ iso, suffix = "" }: { iso: string | null; suffix?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!iso) return <span>never</span>;
+
+  const ts = Math.floor(new Date(iso).getTime() / 1000);
+  const nowSecs = Math.floor(now / 1000);
+  const rel = formatTimeAgo(ts, nowSecs);
+
+  return (
+    <time dateTime={iso} title={iso} className="timeago">
+      {rel}
+      {suffix}
+    </time>
+  );
 }
 
 /**

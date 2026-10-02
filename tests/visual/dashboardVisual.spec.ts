@@ -48,7 +48,7 @@ const SCREENS: Screen[] = [
     // `fetchedAt`, so this label reads "0s ago" one moment and "3s ago" the next.
     // It is masked rather than frozen so the rest of the page is still rendered by
     // the real application, not by a stopped clock.
-    mask: [/^read \d+s ago$/],
+    mask: [/^read (just now|\d+[smhd])$/],
   },
   {
     name: "configure",
