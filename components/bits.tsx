@@ -56,6 +56,39 @@ export function ScopeNotice({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/**
+ * The warning tier: one prominent banner for a state that is *safe* but not
+ * doing what the operator probably assumes it is doing.
+ *
+ * Established here by the default-deny status pass (issue #25) and shared, so
+ * the telemetry feed's per-row severity (issue #26) and the pending-status
+ * surfaces reuse one set of tokens rather than each inventing a red. `tier`
+ * picks the intensity: `warn` for "working as designed, read this", `danger` for
+ * "frozen/refused, act now" — the same two tiers as `.notice` and `.error`.
+ *
+ * `role="status"` announces it politely rather than interrupting: a state that
+ * is already true when the page loads is context, not an event.
+ */
+export function WarningBanner({
+  tier = "warn",
+  title,
+  children,
+  action,
+}: {
+  tier?: "warn" | "danger";
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className={`notice${tier === "danger" ? " danger" : ""}`} data-tier={tier} role="status">
+      <strong>{title}</strong>
+      {children}
+      {action}
+    </div>
+  );
+}
+
 export function ErrorBlock({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="error">

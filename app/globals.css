@@ -323,6 +323,16 @@ label.field .hint {
   margin-bottom: 3px;
 }
 
+/*
+ * Warning tier — the shared primitive for "safe, but not doing what the
+ * operator assumed", established by the default-deny status pass (issue #25)
+ * and reused by the telemetry feed's row severity (issue #26).
+ *
+ * Two intensities, two tokens, no third colour: `warn` for a state that is
+ * working as designed and needs reading, `danger` for one that is refusing
+ * work. `.pill.warn` / `.pill.danger` are the inline form of the same tier, so
+ * a badge and the banner it belongs to cannot drift apart.
+ */
 .notice {
   border-left: 3px solid var(--warn);
   background: #1b1710;
@@ -330,6 +340,11 @@ label.field .hint {
   border-radius: 0 7px 7px 0;
   margin: 10px 0;
   font-size: 13px;
+}
+
+.notice.danger {
+  border-left-color: var(--danger);
+  background: #1c1113;
 }
 
 .notice.info {
@@ -340,6 +355,11 @@ label.field .hint {
 .notice strong {
   display: block;
   margin-bottom: 4px;
+}
+
+.notice .cta {
+  display: inline-block;
+  margin-top: 8px;
 }
 
 /*
@@ -858,6 +878,19 @@ code {
   .pill.danger {
     background: transparent !important;
     border: 1px solid black !important;
+  }
+  /* The warning tier prints too — an operator who prints the compliance report
+   * must still read the default-deny banner, so the tier's dark surface has to
+   * become white rather than leaving black text on a black box. The two
+   * intensities lose their colour difference on paper by design: what separates
+   * them is the wording, which is why the copy names the consequence. */
+  .notice,
+  .notice.danger,
+  .notice.info {
+    background: white !important;
+    color: black !important;
+    border: 1px solid black !important;
+    border-left: 3px solid black !important;
   }
   /* Row severity has to survive the `* { color: black }` rule above. The
    * inset shadow is not a border, so it prints unflattened — but a thin red rule

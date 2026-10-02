@@ -44,6 +44,7 @@ import {
   type TelemetryEvent,
 } from "../lib/guard/telemetry.ts";
 import { createTabSync, type TabSyncEventType } from "../lib/guard/tabSync.ts";
+import { resolveGuardFromSearch } from "../lib/guard/deeplink.ts";
 import { announce } from "../lib/guard/useAnnounce.ts";
 import {
   KNOWN_INSTANCES,
@@ -257,6 +258,25 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     lastPolledAt: null,
   });
 
+  /**
+   * The two event resets, declared beside the state they reset.
+   *
+   * `clearEvents` empties the table but keeps the dedupe set, so a poll cannot
+   * re-deliver what the operator just cleared. `resetEvents` drops the set too —
+   * required whenever the *guard* changes, or the new account's events would be
+   * swallowed as already-seen. Both are declared here rather than with the rest
+   * of the feed wiring because the deep-link effect below adopts a different
+   * guard before that wiring is reached.
+   */
+  const clearEvents = useCallback(() => {
+    setBuffer(clearStreamRows);
+    setRangeLabel(null);
+  }, []);
+  const resetEvents = useCallback(() => {
+    setBuffer(emptyStreamBuffer());
+    setRangeLabel(null);
+  }, []);
+
   // The active feed is reached only through an identity-keyed coordinator, so a
   // guard switch can never resume the previous guard's cursor onto a different
   // stream — the coordinator replaces the feed, it does not re-point it. The
@@ -300,6 +320,40 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     if (demoFlagFromQuery(window.location.search)) setDemo(true);
     return memoryWiper.registerBrowserEvents();
   }, []);
+
+  // Adopt the guard a link named, so a call to action that deep-links into the
+  // configurator does not quietly show a *different* account's state: this page
+  // mounts its own provider, which would otherwise fall back to the first known
+  // instance. An address outside the registry is added to it for the session (not
+  // persisted — a link is not the operator choosing to remember an instance), so
+  // the selector always has an option matching the selection. Demo mode pins the
+  // fixture instance and is left alone.
+  useEffect(() => {
+    if (demo) return;
+    const registry = loadInstances();
+    const requested = resolveGuardFromSearch({
+      search: window.location.search,
+      registry,
+      current: guardRef.current,
+    });
+    if (!requested) return;
+    setInstances(
+      requested.addToRegistry
+        ? [
+            ...registry,
+            {
+              guard: requested.guard,
+              label: `Guard ${requested.guard.slice(0, 6)}…${requested.guard.slice(-4)}`,
+              provenance: "Opened from a link in this browser.",
+            },
+          ]
+        : registry,
+    );
+    setGuard(requested.guard);
+    setSnapshot(null);
+    setSnapshotError(null);
+    resetEvents();
+  }, [demo, resetEvents]);
 
   // In demo mode the feed is seeded and watching immediately: a visitor should
   // see realistic telemetry without having to click "Start watching" first. The
@@ -651,16 +705,6 @@ export function GuardProvider({ children }: { children: ReactNode }) {
 
   const stopWatching = useCallback(() => {
     setFeed((current) => ({ ...current, watching: false }));
-  }, []);
-
-  const clearEvents = useCallback(() => {
-    setBuffer(clearStreamRows);
-    setRangeLabel(null);
-  }, []);
-  /** Drop everything, queued events and history included: a new guard or a locked session. */
-  const resetEvents = useCallback(() => {
-    setBuffer(emptyStreamBuffer());
-    setRangeLabel(null);
   }, []);
 
   // ── Historical range queries (#148) ──────────────────────────────────

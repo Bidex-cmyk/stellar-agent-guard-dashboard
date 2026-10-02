@@ -7,10 +7,12 @@ import { installDom, loadReact, sleep, type Act } from "./domHarness.ts";
 import { PolicyForm } from "../../components/PolicyForm.tsx";
 import { PanicPanel } from "../../components/PanicPanel.tsx";
 import { DeployPanel } from "../../components/DeployPanel.tsx";
+import { StatusPanel } from "../../components/StatusPanel.tsx";
 import { TxHistoryTable } from "../../components/TxHistoryTable.tsx";
 import { TelemetryFeed } from "../../components/TelemetryFeed.tsx";
 import { GuardContext, GuardEventsContext } from "../../components/GuardProvider.tsx";
 import { TX_HISTORY_STORAGE_KEY, type TxHistoryEntry } from "../../lib/guard/txHistory.ts";
+import type { GuardSnapshot } from "../../lib/guard/guardOps.ts";
 
 type GuardEventsContextValue = NonNullable<ContextType<typeof GuardEventsContext>>;
 
@@ -176,6 +178,49 @@ test("the freeze confirmation dialog passes axe-core while open", async () => {
 
     const violations = await axeViolations(rendered.container);
     assert.deepEqual(violations, [], "the open dialog must pass axe-core");
+  } finally {
+    await rendered.unmount();
+  }
+});
+
+test("StatusPanel passes axe-core with the default-deny banner showing", async () => {
+  // The banner is the loudest thing this interface ever renders, so it is
+  // scanned in the state that makes it appear (issue #25).
+  const noPolicy: GuardSnapshot = {
+    guard: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    fetchedAt: "2026-09-25T10:00:00.000Z",
+    status: {
+      ok: true,
+      value: {
+        has_policy: false,
+        admin_frozen: false,
+        heartbeat_expired: false,
+        last_heartbeat: 1_700_000_000n,
+        now: 1_700_000_060n,
+      },
+    },
+    policy: { ok: true, value: null },
+    window: { ok: true, value: null },
+    identity: {
+      ok: true,
+      value: { reportedWasmHash: null, fetchedSha256: "abc123", bytes: 39673, match: false },
+    },
+  };
+  const context = { ...TEST_GUARD, snapshot: noPolicy };
+  const rendered = await renderPanel(
+    react.createElement(
+      GuardContext.Provider,
+      { value: context },
+      react.createElement(StatusPanel),
+    ),
+  );
+  try {
+    assert.ok(
+      rendered.container.querySelector("[data-tier]"),
+      "the scan must have covered a render where the banner is actually present",
+    );
+    const violations = await axeViolations(rendered.container);
+    assert.deepEqual(violations, [], "the default-deny banner must pass axe-core");
   } finally {
     await rendered.unmount();
   }

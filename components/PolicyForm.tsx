@@ -22,6 +22,7 @@ import { computePolicyDiff, type PolicyDiff } from "../lib/guard/policyDiff.ts";
 import { PolicyDiffModal } from "./PolicyDiffModal.tsx";
 import type { InvokeResult } from "../lib/guard/submit.ts";
 import { refusedEventsFromDiagnostics } from "../lib/guard/telemetry.ts";
+import { NO_POLICY_CONSEQUENCE, policyStateFrom } from "../lib/guard/policyState.ts";
 import {
   exportAssetCapsCsv,
   exportAssetCapsJson,
@@ -31,10 +32,10 @@ import {
   type AssetCapChange,
 } from "../lib/guard/assetCapsCsv.ts";
 import { useGuard } from "./GuardProvider.tsx";
+import { ErrorBlock, ScopeNotice, WarningBanner, starLink } from "./bits.tsx";
 import { CsvImportExport } from "./CsvImportExport.tsx";
 import { PolicySimulationView } from "./PolicySimulationView.tsx";
 import { fetchTokenMetadata } from "../lib/guard/tokenMetadata.ts";
-import { ErrorBlock, ScopeNotice, starLink } from "./bits.tsx";
 import { writeControlState } from "../lib/guard/observerMode.ts";
 
 /**
@@ -146,6 +147,10 @@ export function PolicyForm() {
   const validation = buildPolicyConfig(effective);
   const issues = validation.ok ? [] : validation.issues;
 
+  // Nothing installed is default-deny, not a blank slate: the form is where that
+  // state gets named before the operator is asked to fill anything in.
+  const policyState = policyStateFrom(snapshot?.status);
+
   // Every write here is inert for the same reason, in the same words as every
   // other write control in the console (issue #101).
   const installControl = writeControlState(wallet, {
@@ -159,6 +164,16 @@ export function PolicyForm() {
     label: "export the policy",
   });
   const revokeControl = writeControlState(wallet, { busy, label: "revoke the policy" });
+  // Revoking a policy that is not installed spends a signature and changes
+  // nothing, so the button is inert in exactly the state the banner warns about.
+  // The observer and in-flight reasons still win — "connect a wallet" is the
+  // more actionable sentence, and it is the one that stays true.
+  const nothingInstalled = policyState === "default-deny";
+  const revokeDisabled = revokeControl.disabled || nothingInstalled;
+  const revokeTitle =
+    !revokeControl.disabled && nothingInstalled
+      ? "No policy is installed, so there is nothing to revoke."
+      : revokeControl.title;
 
   // Text edits are coalesced into one history step (see useHistoryState); every
   // other change (toggles, row removal, clear, import) is a step of its own.
@@ -320,6 +335,24 @@ export function PolicyForm() {
         </div>
       </div>
       <ScopeNotice />
+
+      {policyState === "default-deny" && (
+        <WarningBanner
+          title="Nothing is installed on this account yet"
+          action={
+            <a className="cta" href="#install-policy">
+              Install the policy below
+            </a>
+          }
+        >
+          <span className="tiny">
+            {NO_POLICY_CONSEQUENCE} The form below starts from a blank draft because there is
+            nothing to edit; installing it is what brings this account out of default-deny, and
+            revoking is the action that puts it back.
+          </span>
+        </WarningBanner>
+      )}
+
       <CsvImportExport />
       <PolicySimulationView policy={validation.ok ? validation.config : null} />
       <p className="tiny muted">
@@ -683,8 +716,8 @@ export function PolicyForm() {
         </button>
         <button
           className="secondary"
-          disabled={revokeControl.disabled}
-          title={revokeControl.title}
+          disabled={revokeDisabled}
+          title={revokeTitle}
           onClick={() => void revoke()}
         >
           Revoke policy (default deny)
