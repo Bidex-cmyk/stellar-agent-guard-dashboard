@@ -684,6 +684,78 @@ code {
   word-break: break-all;
 }
 
+/*
+ * Dead-man-switch expiration alert banners — shown at the top of the console
+ * while the DMS deadline approaches, escalating in three tiers:
+ * warning (yellow) below 25% of grace, critical (red, pulsing) below 10%, and
+ * expired (dark red) once the switch has tripped. High-contrast fills on the
+ * dark theme so the bar reads across the room — that is the point of a
+ * dead-man alert.
+ */
+.dms-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 9px;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dms-banner strong {
+  font-size: 13.5px;
+}
+
+.dms-banner .detail {
+  font-size: 12.5px;
+  opacity: 0.92;
+}
+
+.dms-banner.warning {
+  border-color: var(--warn);
+  background: #2a2010;
+  color: var(--warn);
+}
+
+.dms-banner.critical {
+  border-color: var(--danger);
+  background: #331111;
+  color: #ffd9d9;
+  animation: dms-critical-pulse 1.2s ease-in-out infinite;
+}
+
+.dms-banner.expired {
+  border-color: #8f2a2a;
+  background: #2a0505;
+  color: #ff9c9c;
+}
+
+/*
+ * The critical tier pulses so it cannot be mistaken for a static notice; the
+ * other two tiers stay still so escalation itself is what moves. Honoured by
+ * reduced-motion users, for whom a pulsing alarm is noise, not signal.
+ */
+@keyframes dms-critical-pulse {
+  0%,
+  100% {
+    background-color: #331111;
+    border-color: var(--danger);
+  }
+  50% {
+    background-color: #552020;
+    border-color: #ff8a8a;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dms-banner.critical {
+    animation: none;
+  }
+}
+
 @media print {
   .no-print,
   button,

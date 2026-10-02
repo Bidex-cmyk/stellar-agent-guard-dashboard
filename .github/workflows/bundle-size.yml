@@ -126,21 +126,46 @@ jobs:
                 event: "pull_request",
                 per_page: 10,
               });
-              // Exclude runs that are still pending approval (action_required):
-              // those will never produce an artifact, so treat them as not-yet-done.
-              run = data.workflow_runs.find(
-                (candidate) =>
-                  candidate.status !== "in_progress" &&
-                  candidate.status !== "queued" &&
-                  candidate.conclusion !== "action_required"
-              ) ?? null;
-              if (run && run.status === "completed") break;
-              run = null;
+              // Only accept a completed run that actually produced the report
+              // artifact — a cancelled/failure run (e.g. cancelled by the
+              // workflow's own concurrency group) never reaches the upload
+              // step, and download-artifact would fail with "Artifact not
+              // found". Skipped/cancelled runs resolve immediately rather
+              // than polling until the deadline.
+              const candidates = [];
+              for (const candidate of data.workflow_runs) {
+                if (candidate.status === "in_progress" || candidate.status === "queued") {
+                  candidates.push(null); // still running: keep polling
+                  continue;
+                }
+                if (candidate.conclusion !== "success") continue;
+                const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: candidate.id,
+                  per_page: 100,
+                });
+                if (artifacts.artifacts.some((artifact) => artifact.name === "bundle-size-report")) {
+                  candidates.push(candidate);
+                  break;
+                }
+              }
+              run = candidates.find(Boolean) ?? null;
+              if (run) break;
+              if (!candidates.includes(null)) {
+                // No in-flight run of this head SHA: nothing to wait for.
+                break;
+              }
               await new Promise((resolve) => setTimeout(resolve, 15000));
             }
             core.setOutput("run-id", run ? String(run.id) : "");
             core.setOutput("conclusion", run ? (run.conclusion ?? "") : "timeout");
 
+      # Belt-and-braces: the wait script only selects runs that verifiably
+      # have the artifact, but a download can still race an expiry or be
+      # interrupted. The next step renders a fallback comment when
+      # bundle-report.md is missing, so a failed download must not fail the
+      # job.
       - name: Download the report artifact
         id: artifact
         # Only attempt download when analyze actually completed (not action_required/timeout).
@@ -154,6 +179,7 @@ jobs:
           name: bundle-size-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.wait.outputs.run-id }}
+        continue-on-error: true
 
       - name: Post or update the PR comment
         if: always()
@@ -177,7 +203,8 @@ jobs:
                 marker,
                 "## Bundle size report",
                 "",
-                "The bundle-size analysis run did not produce a report." + reason,
+                "The bundle-size analysis run did not produce a report" +
+                  `${process.env.conclusion === "timeout" ? " (timed out waiting for it)" : ""}.`,
                 "Check the `bundle-size` workflow logs on this pull request.",
               ].join("\n");
             }
