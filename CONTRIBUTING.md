@@ -33,6 +33,16 @@ Three extra scripts are not part of the CI gate:
   events in 30s with FPS/heap assertions); frame-rate numbers depend on the
   runner's hardware, so it is measured locally and never gates a merge.
 
+### Lockfile ride-along rule
+
+`package-lock.json` is committed and is the reproducibility contract (`npm ci` is the
+gate that proves it). Lockfile changes therefore ride along with the PR that caused
+them — a dependency-adding or dependency-bumping PR commits its own lockfile diff in
+the same commit — and separate lockfile-only PRs are not opened. The same applies to
+`npm audit fix` output: run it as part of the change that motivates it, never as a
+standalone lock churn. Never run `npm audit fix --force` (it can jump majors); a fix
+that requires a breaking upgrade is its own issue, argued on its own.
+
 ## Branch protection and CI
 
 `main` is protected by the `main-protection` ruleset, and the required status check is
