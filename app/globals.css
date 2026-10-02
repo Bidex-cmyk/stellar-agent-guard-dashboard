@@ -422,6 +422,31 @@ table.chart-data td {
   vertical-align: top;
 }
 
+/*
+ * Row severity tiers (issue #26) — the same two tokens as the warning-tier
+ * banner, so a feed row and a status banner cannot disagree about what "red"
+ * means. Every tier's wording is already in the row (the decision badge, the
+ * source pill), so the colour is emphasis, never the message.
+ *
+ * The marker is an inset box-shadow on the first cell rather than a border:
+ * `border-collapse: collapse` (above) makes a row-level border unreliable, and
+ * the row's cell padding stays as it was — no reflow, no layout shift.
+ */
+table.events tbody tr.severity-blocked {
+  background: #1c1113;
+}
+
+table.events tbody tr.severity-blocked td:first-child {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+table.events tbody tr.severity-diagnostic td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+/* Allowed and lifecycle rows are deliberately unmarked: the eye should go to the
+ * blocks, and an unmarked row is what "nothing happened here" looks like. */
+
 table.asset-caps {
   width: 100%;
   border-collapse: collapse;
@@ -833,6 +858,20 @@ code {
   .pill.danger {
     background: transparent !important;
     border: 1px solid black !important;
+  }
+  /* Row severity has to survive the `* { color: black }` rule above. The
+   * inset shadow is not a border, so it prints unflattened — but a thin red rule
+   * on paper is worth nothing, so the tiers print as black rules of different
+   * weights (a block is heavier than a diagnostic) and the row's own words carry
+   * the distinction either way. */
+  table.events tbody tr.severity-blocked {
+    background: transparent !important;
+  }
+  table.events tbody tr.severity-blocked td:first-child {
+    box-shadow: inset 4px 0 0 #000 !important;
+  }
+  table.events tbody tr.severity-diagnostic td:first-child {
+    box-shadow: inset 2px 0 0 #000 !important;
   }
 }
 
