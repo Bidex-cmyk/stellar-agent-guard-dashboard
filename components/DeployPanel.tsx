@@ -55,6 +55,10 @@ import { ErrorBlock, OutcomeList, starLink } from "./bits.tsx";
 /** Either the chain's answer about the artifact, or why there is not one. */
 type ArtifactFetch = { artifact: ArtifactCheck } | { error: string };
 
+// parked-until-upstream: #13
+// The multi-artifact version picker is blocked until the upstream stellar-agent-guard-contracts
+// repository lands its release-workflow and publishes its first versioned artifact, and the SDK
+// exports GUARD_WASM_HASH for the recommended build.
 export function DeployPanel() {
   const { server, signer, wallet, refresh, addInstance, guard } = useGuard();
   const [artifact, setArtifact] = useState<ArtifactCheck | null>(null);
