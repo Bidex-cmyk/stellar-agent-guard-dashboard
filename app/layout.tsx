@@ -5,6 +5,7 @@ import { AriaAnnouncer } from "../components/AriaAnnouncer.tsx";
 import { PwaRegistrar } from "../components/PwaRegistrar.tsx";
 import { ThemeProvider } from "../components/ThemeProvider.tsx";
 import { ThemeToggle } from "../components/ThemeToggle.tsx";
+import { ToastContainer } from "../components/ToastContainer.tsx";
 import { PWA_MANIFEST_PATH, PWA_THEME_COLOR } from "../lib/guard/pwa.ts";
 import "./globals.css";
 
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <PwaRegistrar />
           <AriaAnnouncer />
+          <ToastContainer />
           <div className="shell">
             <DemoBadge />
             <header className="top">

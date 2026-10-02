@@ -32,7 +32,8 @@
     "next": "^16.3.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "stellar-agent-guard-sdk": "file:vendor/stellar-agent-guard-sdk-0.1.1.tgz"
+    "stellar-agent-guard-sdk": "file:vendor/stellar-agent-guard-sdk-0.1.1.tgz",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.3.6",

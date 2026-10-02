@@ -37,6 +37,8 @@ import { CsvImportExport } from "./CsvImportExport.tsx";
 import { PolicySimulationView } from "./PolicySimulationView.tsx";
 import { fetchTokenMetadata } from "../lib/guard/tokenMetadata.ts";
 import { writeControlState } from "../lib/guard/observerMode.ts";
+import { useToast } from "../lib/guard/useToast.ts";
+import { exportPolicyDraft, importPolicyFromJson } from "../lib/guard/policySchema.ts";
 
 /**
  * The no-code configurator.
@@ -73,6 +75,8 @@ export function PolicyForm() {
   const [pendingPreset, setPendingPreset] = useState<PolicyPreset | null>(null);
   const csvInput = useRef<HTMLInputElement>(null);
   const jsonInput = useRef<HTMLInputElement>(null);
+  const policyJsonInput = useRef<HTMLInputElement>(null);
+  const toast = useToast();
   const presetSelect = useRef<HTMLSelectElement>(null);
   const presetDialog = useRef<HTMLDivElement>(null);
 
@@ -217,6 +221,39 @@ export function PolicyForm() {
     URL.revokeObjectURL(url);
   }
 
+  function exportPolicyJson() {
+    const result = exportPolicyDraft(effective);
+    if (!result.ok) {
+      setError(`Policy export failed: ${result.issues.map((issue) => issue.message).join("; ")}`);
+      return;
+    }
+    downloadAssetCaps(result.filename, result.json);
+    toast.success("Policy exported", result.filename);
+  }
+
+  async function importPolicyJson(file: File) {
+    try {
+      const source = await file.text();
+      const result = importPolicyFromJson(source);
+      if (!result.ok) {
+        const detail = result.issues
+          .map((issue) => (issue.path ? `${issue.path}: ${issue.message}` : issue.message))
+          .join("; ");
+        setError(`Policy import failed: ${detail}`);
+        toast.error("Policy import failed", { message: detail });
+        return;
+      }
+      setDraft(result.draft);
+      setAssetCapChanges({});
+      setError(null);
+      toast.success("Policy imported", "Loaded into the form below -- review before signing.");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setError(`Policy import failed: ${message}`);
+      toast.error("Policy import failed", { message });
+    }
+  }
+
   /**
    * A signed `set_policy` is what the guard enforces from then on, so an install
    * stops here to show the operator the diff first. Exporting XDR writes nothing
@@ -359,6 +396,31 @@ export function PolicyForm() {
         Installing a policy resets the rolling window and restarts the dead-man-switch clock, so a
         freshly installed policy always starts with full grace.
       </p>
+
+      <div className="row" style={{ marginBottom: 14 }}>
+        <button
+          className="secondary"
+          type="button"
+          onClick={() => policyJsonInput.current?.click()}
+          disabled={busy}
+        >
+          Import Policy JSON
+        </button>
+        <button className="secondary" type="button" onClick={exportPolicyJson} disabled={busy}>
+          Export Policy JSON
+        </button>
+        <input
+          ref={policyJsonInput}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void importPolicyJson(file);
+          }}
+        />
+      </div>
 
       <div className="preset-picker">
         <label className="field" style={{ maxWidth: 420 }}>
