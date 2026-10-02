@@ -111,7 +111,7 @@ jobs:
     steps:
       - name: Wait for the analysis run of this head SHA
         id: wait
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const headSha = context.payload.pull_request.head.sha;
