@@ -11,6 +11,7 @@ import { getCachedByteLength, getCachedHash, setCachedHash } from "./bytecodeCac
 import {
   Account,
   Address,
+  Asset,
   Contract,
   Operation,
   StrKey,
@@ -163,6 +164,42 @@ export async function readWindow(
   if (!raw.ok) return raw;
   if (raw.value === null || raw.value === undefined) return { ok: true, value: null };
   return { ok: true, value: raw.value };
+}
+
+/**
+ * The guard's live XLM balance, in stroops.
+ *
+ * This is the balance source for the freeze-confirmation threshold (issue
+ * #15, consumed by `requiresFreezeChallenge` in `lib/guard/freezeChallenge.ts`),
+ * so it must be a live number, never a cached or derived one: it reads the
+ * native Stellar Asset Contract's persistent `Balance` ledger entry for the
+ * guard's address straight from Soroban RPC. The SDK's
+ * `Server.getAssetBalance(address, Asset.native(), passphrase)` resolves
+ * exactly that key — the same value a simulation of the SAC `balance(holder)`
+ * view returns, which is the balance source SPEC §8 classifies — and unlike
+ * `Server.getAccountEntry` it works for the guard's contract (`C…`) address,
+ * not just `G…` accounts.
+ *
+ * Absence is a real answer, not a failure: the SAC keeps no `Balance` entry
+ * for an address holding no XLM (the SDK documents `balanceEntry` as present
+ * only when there is one), so a successful lookup with no entry reads as
+ * `0n`. Everything else — transport error, HTTP 429, unparseable amount — is
+ * an error, and callers must fail safe on it (escalate the freeze challenge)
+ * rather than treat uncertainty as a small balance.
+ */
+export async function readNativeXlmBalance(
+  server: rpc.Server,
+  guard: string,
+  passphrase: string = NETWORK.passphrase,
+): Promise<ReadResult<bigint>> {
+  try {
+    const response = await server.getAssetBalance(guard, Asset.native(), passphrase);
+    const entry = response.balanceEntry;
+    if (!entry) return { ok: true, value: 0n };
+    return { ok: true, value: BigInt(entry.amount) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export interface WasmIdentity {

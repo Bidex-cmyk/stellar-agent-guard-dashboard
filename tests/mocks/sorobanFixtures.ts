@@ -12,7 +12,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { Address, SorobanDataBuilder, xdr } from "@stellar/stellar-sdk";
+import { Address, SorobanDataBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { NETWORK, PHASE1_ARTIFACT } from "../../lib/guard/network.ts";
 
 export const MOCK_PASSPHRASE = NETWORK.passphrase;
@@ -230,6 +230,49 @@ export function persistentDataEntry(
   return {
     key: contractDataKey(contractId, key, durability),
     data: contractDataEntry(contractId, key, durability, val),
+  };
+}
+
+/**
+ * The native Stellar Asset Contract's persistent `Balance` entry for one
+ * address — the ledger key the RPC balance read
+ * (`Server.getAssetBalance(address, Asset.native(), …)`) resolves, and the
+ * fixture `readNativeXlmBalance` tests decode. The key is built exactly the
+ * way the SDK builds it (`["Balance", <address>]` under the SAC contract id),
+ * so the SDK's own lookup finds it; the value mirrors the field shape the SDK
+ * decodes (`amount`/`authorized`/`clawback`), which is what the unit tests
+ * need to pin — real-network confirmation of that shape belongs to the SDK's
+ * integration suite, not to a mock here.
+ */
+export function sacBalanceEntry(params: {
+  /** `Asset.native().contractId(MOCK_PASSPHRASE)` for the network under test. */
+  sacContractId: string;
+  /** The account (`G…`) or contract (`C…`) whose XLM balance this records. */
+  holder: string;
+  /** Balance in stroops (the SAC stores i128). */
+  amount: bigint;
+  authorized?: boolean;
+  clawback?: boolean;
+}): LedgerEntryFixture {
+  const key = nativeToScVal(["Balance", params.holder], { type: ["symbol", "address"] });
+  const durability = xdr.ContractDataDurability.persistent;
+  const val = xdr.ScVal.scvMap([
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol("amount"),
+      val: nativeToScVal(params.amount, { type: "i128" }),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol("authorized"),
+      val: xdr.ScVal.scvBool(params.authorized ?? true),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol("clawback"),
+      val: xdr.ScVal.scvBool(params.clawback ?? false),
+    }),
+  ]);
+  return {
+    key: contractDataKey(params.sacContractId, key, durability),
+    data: contractDataEntry(params.sacContractId, key, durability, val),
   };
 }
 

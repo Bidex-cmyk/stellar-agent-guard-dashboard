@@ -144,6 +144,11 @@ test("DeployPanel passes automated axe-core WCAG 2.1 AA checks", async () => {
 });
 
 test("the freeze confirmation dialog passes axe-core while open", async () => {
+  // Issue #15: this fixture's server fails every read, so the freeze-challenge
+  // balance read fails too and the typed-challenge block renders here — the
+  // scan below therefore covers the challenge input, its label and its error
+  // association as they actually ship (basic pairing asserted directly in
+  // tests/unit/panicFreezeChallenge.test.ts; full a11y checklist audit pending).
   const rendered = await renderPanel(renderGuarded(react.createElement(PanicPanel)));
   try {
     const trigger = buttonByText(rendered.container, "Freeze this account");
@@ -195,6 +200,10 @@ test("TxHistoryTable passes automated axe-core WCAG 2.1 AA checks", async () => 
 });
 
 test("the freeze dialog traps keyboard focus and cycles Tab in both directions", async () => {
+  // Order note (issue #15): in this fixture the typed-challenge input renders
+  // *after* the acknowledgement checkbox and before the buttons, so the
+  // boundary controls this test walks — first = checkbox, last = Cancel — are
+  // unchanged from before the challenge existed.
   const rendered = await renderPanel(renderGuarded(react.createElement(PanicPanel)));
   try {
     const trigger = buttonByText(rendered.container, "Freeze this account");

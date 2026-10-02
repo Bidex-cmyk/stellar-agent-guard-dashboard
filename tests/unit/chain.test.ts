@@ -9,10 +9,19 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { Account, Keypair, Operation, TransactionBuilder, rpc, xdr } from "@stellar/stellar-sdk";
+import {
+  Account,
+  Asset,
+  Keypair,
+  Operation,
+  TransactionBuilder,
+  rpc,
+  xdr,
+} from "@stellar/stellar-sdk";
 import {
   isInitialized,
   readContract,
+  readNativeXlmBalance,
   readPolicy,
   readStatus,
   readWindow,
@@ -23,6 +32,7 @@ import { MockSorobanRpc, type Invocation } from "../mocks/mockRpcServer.ts";
 import {
   MOCK_GENESIS_LEDGER,
   MOCK_GUARD,
+  MOCK_PASSPHRASE,
   authError,
   contractCodeEntry,
   contractInstanceEntry,
@@ -32,6 +42,7 @@ import {
   guardStatusScVal,
   initializedFlag,
   persistentDataEntry,
+  sacBalanceEntry,
   simSuccess,
   toHex,
   windowScVal,
@@ -183,6 +194,38 @@ describe("ledger reads", () => {
 
   test("verifyWasmIdentity rejects when the contract does not exist", async () => {
     await assert.rejects(verifyWasmIdentity(server, MOCK_GUARD));
+  });
+});
+
+describe("readNativeXlmBalance — the freeze-challenge balance source (issue #15)", () => {
+  const SAC = Asset.native().contractId(MOCK_PASSPHRASE);
+
+  test("reads the guard's native SAC Balance entry as stroops", async () => {
+    mock.setLedgerEntry(
+      sacBalanceEntry({
+        sacContractId: SAC,
+        holder: MOCK_GUARD,
+        amount: 250_000_000_000n,
+      }),
+    );
+    assert.deepEqual(await readNativeXlmBalance(server, MOCK_GUARD), {
+      ok: true,
+      value: 250_000_000_000n,
+    });
+  });
+
+  test("a successful lookup with no entry reads as 0 XLM, not as an error", async () => {
+    // The SAC keeps no Balance entry for an address holding nothing, and the
+    // SDK reports that as "no balance" — a real answer of zero, which is far
+    // below the threshold and therefore stays on the standard confirm.
+    assert.deepEqual(await readNativeXlmBalance(server, MOCK_GUARD), { ok: true, value: 0n });
+  });
+
+  test("an unreachable RPC is a failed read, so callers fail safe to the challenge", async () => {
+    mock.rateLimit({ method: "getLedgerEntries" });
+    const result = await readNativeXlmBalance(server, MOCK_GUARD);
+    assert.equal(result.ok, false, "a transport failure must never read as a balance");
+    assert.match(!result.ok ? result.error : "", /429/);
   });
 });
 
