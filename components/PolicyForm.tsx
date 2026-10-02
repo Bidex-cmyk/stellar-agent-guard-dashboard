@@ -353,7 +353,7 @@ export function PolicyForm() {
           </label>
 
           <span className="lbl">Active from / until (unix seconds, blank = unrestricted)</span>
-          <div className="row" style={{ marginBottom: 12 }}>
+          <div className="row form-inline-row" style={{ marginBottom: 12 }}>
             <input
               value={effective.activeFrom}
               inputMode="numeric"
@@ -602,7 +602,7 @@ export function PolicyForm() {
         </div>
       )}
 
-      <div className="row" style={{ marginTop: 14 }}>
+      <div className="form-actions row" style={{ marginTop: 14 }}>
         <button
           disabled={installControl.disabled}
           title={installControl.title}

@@ -513,6 +513,53 @@ code {
   .split {
     grid-template-columns: 1fr;
   }
+
+  /* Responsive contract for dense forms (PolicyForm on /configure): every
+   * row-container stacks to a single column and its children go full-width,
+   * so 12+ stacked fields stay usable at 375px. List-editor rows wrap and
+   * remove-buttons get a >=44px touch target (WCAG 2.5.5 / iOS HIG). */
+  .form-actions.row,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .form-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .asset-caps button.secondary {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 14px;
+  }
+
+  .checkline {
+    align-items: flex-start;
+  }
+
+  /* Inline date-range pair stacks instead of overflowing horizontally. */
+  .form-inline-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Sticky action bar: justified by measurement, not preference. PolicyForm
+ * stacks to roughly 12 label.field blocks × ~81px ≈ 972px — well past a
+ * 667px iPhone SE viewport — so Sign/Export would sit below the fold and
+ * invite mis-taps mid-scroll. Under the same 720px breakpoint the form's
+ * action bar pins to the viewport bottom instead. */
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  margin: 0 -18px;
+  padding: 12px 18px;
 }
 
 /*
