@@ -53,12 +53,16 @@ import {
   writeUrlState,
 } from "../lib/guard/urlState.ts";
 import { announce } from "../lib/guard/useAnnounce.ts";
+import { clearGuardScopedState } from "../lib/guard/guardScoped.ts";
 import {
   KNOWN_INSTANCES,
+  defaultGuard,
   loadInstances,
-  rememberInstance,
+  removeInstance as removeSavedInstance,
+  renameInstance as renameSavedInstance,
   type GuardInstance,
 } from "../lib/guard/instance.ts";
+import { addGuard } from "../lib/guard/registry.ts";
 import { readStatus, readPolicy, readWindow, verifyWasmIdentity } from "../lib/guard/chain.ts";
 import { currentAddress, freighterSigner, type ConnectedWallet } from "../lib/guard/wallet.ts";
 import {
@@ -140,9 +144,21 @@ interface GuardContextValue {
   /** Ask the wallet to move to this dashboard's network; null when declined. */
   switchNetwork: () => Promise<NetworkSwitchOutcome | null>;
   instances: GuardInstance[];
+  /** The active guard address. Every read/write derives from this, never a constant. */
   guard: string;
+  /** The active instance (address + network + label), or null if it is not saved. */
+  activeInstance: GuardInstance | null;
   selectGuard: (guard: string) => void;
-  addInstance: (guard: string, label: string) => void;
+  /**
+   * Validate and live-verify an address, then save it and switch to it (#22).
+   * Resolves with `{ ok: false, error }` rather than throwing, so the caller can
+   * render an inline error beside the input.
+   */
+  addInstance: (guard: string, label: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Delete an operator-saved guard, clearing the state scoped to it. */
+  removeInstance: (guard: string) => void;
+  /** Rename a saved guard (a known instance gets a saved override). */
+  renameInstance: (guard: string, label: string) => void;
   snapshot: GuardSnapshot | null;
   snapshotError: string | null;
   refreshing: boolean;
@@ -214,8 +230,19 @@ const GuardContext = createContext<GuardContextValue | null>(null);
  */
 const GuardEventsContext = createContext<TelemetryEvent[] | null>(null);
 
-export function GuardProvider({ children }: { children: ReactNode }) {
-  const server = useMemo(() => createServer(NETWORK.rpcUrl), []);
+export function GuardProvider({
+  children,
+  server: serverOverride,
+}: {
+  children: ReactNode;
+  /**
+   * Test seam: the RPC server the console reads through. Production callers omit
+   * it and get one bound to the build's network; the provider test injects a
+   * controllable server to drive the stale-read race deterministically.
+   */
+  server?: rpc.Server;
+}) {
+  const server = useMemo(() => serverOverride ?? createServer(NETWORK.rpcUrl), [serverOverride]);
   // The cross-tab coordinator. It is transport-agnostic (BroadcastChannel with a
   // localStorage fallback) and inert where neither exists, so the provider never
   // branches on availability. Created once per tab.
@@ -249,7 +276,7 @@ export function GuardProvider({ children }: { children: ReactNode }) {
       const shared = decodeUrlState(window.location.search).guard;
       if (shared) return shared;
     }
-    return isDemoMode() ? DEMO_GUARD : KNOWN_INSTANCES[0]!.guard;
+    return isDemoMode() ? DEMO_GUARD : defaultGuard();
   });
   const [snapshot, setSnapshot] = useState<GuardSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -306,6 +333,13 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     guardRef.current = guard;
   }, [guard]);
 
+  // Monotonic read epoch: bumped whenever the active guard changes. A read that
+  // started under guard A and resolves after the switch to B is dropped instead
+  // of painted, because it belongs to a world the operator has left. This is the
+  // abort/ignore-stale pattern the issue's concurrency test pins; without it the
+  // slower of two overlapping `refresh()` calls wins the `setSnapshot` race.
+  const readEpochRef = useRef(0);
+
   // The coordinator is deliberately never closed by an effect cleanup: React's
   // development StrictMode mount/unmount/mount cycle would close the channel on
   // the simulated unmount and leave the tab permanently unable to broadcast. The
@@ -318,6 +352,9 @@ export function GuardProvider({ children }: { children: ReactNode }) {
     // the remembered instances.
     if (demo) {
       setInstances([DEMO_INSTANCE]);
+      // Invalidate any in-flight read: switching worlds must not let the old
+      // guard's status land in the fixture view.
+      readEpochRef.current += 1;
       setGuard(DEMO_GUARD);
       return;
     }
@@ -353,6 +390,8 @@ export function GuardProvider({ children }: { children: ReactNode }) {
             {
               guard: requested.guard,
               label: `Guard ${requested.guard.slice(0, 6)}…${requested.guard.slice(-4)}`,
+              network: NETWORK.name,
+              addedAt: new Date().toISOString(),
               provenance: "Opened from a link in this browser.",
             },
           ]
@@ -563,6 +602,10 @@ export function GuardProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!guard) return;
+    // Capture the epoch this read belongs to. If the operator switches guard
+    // while it is in flight, `readEpochRef` moves on and the result below is
+    // discarded — guard A's status must never paint over guard B's view.
+    const epoch = readEpochRef.current;
     setRefreshing(true);
     try {
       // In demo mode the snapshot is a fixture, so no read (and no failure) is
@@ -573,15 +616,17 @@ export function GuardProvider({ children }: { children: ReactNode }) {
       const next = demo
         ? demoSnapshot()
         : await readGuardSnapshot(server, guard, readSourceFor(wallet));
+      if (epoch !== readEpochRef.current) return;
       setSnapshot(next);
       setSnapshotError(null);
     } catch (error) {
+      if (epoch !== readEpochRef.current) return;
       // A transport failure is not the guard's state: report it as a failure and
       // drop the previous snapshot rather than leaving stale numbers on screen.
       setSnapshot(null);
       setSnapshotError(error instanceof Error ? error.message : String(error));
     } finally {
-      setRefreshing(false);
+      if (epoch === readEpochRef.current) setRefreshing(false);
     }
   }, [guard, server, wallet, demo]);
 
@@ -663,10 +708,14 @@ export function GuardProvider({ children }: { children: ReactNode }) {
         case "GUARD_CHANGED": {
           const next = event.guard;
           if (!next || next === guardRef.current) return;
+          readEpochRef.current += 1;
           setGuard(next);
           setSnapshot(null);
           setSnapshotError(null);
           setBuffer(emptyStreamBuffer());
+          // The feed cursor is guard-scoped: never carry the previous guard's
+          // cursor into the new stream.
+          feedRef.current = null;
           return;
         }
         case "FREEZE_STATE_CHANGED":
@@ -697,10 +746,17 @@ export function GuardProvider({ children }: { children: ReactNode }) {
 
   const selectGuard = useCallback(
     (next: string) => {
+      // Invalidate in-flight reads first: the epoch bump makes the guard switch
+      // atomic with respect to `refresh`, even though the state update is async.
+      readEpochRef.current += 1;
       setGuard(next);
       setSnapshot(null);
+      setSnapshotError(null);
       setBuffer(emptyStreamBuffer());
       setRangeLabel(null);
+      // Drop the (guard-scoped) feed cursor so a switch can never bleed guard A's
+      // events into guard B; the poll effect rebuilds it for the new guard.
+      feedRef.current = null;
       // Every other tab follows the operator's selection instead of continuing to
       // poll a guard they are no longer looking at.
       tabSync.broadcast("GUARD_CHANGED", { guard: next });
@@ -709,14 +765,58 @@ export function GuardProvider({ children }: { children: ReactNode }) {
   );
 
   const addInstance = useCallback(
-    (next: string, label: string) => {
-      rememberInstance(next, label);
+    async (address: string, label: string): Promise<{ ok: boolean; error?: string }> => {
+      if (demo) {
+        return {
+          ok: false,
+          error: "Demo mode pins a single static fixture; adding a guard needs a real network.",
+        };
+      }
+      const result = await addGuard({ server, address, label });
+      if (!result.ok) return { ok: false, error: result.error };
+      readEpochRef.current += 1;
       setInstances(loadInstances());
-      setGuard(next);
+      setGuard(result.instance.guard);
       setSnapshot(null);
-      tabSync.broadcast("GUARD_CHANGED", { guard: next });
+      setSnapshotError(null);
+      feedRef.current = null;
+      tabSync.broadcast("GUARD_CHANGED", { guard: result.instance.guard });
+      return { ok: true };
     },
-    [tabSync],
+    [server, demo, tabSync],
+  );
+
+  const removeInstance = useCallback(
+    (target: string) => {
+      const removed = instances.find((instance) => instance.guard === target);
+      const remaining = removeSavedInstance(target);
+      setInstances(remaining);
+      // Cascade: state scoped to the deleted guard (drafts, filters) is removed
+      // too, so re-adding the same address later starts clean rather than
+      // resurrecting work the operator discarded with the guard.
+      clearGuardScopedState(removed?.network ?? NETWORK.name, target);
+      if (target === guard) {
+        const fallback = remaining[0]?.guard ?? defaultGuard();
+        readEpochRef.current += 1;
+        setGuard(fallback);
+        setSnapshot(null);
+        setSnapshotError(null);
+        setBuffer(emptyStreamBuffer());
+        setRangeLabel(null);
+        feedRef.current = null;
+        tabSync.broadcast("GUARD_CHANGED", { guard: fallback });
+      }
+    },
+    [instances, guard, tabSync],
+  );
+
+  const renameInstance = useCallback((target: string, label: string) => {
+    setInstances(renameSavedInstance(target, label));
+  }, []);
+
+  const activeInstance = useMemo(
+    () => instances.find((instance) => instance.guard === guard) ?? null,
+    [instances, guard],
   );
 
   const pushEvents = useCallback((incoming: TelemetryEvent[]) => {
@@ -933,8 +1033,11 @@ export function GuardProvider({ children }: { children: ReactNode }) {
       switchNetwork,
       instances,
       guard,
+      activeInstance,
       selectGuard,
       addInstance,
+      removeInstance,
+      renameInstance,
       snapshot,
       snapshotError,
       refreshing,
@@ -973,8 +1076,11 @@ export function GuardProvider({ children }: { children: ReactNode }) {
       switchNetwork,
       instances,
       guard,
+      activeInstance,
       selectGuard,
       addInstance,
+      removeInstance,
+      renameInstance,
       snapshot,
       snapshotError,
       refreshing,

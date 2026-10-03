@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { describeGuardEvent, explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
 import { STREAM_BUFFER_LIMIT, type TelemetryEvent } from "../lib/guard/telemetry.ts";
@@ -17,6 +17,7 @@ import {
   telemetryToAuditLog,
 } from "../lib/guard/exportFormats.ts";
 import { NETWORK } from "../lib/guard/network.ts";
+import { loadScopedValue, saveScopedValue } from "../lib/guard/guardScoped.ts";
 import { useAnnounce } from "../lib/guard/useAnnounce.ts";
 import { eventsToCsv, eventsToJson, exportFilename } from "../lib/guard/eventExport.ts";
 import { useDemoMode } from "../lib/guard/useDemoMode.ts";
@@ -30,6 +31,9 @@ import {
 } from "../lib/guard/telemetryExport.ts";
 import { severityFor } from "../lib/guard/feedSeverity.ts";
 import { decodeUrlState, writeUrlState } from "../lib/guard/urlState.ts";
+
+/** The scoped-state base under which each guard's feed filter is remembered. */
+const SCOPED_FILTER_BASE = "feedFilter";
 
 /** Human names for the topic filter's options, keyed by the topic symbol. */
 const TOPIC_LABELS: Record<string, string> = {
@@ -95,18 +99,33 @@ export function TelemetryFeed() {
     queryRange,
     rangeLabel,
   } = useGuard();
-  // The verdict filter a shared link carried (issue #132), settled in the
-  // lazy initializer — the same convention the console's guard deep-link uses
-  // for `?guard=` — so the restore needs no effect and the first client render
-  // is the one that has it. `decodeUrlState` validates, so a malformed
-  // `?filter=` restores nothing rather than a value no option matches.
-  const [filter, setFilter] = useState<TelemetryFilter>(() => {
-    if (typeof window === "undefined") return EMPTY_TELEMETRY_FILTER;
-    const shared = decodeUrlState(window.location.search).filter;
-    return shared === undefined
-      ? EMPTY_TELEMETRY_FILTER
-      : { ...EMPTY_TELEMETRY_FILTER, verdict: shared };
+  // Restore a shared verdict filter from the URL, while retaining the other
+  // filter dimensions independently for each guard in local storage.
+  const [filters, setFilters] = useState<Record<string, TelemetryFilter>>(() => {
+    const saved =
+      loadScopedValue<TelemetryFilter>(SCOPED_FILTER_BASE, NETWORK.name, guard) ??
+      EMPTY_TELEMETRY_FILTER;
+    const shared =
+      typeof window === "undefined" ? undefined : decodeUrlState(window.location.search).filter;
+    return {
+      [guard]: shared === undefined ? saved : { ...saved, verdict: shared },
+    };
   });
+  const filter =
+    filters[guard] ??
+    loadScopedValue<TelemetryFilter>(SCOPED_FILTER_BASE, NETWORK.name, guard) ??
+    EMPTY_TELEMETRY_FILTER;
+
+  function applyFilter(update: (current: TelemetryFilter) => TelemetryFilter) {
+    const next = update(filter);
+    setFilters((current) => ({ ...current, [guard]: next }));
+    saveScopedValue(SCOPED_FILTER_BASE, NETWORK.name, guard, next);
+    // Keep the shareable verdict and panel in the URL without navigating.
+    writeUrlState({
+      filter: next.verdict,
+      tab: next.verdict === "all" ? "console" : "telemetry",
+    });
+  }
   const announce = useAnnounce();
   const demo = useDemoMode();
 
@@ -260,17 +279,12 @@ export function TelemetryFeed() {
           <select
             aria-label="Verdict filter"
             value={filter.verdict}
-            onChange={(event) => {
-              const verdict = event.target.value as VerdictFilter;
-              setFilter((current) => ({ ...current, verdict }));
-              // A filtered feed is the view a teammate should land on, so the
-              // URL carries both the filter and the tab it belongs to — the
-              // `?tab=telemetry&filter=blocked` of issue #132. Written with
-              // `replaceState` through the shared codec: the table re-renders
-              // from state, the page never reloads, and clearing the filter
-              // removes the parameter again.
-              writeUrlState({ filter: verdict, tab: verdict === "all" ? "console" : "telemetry" });
-            }}
+            onChange={(event) =>
+              applyFilter((current) => ({
+                ...current,
+                verdict: event.target.value as VerdictFilter,
+              }))
+            }
           >
             <option value="all">All verdicts</option>
             <option value="allowed">Allowed Only</option>
@@ -286,7 +300,7 @@ export function TelemetryFeed() {
             aria-label="Topic filter"
             value={filter.topic}
             onChange={(event) =>
-              setFilter((current) => ({ ...current, topic: event.target.value }))
+              applyFilter((current) => ({ ...current, topic: event.target.value }))
             }
           >
             <option value="all">All topics</option>
@@ -302,7 +316,7 @@ export function TelemetryFeed() {
           placeholder="Contract address contains…"
           value={filter.contract}
           onChange={(event) =>
-            setFilter((current) => ({ ...current, contract: event.target.value }))
+            applyFilter((current) => ({ ...current, contract: event.target.value }))
           }
           style={{ maxWidth: 240 }}
         />
@@ -340,7 +354,7 @@ export function TelemetryFeed() {
           Export audit log
         </button>
         {filterActive && (
-          <button className="secondary" onClick={() => setFilter(EMPTY_TELEMETRY_FILTER)}>
+          <button className="secondary" onClick={() => applyFilter(() => EMPTY_TELEMETRY_FILTER)}>
             Clear filters
           </button>
         )}

@@ -29,8 +29,8 @@ import { GUARD_EVENT_TOPICS, guardEventId } from "stellar-agent-guard-sdk";
 import type { TelemetryEvent } from "./telemetry.ts";
 import type { GuardSnapshot } from "./guardOps.ts";
 import type { WindowState, WasmIdentity } from "./chain.ts";
-import type { GuardInstance } from "./instance.ts";
-import { PHASE1_ARTIFACT } from "./network.ts";
+import { KNOWN_INSTANCE_ADDED_AT, type GuardInstance } from "./instance.ts";
+import { NETWORK, PHASE1_ARTIFACT } from "./network.ts";
 
 /** The exact badge copy the interface shows whenever demo data is on screen. */
 export const DEMO_BADGE_TEXT = "DEMO MODE — Static Fixture Data";
@@ -67,6 +67,8 @@ export const DEMO_BASE_LEDGER = 2_148_000;
 export const DEMO_INSTANCE: GuardInstance = {
   guard: DEMO_GUARD,
   label: "Demo guard (static fixture)",
+  network: NETWORK.name,
+  addedAt: KNOWN_INSTANCE_ADDED_AT,
   provenance:
     "Static fixture data for local evaluation — no chain reads, no wallet, no contracts. " +
     "Enabled by NEXT_PUBLIC_DEMO_MODE=true or ?demo=true.",

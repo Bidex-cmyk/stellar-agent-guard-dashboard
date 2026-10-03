@@ -151,7 +151,7 @@ npm run inspect      # read-only dump of an instance's state
 - **`TelemetryFeed`**: Cursor-based polling of `event_auth_checked` topics from Soroban RPC, decoding contract outcomes and reason codes. Each row carries a severity tier — blocked rows are marked from the danger token, diagnostic-stream rows from the warn token, and the committed-vs-diagnostic stream is labelled on every row — so blocks are findable by looking rather than by reading, with the tier always also stated in words. No sound: operator consoles run unattended and muted.
 - **`WalletBar`**: Displays Freighter connection status, address, and network validation.
 - **`TelemetryFeed`**: Cursor-based polling of `event_auth_checked` topics from Soroban RPC, decoding contract outcomes and reason codes.
-- **`WalletBar`**: Wallet connection status, address, network validation, and the Freighter / Albedo / xBull connector picker.
+- **`WalletBar`**: Wallet connection status, address, network validation, the Freighter / Albedo / xBull connector picker, and the multi-guard switcher (saved per network, add-by-address verified with a live `status()` read, rename, and confirm-gated delete).
 - **`FleetTable`**: Live per-instance status across every registered guard account.
 - **`TxHistoryTable`** / **`MultisigTracker`**: The locally recorded submission history and pending multisig approvals.
 - **`SubmitSignedXDRPanel`**: Imports and broadcasts an externally signed transaction envelope for multisig or air-gapped signing.
