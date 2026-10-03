@@ -172,9 +172,10 @@ Two step-by-step procedures cover the console's high-stakes operations. They are
 
 ## Developer Guides
 
-| Guide                                                             | Description                                                                                                                                                                                         |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [**Agent Integration Guide**](./docs/guides/agent-integration.md) | Connecting custom AI agent runtimes (TypeScript, Python, LangChain, ElizaOS) to a deployed Guard, configuring environment variables, sending heartbeats, and diagnosing telemetry in the dashboard. |
+| Guide                                                             | Description                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**Agent Integration Guide**](./docs/guides/agent-integration.md) | Connecting custom AI agent runtimes (TypeScript, Python, LangChain, ElizaOS) to a deployed Guard, configuring environment variables, sending heartbeats, and diagnosing telemetry in the dashboard.                                                                                                                                               |
+| [**Glossary**](./docs/glossary.md)                                | Precise technical definitions of every Stellar, Soroban and Stellar Agent Guard term used across this project — Soroban Auth Context, SAC, Stroop, Rolling Window, DMS, Diagnostic Event, Pre-flight Simulation, Pinned Bytecode, Footprint and more — with an alphabetical index, cross-references, and links to official Stellar documentation. |
 
 ## Architecture
 

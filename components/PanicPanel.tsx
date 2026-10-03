@@ -467,7 +467,7 @@ export function PanicPanel() {
             className="secondary"
             disabled={!wallet || simulating}
             onClick={() => void runSimulation()}
-            title="Simulate freeze() read-only: no wallet prompt, no broadcast"
+            title="Simulate freeze() read-only: no wallet prompt, no broadcast (docs/glossary.md — Pre-flight Simulation)"
           >
             {simulating ? "Simulating…" : "Simulate freeze (dry run)"}
           </button>

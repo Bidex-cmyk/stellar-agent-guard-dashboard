@@ -335,7 +335,7 @@ export function TelemetryFeed() {
           className="secondary"
           onClick={exportAuditLog}
           disabled={rows.length === 0}
-          title="NDJSON audit log: a header line, then decoded fields, verdict, ledger, transaction hash and the raw event XDR per event"
+          title="NDJSON audit log: a header line, then decoded fields, verdict, ledger, transaction hash and the raw event XDR per event (terms in docs/glossary.md — XDR, Ledger, Stroop)"
         >
           Export audit log
         </button>

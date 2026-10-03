@@ -46,7 +46,9 @@ export function Tabs() {
 export function ScopeNotice({ compact = false }: { compact?: boolean }) {
   return (
     <div className="notice">
-      <strong>What the policy engine enforces</strong>
+      <strong title="Terminology defined in docs/glossary.md: SAC (Stellar Asset Contract), Soroban Auth Context, __check_auth, Rolling Window">
+        What the policy engine enforces
+      </strong>
       <span className="tiny">{ENFORCEMENT_SCOPE_STATEMENT}</span>
       {!compact && (
         <div className="tiny muted" style={{ marginTop: 6 }}>
@@ -414,7 +416,11 @@ export function AmountDisplay({ stroops, symbol, decimals }: AmountDisplayProps)
       aria-label={
         showRaw ? `Raw amount: ${raw}` : `Amount: ${human}. Activate to show raw stroops.`
       }
-      title={showRaw ? "Show human-readable amount" : "Show raw stroops"}
+      title={
+        showRaw
+          ? "Show human-readable amount"
+          : "Show raw stroops — the smallest unit of an asset (docs/glossary.md — Stroop)"
+      }
     >
       {showRaw ? raw : human}
     </button>

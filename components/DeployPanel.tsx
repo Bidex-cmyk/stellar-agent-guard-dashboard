@@ -786,7 +786,12 @@ export function DeployPanel() {
 
       <div className="grid">
         <label className="field">
-          <span className="lbl">Dead-man grace (seconds)</span>
+          <span
+            className="lbl"
+            title="Seconds the agent may miss its heartbeat before the dead-man's switch freezes the account (docs/glossary.md — Dead-Man's Switch)"
+          >
+            Dead-man grace (seconds)
+          </span>
           <input
             value={dmsDurationSecs}
             onChange={(event) => setDmsDurationSecs(event.target.value)}
