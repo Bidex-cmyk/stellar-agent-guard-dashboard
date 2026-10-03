@@ -61,7 +61,10 @@ describe("web app manifest", () => {
   });
 
   it("ships a regular and a maskable icon, and both files exist", () => {
-    assert.ok(manifest.icons.length >= 2, "an installed app needs at least a regular and a maskable icon");
+    assert.ok(
+      manifest.icons.length >= 2,
+      "an installed app needs at least a regular and a maskable icon",
+    );
     const purposes = manifest.icons.map((icon) => icon.purpose ?? "any");
     assert.ok(purposes.includes("any"), "a purpose=any icon is required");
     assert.ok(purposes.includes("maskable"), "a purpose=maskable icon is required");
@@ -178,14 +181,16 @@ function createServiceWorkerHarness() {
     clients: { async claim(): Promise<void> {} },
   };
 
-  new vm.Script(readFileSync("public/sw.js", "utf8"), { filename: "public/sw.js" }).runInNewContext({
-    self,
-    caches,
-    fetch: fakeFetch,
-    Response,
-    URL,
-    console,
-  });
+  new vm.Script(readFileSync("public/sw.js", "utf8"), { filename: "public/sw.js" }).runInNewContext(
+    {
+      self,
+      caches,
+      fetch: fakeFetch,
+      Response,
+      URL,
+      console,
+    },
+  );
 
   async function install(): Promise<void> {
     const pending: Promise<unknown>[] = [];
@@ -198,7 +203,10 @@ function createServiceWorkerHarness() {
     await Promise.all(pending);
   }
 
-  async function dispatchFetch(url: string, options: { mode?: string; method?: string } = {}): Promise<FetchOutcome> {
+  async function dispatchFetch(
+    url: string,
+    options: { mode?: string; method?: string } = {},
+  ): Promise<FetchOutcome> {
     const request: FetchRequestLike = {
       url: absolute(url),
       method: options.method ?? "GET",
@@ -287,7 +295,11 @@ describe("service worker cache-bypassing rules", () => {
     const outcome = await sw.dispatchFetch("/icons/icon.svg");
     assert.equal(outcome.respondWithCalled, true, "static assets are served by the worker");
     assert.equal(outcome.response?.status, 200);
-    assert.deepEqual(sw.putUrls, [`${ORIGIN}/icons/icon.svg`], "the asset is written to the static cache");
+    assert.deepEqual(
+      sw.putUrls,
+      [`${ORIGIN}/icons/icon.svg`],
+      "the asset is written to the static cache",
+    );
   });
 
   it("serves a navigation from the network, and the cached shell when the network is gone", async () => {

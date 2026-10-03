@@ -31,7 +31,14 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Address, TransactionBuilder, rpc, xdr, type FeeBumpTransaction, type Transaction } from "@stellar/stellar-sdk";
+import {
+  Address,
+  TransactionBuilder,
+  rpc,
+  xdr,
+  type FeeBumpTransaction,
+  type Transaction,
+} from "@stellar/stellar-sdk";
 import {
   MOCK_GENESIS_LEDGER,
   MOCK_PASSPHRASE,
@@ -214,7 +221,10 @@ export class MockSorobanRpc {
   readonly requests: RecordedRequest[] = [];
 
   private latest: number;
-  private readonly entries = new Map<string, { xdr: string; lastModifiedLedgerSeq: number; liveUntilLedgerSeq?: number }>();
+  private readonly entries = new Map<
+    string,
+    { xdr: string; lastModifiedLedgerSeq: number; liveUntilLedgerSeq?: number }
+  >();
   private readonly events: StoredEvent[] = [];
   private readonly transactions = new Map<string, StoredTransaction>();
   private pending: StoredTransaction[] = [];
@@ -272,7 +282,8 @@ export class MockSorobanRpc {
 
   /** The loopback URL the mock is listening on. */
   get url(): string {
-    if (!this.baseUrl) throw new Error("MockSorobanRpc is not listening; call listen() or MockSorobanRpc.start()");
+    if (!this.baseUrl)
+      throw new Error("MockSorobanRpc is not listening; call listen() or MockSorobanRpc.start()");
     return this.baseUrl;
   }
 
@@ -292,10 +303,15 @@ export class MockSorobanRpc {
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
       if (prefix && !url.startsWith(prefix)) return original(input, init);
-      const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-      const body = init?.body !== undefined && init.body !== null
-        ? await new Response(init.body).text()
-        : input instanceof Request ? await input.text() : "";
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : "GET")
+      ).toUpperCase();
+      const body =
+        init?.body !== undefined && init.body !== null
+          ? await new Response(init.body).text()
+          : input instanceof Request
+            ? await input.text()
+            : "";
       const reply = await this.handleHttp(method, body);
       return new Response(reply.body, { status: reply.status, headers: reply.headers });
     }) as typeof fetch;
@@ -348,7 +364,12 @@ export class MockSorobanRpc {
   seedEvents(events: EventFixture[]): void {
     for (const event of events) {
       const txIndex = this.nextTxIndex(this.latest);
-      this.storeEvents([event], this.latest, txIndex, toHex(sha256(`event:${this.latest}:${txIndex}`)));
+      this.storeEvents(
+        [event],
+        this.latest,
+        txIndex,
+        toHex(sha256(`event:${this.latest}:${txIndex}`)),
+      );
     }
   }
 
@@ -374,7 +395,11 @@ export class MockSorobanRpc {
    * Answer matching `simulateTransaction` calls with a fixture. Later
    * registrations take precedence, so a test can override a default.
    */
-  onSimulate(match: InvocationMatcher, responder: SimulationResponder, options: ScriptOptions = {}): void {
+  onSimulate(
+    match: InvocationMatcher,
+    responder: SimulationResponder,
+    options: ScriptOptions = {},
+  ): void {
     this.simulations.unshift({ match, value: responder, remaining: options.times ?? Infinity });
   }
 
@@ -385,7 +410,11 @@ export class MockSorobanRpc {
 
   /** Fail the next request(s) — optionally only for one method — before any handler runs. */
   injectFault(fault: Fault, options: ScriptOptions & { method?: string } = {}): void {
-    this.faults.push({ value: fault, remaining: options.times ?? 1, method: options.method ?? null });
+    this.faults.push({
+      value: fault,
+      remaining: options.times ?? 1,
+      method: options.method ?? null,
+    });
   }
 
   /** Answer the next request(s) with HTTP 429, as a rate-limiting RPC gateway does. */
@@ -395,7 +424,10 @@ export class MockSorobanRpc {
         kind: "http",
         status: 429,
         body: "429 Too Many Requests",
-        headers: { "retry-after": String(options.retryAfterSeconds ?? 1), "content-type": "text/plain" },
+        headers: {
+          "retry-after": String(options.retryAfterSeconds ?? 1),
+          "content-type": "text/plain",
+        },
       },
       { times: options.times ?? 1, ...(options.method ? { method: options.method } : {}) },
     );
@@ -417,7 +449,10 @@ export class MockSorobanRpc {
   private async serveHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
-    const reply = await this.handleHttp(req.method ?? "GET", Buffer.concat(chunks).toString("utf8"));
+    const reply = await this.handleHttp(
+      req.method ?? "GET",
+      Buffer.concat(chunks).toString("utf8"),
+    );
     res.writeHead(reply.status, reply.headers);
     res.end(reply.body);
   }
@@ -428,7 +463,11 @@ export class MockSorobanRpc {
    */
   async handleHttp(method: string, rawBody: string): Promise<MockHttpResponse> {
     if (method !== "POST") {
-      return { status: 405, headers: { allow: "POST", "content-type": "text/plain" }, body: "method not allowed" };
+      return {
+        status: 405,
+        headers: { allow: "POST", "content-type": "text/plain" },
+        body: "method not allowed",
+      };
     }
     let payload: unknown;
     try {
@@ -467,7 +506,10 @@ export class MockSorobanRpc {
   /** Handle one decoded JSON-RPC request object. */
   async dispatch(payload: unknown, fault: Fault | null = null): Promise<JsonRpcResponse | null> {
     if (!isJsonRpcRequest(payload)) {
-      const id = typeof payload === "object" && payload !== null ? ((payload as { id?: JsonRpcId }).id ?? null) : null;
+      const id =
+        typeof payload === "object" && payload !== null
+          ? ((payload as { id?: JsonRpcId }).id ?? null)
+          : null;
       return errorResponse(id, JSON_RPC_ERRORS.invalidRequest, "invalid request");
     }
     const id = payload.id ?? null;
@@ -480,7 +522,11 @@ export class MockSorobanRpc {
     } catch (error) {
       if (isNotification) return null;
       if (error instanceof RpcError) return errorResponse(id, error.code, error.message);
-      return errorResponse(id, JSON_RPC_ERRORS.internalError, error instanceof Error ? error.message : String(error));
+      return errorResponse(
+        id,
+        JSON_RPC_ERRORS.internalError,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -508,7 +554,9 @@ export class MockSorobanRpc {
   }
 
   private takeFault(method: string | null): Fault | null {
-    const index = this.faults.findIndex((fault) => fault.method === null || fault.method === method);
+    const index = this.faults.findIndex(
+      (fault) => fault.method === null || fault.method === method,
+    );
     if (index === -1) return null;
     const script = this.faults[index]!;
     script.remaining -= 1;
@@ -560,12 +608,16 @@ export class MockSorobanRpc {
     }
     const entries = [];
     for (const [index, key] of keys.entries()) {
-      if (typeof key !== "string") throw new RpcError(JSON_RPC_ERRORS.invalidParams, `cannot unmarshal key value ${index}`);
+      if (typeof key !== "string")
+        throw new RpcError(JSON_RPC_ERRORS.invalidParams, `cannot unmarshal key value ${index}`);
       let canonical: string;
       try {
         canonical = xdr.LedgerKey.fromXDR(key, "base64").toXDR("base64");
       } catch {
-        throw new RpcError(JSON_RPC_ERRORS.invalidParams, `cannot unmarshal key value ${key} at index ${index}`);
+        throw new RpcError(
+          JSON_RPC_ERRORS.invalidParams,
+          `cannot unmarshal key value ${key} at index ${index}`,
+        );
       }
       const stored = this.entries.get(canonical);
       if (!stored) continue;
@@ -577,11 +629,16 @@ export class MockSorobanRpc {
   private getEvents(params: unknown) {
     const request = objectParam(params);
     const pagination = (request.pagination ?? {}) as { cursor?: unknown; limit?: unknown };
-    const cursor = typeof pagination.cursor === "string" && pagination.cursor !== "" ? pagination.cursor : null;
+    const cursor =
+      typeof pagination.cursor === "string" && pagination.cursor !== "" ? pagination.cursor : null;
     const limit = pagination.limit === undefined ? DEFAULT_EVENT_LIMIT : Number(pagination.limit);
     const startLedger = request.startLedger === undefined ? null : Number(request.startLedger);
     const endLedger = request.endLedger === undefined ? null : Number(request.endLedger);
-    const filters = (request.filters ?? []) as Array<{ type?: string; contractIds?: string[]; topics?: string[][] }>;
+    const filters = (request.filters ?? []) as Array<{
+      type?: string;
+      contractIds?: string[];
+      topics?: string[][];
+    }>;
 
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new RpcError(JSON_RPC_ERRORS.invalidParams, "limit must be positive");
@@ -590,10 +647,16 @@ export class MockSorobanRpc {
       throw new RpcError(JSON_RPC_ERRORS.invalidParams, `limit must not exceed ${MAX_EVENT_LIMIT}`);
     }
     if (filters.length > MAX_EVENT_FILTERS) {
-      throw new RpcError(JSON_RPC_ERRORS.invalidParams, `maximum ${MAX_EVENT_FILTERS} filters per request`);
+      throw new RpcError(
+        JSON_RPC_ERRORS.invalidParams,
+        `maximum ${MAX_EVENT_FILTERS} filters per request`,
+      );
     }
     if (cursor !== null && startLedger !== null) {
-      throw new RpcError(JSON_RPC_ERRORS.invalidParams, "ledger ranges and cursor cannot both be set");
+      throw new RpcError(
+        JSON_RPC_ERRORS.invalidParams,
+        "ledger ranges and cursor cannot both be set",
+      );
     }
     if (cursor === null) {
       if (startLedger === null || !Number.isInteger(startLedger) || startLedger <= 0) {
@@ -606,7 +669,10 @@ export class MockSorobanRpc {
         );
       }
       if (endLedger !== null && endLedger <= startLedger) {
-        throw new RpcError(JSON_RPC_ERRORS.invalidParams, "startLedger must be less than endLedger");
+        throw new RpcError(
+          JSON_RPC_ERRORS.invalidParams,
+          "startLedger must be less than endLedger",
+        );
       }
     } else if (!/^\d{19}-\d{10}$/.test(cursor)) {
       throw new RpcError(JSON_RPC_ERRORS.invalidParams, `invalid cursor: ${cursor}`);
@@ -634,7 +700,9 @@ export class MockSorobanRpc {
       events: page.map((event) => ({
         type: event.type,
         ledger: event.ledger,
-        ledgerClosedAt: new Date(ledgerCloseTime(event.ledger) * 1000).toISOString().replace(".000Z", "Z"),
+        ledgerClosedAt: new Date(ledgerCloseTime(event.ledger) * 1000)
+          .toISOString()
+          .replace(".000Z", "Z"),
         contractId: event.contractId,
         id: event.id,
         operationIndex: 0,
@@ -693,7 +761,11 @@ export class MockSorobanRpc {
     const tx = this.decodeEnvelope(envelopeXdr);
     const hash = toHex(tx.hash());
     const outcome = this.takeSend();
-    const base = { hash, latestLedger: this.latest, latestLedgerCloseTime: String(ledgerCloseTime(this.latest)) };
+    const base = {
+      hash,
+      latestLedger: this.latest,
+      latestLedgerCloseTime: String(ledgerCloseTime(this.latest)),
+    };
 
     if (outcome.status === "ERROR") {
       return {
@@ -706,7 +778,8 @@ export class MockSorobanRpc {
       };
     }
     if (outcome.status === "TRY_AGAIN_LATER") return { ...base, status: "TRY_AGAIN_LATER" };
-    if (outcome.status === "DUPLICATE" || this.transactions.has(hash)) return { ...base, status: "DUPLICATE" };
+    if (outcome.status === "DUPLICATE" || this.transactions.has(hash))
+      return { ...base, status: "DUPLICATE" };
 
     const stored: StoredTransaction = {
       hash,
@@ -785,7 +858,12 @@ export class MockSorobanRpc {
     }
   }
 
-  private storeEvents(events: EventFixture[], ledger: number, txIndex: number, txHash: string): void {
+  private storeEvents(
+    events: EventFixture[],
+    ledger: number,
+    txIndex: number,
+    txHash: string,
+  ): void {
     events.forEach((event, eventIndex) => {
       this.events.push({
         id: eventId(ledger, txIndex, 0, eventIndex),
@@ -826,9 +904,12 @@ export class MockSorobanRpc {
       );
     }
     const raw = xdr.TransactionEnvelope.fromXDR(tx.toXDR(), "base64");
-    const body = (raw.type === "envelopeTypeTx" ? raw.v1.tx.operations[0]?.body : undefined);
+    const body = raw.type === "envelopeTypeTx" ? raw.v1.tx.operations[0]?.body : undefined;
     if (!body || body.type !== "invokeHostFunction") {
-      throw new RpcError(JSON_RPC_ERRORS.invalidParams, "Transaction contains unsupported operation type");
+      throw new RpcError(
+        JSON_RPC_ERRORS.invalidParams,
+        "Transaction contains unsupported operation type",
+      );
     }
     const hostFunction = body.invokeHostFunctionOp.hostFunction;
     if (hostFunction.type !== "hostFunctionTypeInvokeContract") {
@@ -875,8 +956,10 @@ function objectParam(params: unknown): Record<string, unknown> {
 }
 
 function matches(match: InvocationMatcher, call: Invocation): boolean {
-  return (match.contractId === undefined || match.contractId === call.contractId) &&
-    (match.fn === undefined || match.fn === call.fn);
+  return (
+    (match.contractId === undefined || match.contractId === call.contractId) &&
+    (match.fn === undefined || match.fn === call.fn)
+  );
 }
 
 /**

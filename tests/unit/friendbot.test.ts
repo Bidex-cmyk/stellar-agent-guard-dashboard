@@ -32,7 +32,13 @@ const TESTNET = {
 
 /** A Horizon account payload with one native balance. */
 function horizonAccount(balance: string) {
-  return { id: ACCOUNT, balances: [{ asset_type: "native", balance }, { asset_type: "credit_alphanum4", balance: "99" }] };
+  return {
+    id: ACCOUNT,
+    balances: [
+      { asset_type: "native", balance },
+      { asset_type: "credit_alphanum4", balance: "99" },
+    ],
+  };
 }
 
 /**
@@ -69,7 +75,9 @@ test("the pinned network is the one with a faucet", () => {
 });
 
 test("mainnet is refused with the reason, not a faucet call", () => {
-  const byPassphrase = friendbotTarget({ passphrase: "Public Global Stellar Network ; September 2015" });
+  const byPassphrase = friendbotTarget({
+    passphrase: "Public Global Stellar Network ; September 2015",
+  });
   assert.equal(byPassphrase.supported, false);
   if (byPassphrase.supported) return;
   assert.match(byPassphrase.reason, /Mainnet has no Friendbot/);
@@ -95,7 +103,10 @@ test("the future network passphrase alone identifies futurenet", () => {
 });
 
 test("an unknown network gets an honest refusal naming the passphrase", () => {
-  const target = friendbotTarget({ rpcUrl: "http://localhost:8000/rpc", passphrase: "Pvt Net ; 2026" });
+  const target = friendbotTarget({
+    rpcUrl: "http://localhost:8000/rpc",
+    passphrase: "Pvt Net ; 2026",
+  });
   assert.equal(target.supported, false);
   if (target.supported) return;
   assert.match(target.reason, /not a public SDF test network/);
@@ -125,12 +136,25 @@ test("the faucet request passes the address as a query parameter", () => {
 });
 
 test("a request against a contract address is refused before it reaches the wire", () => {
-  assert.throws(() => buildBalanceRequest("CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7", TESTNET.horizonUrl), /not a valid account address/);
-  assert.throws(() => buildFundRequest(AGENT.slice(0, 20), TESTNET.friendbotUrl), /not a valid account address/);
+  assert.throws(
+    () =>
+      buildBalanceRequest(
+        "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7",
+        TESTNET.horizonUrl,
+      ),
+    /not a valid account address/,
+  );
+  assert.throws(
+    () => buildFundRequest(AGENT.slice(0, 20), TESTNET.friendbotUrl),
+    /not a valid account address/,
+  );
 });
 
 test("a native balance at or above the threshold reads as funded", () => {
-  assert.deepEqual(parseAccountPayload(horizonAccount("10.0000000")), { state: "funded", balanceXlm: "10.0000000" });
+  assert.deepEqual(parseAccountPayload(horizonAccount("10.0000000")), {
+    state: "funded",
+    balanceXlm: "10.0000000",
+  });
   assert.equal(parseAccountPayload(horizonAccount(FUNDING_THRESHOLD_XLM)).state, "funded");
 });
 
@@ -153,7 +177,10 @@ test("a payload that does not say the balance is unknown, never zero", () => {
   assert.equal(parseAccountPayload({ balances: "nope" }).state, "unreachable");
   assert.equal(parseAccountPayload({ balances: [] }).state, "unreachable");
   assert.equal(parseAccountPayload({ balances: [{ asset_type: "native" }] }).state, "unreachable");
-  assert.equal(parseAccountPayload({ balances: [{ asset_type: "native", balance: "abc" }] }).state, "unreachable");
+  assert.equal(
+    parseAccountPayload({ balances: [{ asset_type: "native", balance: "abc" }] }).state,
+    "unreachable",
+  );
 });
 
 test("only the native balance counts, however many assets the account holds", () => {
@@ -170,10 +197,14 @@ test("only the native balance counts, however many assets the account holds", ()
 });
 
 test("a 404 from Horizon means the account does not exist yet", () => {
-  assert.deepEqual(interpretBalanceResponse(404, { detail: "Resource Not Found" }), { state: "absent", balanceXlm: null });
+  assert.deepEqual(interpretBalanceResponse(404, { detail: "Resource Not Found" }), {
+    state: "absent",
+    balanceXlm: null,
+  });
   const serverError = interpretBalanceResponse(500, null);
   assert.equal(serverError.state, "unreachable");
-  if (serverError.state === "unreachable") assert.equal(serverError.detail, "Horizon responded 500");
+  if (serverError.state === "unreachable")
+    assert.equal(serverError.detail, "Horizon responded 500");
   assert.equal(interpretBalanceResponse(200, horizonAccount("3.5")).state, "funded");
 });
 
@@ -187,7 +218,10 @@ test("a successful payout returns the transaction hash", () => {
 });
 
 test("faucet failures say which failure it was", () => {
-  const limited = interpretFundResponse(429, JSON.stringify({ detail: "too many requests per ip" }));
+  const limited = interpretFundResponse(
+    429,
+    JSON.stringify({ detail: "too many requests per ip" }),
+  );
   assert.equal(limited.ok, false);
   assert.match(limited.message, /rate limit reached/i);
   assert.ok(limited.message.includes("too many requests per ip"));
@@ -200,7 +234,9 @@ test("faucet failures say which failure it was", () => {
 });
 
 test("probing one account turns a live response into a state", async () => {
-  const fetchImpl = scriptedFetch([{ matches: "/accounts/", status: 200, body: horizonAccount("0.5") }]);
+  const fetchImpl = scriptedFetch([
+    { matches: "/accounts/", status: 200, body: horizonAccount("0.5") },
+  ]);
   const state = await probeBalance(ACCOUNT, TESTNET, fetchImpl);
   assert.equal(state.state, "unfunded");
   assert.equal(fetchImpl.calls.length, 1);
@@ -249,7 +285,10 @@ test("funding walks the accounts in order and reports each one", async () => {
   const results = await fundWithFriendbot([ACCOUNT, AGENT], TESTNET, fetchImpl, (result) => {
     seen.push(result.address);
   });
-  assert.deepEqual(results.map((result) => result.ok), [true, false]);
+  assert.deepEqual(
+    results.map((result) => result.ok),
+    [true, false],
+  );
   assert.equal(results[0]?.message, "Funded.");
   assert.match(results[1]?.message ?? "", /rate limit/);
   assert.deepEqual(seen, [ACCOUNT, AGENT], "the operator sees progress as it happens");
@@ -266,7 +305,10 @@ test("the funding summary reads as one line per account", () => {
   const readings: BalanceReading[] = [
     { address: ACCOUNT, state: { state: "funded", balanceXlm: "10.0000000" } },
     { address: AGENT, state: { state: "unfunded", balanceXlm: "0.5000000" } },
-    { address: "GABSENTABSSENTABSSENTABSSENTABSSENTABSSENTABSSENTAB1", state: { state: "absent", balanceXlm: null } },
+    {
+      address: "GABSENTABSSENTABSSENTABSSENTABSSENTABSSENTABSSENTAB1",
+      state: { state: "absent", balanceXlm: null },
+    },
     { address: ACCOUNT, state: { state: "unreachable", balanceXlm: null, detail: "timeout" } },
   ];
   const line = describeBalances(readings);
@@ -280,8 +322,19 @@ test("the funding summary reads as one line per account", () => {
 test("funding is offered exactly when something is short or missing", () => {
   const funded: BalanceReading = { address: ACCOUNT, state: { state: "funded", balanceXlm: "9" } };
   assert.equal(needsFunding([funded]), false);
-  assert.equal(needsFunding([{ address: ACCOUNT, state: { state: "unfunded", balanceXlm: "0" } }]), true);
-  assert.equal(needsFunding([{ address: ACCOUNT, state: { state: "absent", balanceXlm: null } }]), true);
+  assert.equal(
+    needsFunding([{ address: ACCOUNT, state: { state: "unfunded", balanceXlm: "0" } }]),
+    true,
+  );
+  assert.equal(
+    needsFunding([{ address: ACCOUNT, state: { state: "absent", balanceXlm: null } }]),
+    true,
+  );
   // An account we could not read is not the same as an unfunded one.
-  assert.equal(needsFunding([{ address: ACCOUNT, state: { state: "unreachable", balanceXlm: null, detail: "x" } }]), false);
+  assert.equal(
+    needsFunding([
+      { address: ACCOUNT, state: { state: "unreachable", balanceXlm: null, detail: "x" } },
+    ]),
+    false,
+  );
 });

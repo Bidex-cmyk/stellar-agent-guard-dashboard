@@ -22,7 +22,9 @@ before(async () => {
 
 afterEach(() => {
   if (root) {
-    act(() => { root!.unmount(); });
+    act(() => {
+      root!.unmount();
+    });
     root = null;
   }
   document.body.innerHTML = "";
@@ -49,8 +51,10 @@ test("opens on Cmd+K, filters commands, and dispatches action on Enter", async (
         router: mockRouter,
         guard: "GBM...",
         instances: mockInstances,
-        selectGuard: (a: string) => { selectGuardCalledWith = a; }
-      })
+        selectGuard: (a: string) => {
+          selectGuardCalledWith = a;
+        },
+      }),
     );
   });
 
@@ -62,10 +66,13 @@ test("opens on Cmd+K, filters commands, and dispatches action on Enter", async (
   const input = div.querySelector('input[role="combobox"]') as HTMLInputElement;
   assert.ok(input);
 
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )?.set;
   await act(() => {
     nativeInputValueSetter?.call(input, "Switch to My");
-    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 
   await act(() => {

@@ -59,7 +59,10 @@ test("signatures from keys that are no longer account signers contribute nothing
   const state = evaluateApprovalState({
     signers: signers(),
     thresholds: THRESHOLDS,
-    signatures: [{ signer: ADMIN_1 }, { signer: "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ" }],
+    signatures: [
+      { signer: ADMIN_1 },
+      { signer: "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ" },
+    ],
   });
   assert.equal(state.collectedWeight, 10);
   assert.equal(state.ready, false);
@@ -193,7 +196,10 @@ test("envelope signatures are read from the XDR and matched to signers by hint",
   const envelopeSigner = decoded.value[0]!.signer;
   assert.match(envelopeSigner, /^hint:[0-9a-f]{8}$/);
   assert.equal(`hint:${signerHint(keypair.publicKey())}`, envelopeSigner);
-  assert.deepEqual(unmatchedSignatures(decoded.value, [{ key: keypair.publicKey(), weight: 1, label: "A" }]), []);
+  assert.deepEqual(
+    unmatchedSignatures(decoded.value, [{ key: keypair.publicKey(), weight: 1, label: "A" }]),
+    [],
+  );
 });
 
 test("a malformed envelope is an error, not a silent empty signature list", () => {

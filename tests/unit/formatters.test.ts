@@ -18,10 +18,7 @@ describe("formatStroops", () => {
 
   it("handles multi-billion XLM magnitudes exactly", () => {
     // 2.5B XLM = 25_000_000_000_000_000 stroops — beyond float precision.
-    assert.equal(
-      formatStroops(25_000_000_000_000_000n),
-      "2,500,000,000.0000000"
-    );
+    assert.equal(formatStroops(25_000_000_000_000_000n), "2,500,000,000.0000000");
   });
 
   it("accepts number and string inputs", () => {
@@ -30,10 +27,7 @@ describe("formatStroops", () => {
   });
 
   it("supports custom symbols and decimals", () => {
-    assert.equal(
-      formatStroops(1_500_000n, { symbol: "USDC", decimals: 6 }),
-      "1.500000"
-    );
+    assert.equal(formatStroops(1_500_000n, { symbol: "USDC", decimals: 6 }), "1.500000");
     assert.equal(formatStroops(1500n, { decimals: 0 }), "1,500");
   });
 
@@ -46,20 +40,14 @@ describe("formatStroops", () => {
 
 describe("formatStroopsWithUnit / formatRawStroops", () => {
   it("pairs human and raw forms for the toggle", () => {
-    assert.equal(
-      formatStroopsWithUnit(100_000_000_000n),
-      "10,000.0000000 XLM"
-    );
-    assert.equal(
-      formatRawStroops(100_000_000_000n),
-      "100,000,000,000 stroops"
-    );
+    assert.equal(formatStroopsWithUnit(100_000_000_000n), "10,000.0000000 XLM");
+    assert.equal(formatRawStroops(100_000_000_000n), "100,000,000,000 stroops");
   });
 
   it("honours a custom symbol", () => {
     assert.equal(
       formatStroopsWithUnit(2_000_000n, { symbol: "USDC", decimals: 6 }),
-      "2.000000 USDC"
+      "2.000000 USDC",
     );
   });
 });

@@ -32,17 +32,23 @@ function fakeFreighterNetworkApi(
 ): FreighterNetworkApi {
   return {
     ...(options.networkAccess ? { requestNetworkAccess: options.networkAccess } : {}),
-    getNetworkDetails: async () => options.details ?? { network: "TESTNET", networkPassphrase: TESTNET_PASSPHRASE },
+    getNetworkDetails: async () =>
+      options.details ?? { network: "TESTNET", networkPassphrase: TESTNET_PASSPHRASE },
   };
 }
 
 describe("mismatch detection", () => {
   it("stays silent when the wallet and the dashboard agree", () => {
-    assert.equal(detectNetworkMismatch(TESTNET_PASSPHRASE, TESTNET_PASSPHRASE, { targetNetwork: "testnet" }), null);
+    assert.equal(
+      detectNetworkMismatch(TESTNET_PASSPHRASE, TESTNET_PASSPHRASE, { targetNetwork: "testnet" }),
+      null,
+    );
   });
 
   it("reports a Mainnet wallet against a Testnet dashboard", () => {
-    const mismatch = detectNetworkMismatch(PUBLIC_PASSPHRASE, TESTNET_PASSPHRASE, { targetNetwork: "testnet" });
+    const mismatch = detectNetworkMismatch(PUBLIC_PASSPHRASE, TESTNET_PASSPHRASE, {
+      targetNetwork: "testnet",
+    });
     assert.ok(mismatch);
     assert.equal(mismatch.walletPassphrase, PUBLIC_PASSPHRASE);
     assert.equal(mismatch.targetPassphrase, TESTNET_PASSPHRASE);
@@ -63,16 +69,15 @@ describe("mismatch detection", () => {
     const mismatch = detectNetworkMismatch(TESTNET_PASSPHRASE, PUBLIC_PASSPHRASE, {
       targetNetwork: "public",
     })!;
-    assert.equal(
-      describeMismatch(mismatch),
-      "Wallet on Testnet, dashboard on Mainnet.",
-    );
+    assert.equal(describeMismatch(mismatch), "Wallet on Testnet, dashboard on Mainnet.");
   });
 });
 
 describe("the wording operators see", () => {
   it("names both sides in the warning bar headline", () => {
-    const mismatch = detectNetworkMismatch(PUBLIC_PASSPHRASE, TESTNET_PASSPHRASE, { targetNetwork: "testnet" })!;
+    const mismatch = detectNetworkMismatch(PUBLIC_PASSPHRASE, TESTNET_PASSPHRASE, {
+      targetNetwork: "testnet",
+    })!;
     assert.equal(describeMismatch(mismatch), "Wallet on Mainnet, dashboard on Testnet.");
     assert.equal(switchButtonLabel(mismatch), "Switch wallet to Testnet");
     assert.match(mismatchExplanation(mismatch), /cannot authorize/);
@@ -82,14 +87,19 @@ describe("the wording operators see", () => {
   it("spells the known networks and admits the rest", () => {
     assert.equal(networkDisplayName({ passphrase: PUBLIC_PASSPHRASE }), "Mainnet");
     assert.equal(networkDisplayName({ passphrase: TESTNET_PASSPHRASE }), "Testnet");
-    assert.equal(networkDisplayName({ passphrase: "Test SDF Future Network ; October 2022" }), "Futurenet");
+    assert.equal(
+      networkDisplayName({ passphrase: "Test SDF Future Network ; October 2022" }),
+      "Futurenet",
+    );
     assert.equal(networkDisplayName({ passphrase: null, name: "testnet" }), "Testnet");
     assert.equal(networkDisplayName({ passphrase: null }), "an unknown network");
     assert.equal(networkDisplayName({ passphrase: "Something ; 2031" }), "an unknown network");
   });
 
   it("keeps the manual fallback specific enough to act on", () => {
-    const mismatch = detectNetworkMismatch(PUBLIC_PASSPHRASE, TESTNET_PASSPHRASE, { targetNetwork: "testnet" })!;
+    const mismatch = detectNetworkMismatch(PUBLIC_PASSPHRASE, TESTNET_PASSPHRASE, {
+      targetNetwork: "testnet",
+    })!;
     const steps = manualSwitchInstructions(mismatch);
     assert.ok(steps.length >= 2);
     assert.ok(steps.every((step) => step.includes("Testnet")));
@@ -158,7 +168,9 @@ describe("requesting the switch from Freighter", () => {
 
   it("says plainly when this Freighter build has no switch request at all", async () => {
     const outcome = await requestFreighterNetworkSwitch({
-      api: fakeFreighterNetworkApi({ details: { network: "PUBLIC", networkPassphrase: PUBLIC_PASSPHRASE } }),
+      api: fakeFreighterNetworkApi({
+        details: { network: "PUBLIC", networkPassphrase: PUBLIC_PASSPHRASE },
+      }),
       ...TARGET,
     });
     assert.equal(outcome.kind, "unsupported");
@@ -201,7 +213,13 @@ describe("requesting the switch from Freighter", () => {
 
 describe("separating a refusal from a breakdown", () => {
   it("classifies the words each wallet uses for no", () => {
-    for (const message of ["User rejected", "permission denied", "request declined", "cancelled", "aborted"]) {
+    for (const message of [
+      "User rejected",
+      "permission denied",
+      "request declined",
+      "cancelled",
+      "aborted",
+    ]) {
       assert.equal(classifySwitchFailure(message), "declined", message);
     }
     for (const message of ["network not configured", "extension disconnected", ""]) {
@@ -210,12 +228,23 @@ describe("separating a refusal from a breakdown", () => {
   });
 
   it("summarizes every outcome with a tone and a sentence", () => {
-    assert.equal(describeSwitchOutcome({ kind: "already", network: "testnet", passphrase: TESTNET_PASSPHRASE }).tone, "ok");
     assert.equal(
-      describeSwitchOutcome({ kind: "switched", network: "testnet", passphrase: TESTNET_PASSPHRASE }).text,
+      describeSwitchOutcome({ kind: "already", network: "testnet", passphrase: TESTNET_PASSPHRASE })
+        .tone,
+      "ok",
+    );
+    assert.equal(
+      describeSwitchOutcome({
+        kind: "switched",
+        network: "testnet",
+        passphrase: TESTNET_PASSPHRASE,
+      }).text,
       "The wallet is now on Testnet. Reconnect to resume signing.",
     );
-    assert.equal(describeSwitchOutcome({ kind: "declined", message: "no" }).text, "no Nothing was signed.");
+    assert.equal(
+      describeSwitchOutcome({ kind: "declined", message: "no" }).text,
+      "no Nothing was signed.",
+    );
   });
 });
 

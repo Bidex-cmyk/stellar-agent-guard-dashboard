@@ -5,12 +5,12 @@ import { calculateVelocity } from "../../lib/guard/velocity.ts";
 test("velocity calculations", async (t) => {
   await t.test("calculates moving averages correctly across intervals", () => {
     const now = 10000n;
-    
+
     const entries = [
-      { ts: 9980n, amount: 50n },   // age 20s (in 1m, 15m, 1h)
-      { ts: 9950n, amount: 100n },  // age 50s (in 1m, 15m, 1h)
-      { ts: 9500n, amount: 300n },  // age 500s (8.3m - in 15m, 1h)
-      { ts: 8000n, amount: 500n },  // age 2000s (33.3m - in 1h)
+      { ts: 9980n, amount: 50n }, // age 20s (in 1m, 15m, 1h)
+      { ts: 9950n, amount: 100n }, // age 50s (in 1m, 15m, 1h)
+      { ts: 9500n, amount: 300n }, // age 500s (8.3m - in 15m, 1h)
+      { ts: 8000n, amount: 500n }, // age 2000s (33.3m - in 1h)
       { ts: 5000n, amount: 1000n }, // age 5000s (83.3m - out of all)
     ];
 
@@ -32,7 +32,7 @@ test("velocity calculations", async (t) => {
     // exhaustion = 2500 / 100 = 25 minutes
     assert.equal(result.exhaustionMinutes, 25);
   });
-  
+
   await t.test("falls back to 1m average if 15m is empty but 1m is not", () => {
     // This scenario actually puts 1m inside 15m so 15m will never be empty if 1m is not empty,
     // but the code handles if 15m calculation somehow yielded 0 but 1m didn't (impossible theoretically but logic is sound).
@@ -52,7 +52,7 @@ test("velocity calculations", async (t) => {
     const result = calculateVelocity([], 10000n, 1000n);
     assert.equal(result.exhaustionMinutes, null);
   });
-  
+
   await t.test("returns null exhaustion if remainingCap is null", () => {
     const now = 10000n;
     const entries = [{ ts: 9980n, amount: 50n }];

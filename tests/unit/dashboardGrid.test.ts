@@ -52,10 +52,7 @@ test("a saved layout round-trips through storage", () => {
 
 test("loadLayout reads from the versioned storage key", () => {
   const storage = fakeStorage();
-  storage.data.set(
-    LAYOUT_STORAGE_KEY,
-    JSON.stringify([{ id: "telemetry", collapsed: false }]),
-  );
+  storage.data.set(LAYOUT_STORAGE_KEY, JSON.stringify([{ id: "telemetry", collapsed: false }]));
   const loaded = loadLayout(storage);
   assert.equal(loaded.order[0]?.id, "telemetry");
 });
@@ -69,7 +66,10 @@ test("a corrupted or non-array payload degrades to the default layout", () => {
 });
 
 test("an unknown panel id in storage is dropped, not rendered", () => {
-  const stored = [{ id: "telemetry", collapsed: false }, { id: "status", collapsed: false }];
+  const stored = [
+    { id: "telemetry", collapsed: false },
+    { id: "status", collapsed: false },
+  ];
   const layout = normalizeLayout(stored);
   assert.equal(ids(layout).includes("telemetry" as PanelId), true);
   assert.equal(ids(layout).includes("nuclear_launch" as PanelId), false);
@@ -109,10 +109,14 @@ test("reorderPanel clamps out-of-range indices and no-ops when already there", (
   // Below zero clamps to the front: "status" is already first, so unchanged.
   assert.deepEqual(ids(reorderPanel(defaultLayout(), "status", -5)), [...DEFAULT_LAYOUT]);
   // Past the end clamps to the back: "status" moves last.
-  assert.deepEqual(
-    ids(reorderPanel(defaultLayout(), "status", 99)),
-    ["txhistory", "panic", "telemetry", "multisig", "xdr", "status"],
-  );
+  assert.deepEqual(ids(reorderPanel(defaultLayout(), "status", 99)), [
+    "txhistory",
+    "panic",
+    "telemetry",
+    "multisig",
+    "xdr",
+    "status",
+  ]);
   // Already at the target index: no-op.
   assert.deepEqual(ids(reorderPanel(defaultLayout(), "status", 0)), [...DEFAULT_LAYOUT]);
 });

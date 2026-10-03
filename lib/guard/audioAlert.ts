@@ -271,9 +271,10 @@ export interface NotificationApi {
 
 /** Read the live `window.Notification`, or null where it does not exist (Safari, Node). */
 export function readBrowserNotificationApi(win?: unknown): NotificationApi | null {
-  const scope = (win ?? (typeof window === "undefined" ? null : window)) as
-    | { Notification?: unknown; webkitNotifications?: unknown }
-    | null;
+  const scope = (win ?? (typeof window === "undefined" ? null : window)) as {
+    Notification?: unknown;
+    webkitNotifications?: unknown;
+  } | null;
   if (!scope) return null;
   const ctor = scope.Notification;
   if (typeof ctor !== "function") return null;
@@ -299,7 +300,9 @@ export function readBrowserNotificationApi(win?: unknown): NotificationApi | nul
 }
 
 /** Map whatever the browser reports onto the four states this UI renders. */
-export function notificationPermissionState(api: NotificationApi | null): NotificationPermissionState {
+export function notificationPermissionState(
+  api: NotificationApi | null,
+): NotificationPermissionState {
   if (!api) return "unsupported";
   return normalisePermission(api.permission);
 }
@@ -537,7 +540,9 @@ export function loadAlertSettings(storage?: StorageLike | null): AlertSettings {
     return {
       audio: parsed.audio === true,
       desktop: parsed.desktop === true,
-      volume: clampVolume(typeof parsed.volume === "number" ? parsed.volume : DEFAULT_ALERT_SETTINGS.volume),
+      volume: clampVolume(
+        typeof parsed.volume === "number" ? parsed.volume : DEFAULT_ALERT_SETTINGS.volume,
+      ),
     };
   } catch {
     // Corrupt storage is a lost preference, not a reason to break the panel.

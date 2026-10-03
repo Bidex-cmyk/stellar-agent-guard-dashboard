@@ -54,7 +54,12 @@ async function post(mock: MockSorobanRpc, body: unknown) {
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
   const text = await response.text();
-  return { status: response.status, headers: response.headers, json: response.headers.get("content-type")?.includes("json") ? JSON.parse(text) : null, text };
+  return {
+    status: response.status,
+    headers: response.headers,
+    json: response.headers.get("content-type")?.includes("json") ? JSON.parse(text) : null,
+    text,
+  };
 }
 
 describe("MockSorobanRpc — JSON-RPC 2.0 envelope", () => {
@@ -75,7 +80,11 @@ describe("MockSorobanRpc — JSON-RPC 2.0 envelope", () => {
 
   test("malformed JSON is a -32700 parse error with a null id", async () => {
     const { json } = await post(mock, "{not json");
-    assert.deepEqual(json, { jsonrpc: "2.0", id: null, error: { code: JSON_RPC_ERRORS.parseError, message: "parse error" } });
+    assert.deepEqual(json, {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: JSON_RPC_ERRORS.parseError, message: "parse error" },
+    });
   });
 
   test("a request without jsonrpc/method is -32600 invalid request", async () => {
@@ -94,7 +103,10 @@ describe("MockSorobanRpc — JSON-RPC 2.0 envelope", () => {
       { jsonrpc: "2.0", id: 1, method: "getHealth" },
       { jsonrpc: "2.0", id: 2, method: "getNetwork" },
     ]);
-    assert.deepEqual(json.map((reply: { id: number }) => reply.id), [1, 2]);
+    assert.deepEqual(
+      json.map((reply: { id: number }) => reply.id),
+      [1, 2],
+    );
     assert.equal(json[1].result.passphrase, MOCK_PASSPHRASE);
   });
 
@@ -147,7 +159,10 @@ describe("MockSorobanRpc — getLatestLedger and ledger progression", () => {
   test("identical state produces identical ledger hashes (deterministic)", async () => {
     const other = await MockSorobanRpc.start();
     try {
-      const [a, b] = await Promise.all([server.getLatestLedger(), other.client().getLatestLedger()]);
+      const [a, b] = await Promise.all([
+        server.getLatestLedger(),
+        other.client().getLatestLedger(),
+      ]);
       assert.equal(a.id, b.id);
     } finally {
       await other.stop();
@@ -169,7 +184,9 @@ describe("MockSorobanRpc — getLedgerEntries", () => {
     mock.setLedgerEntry(code);
     mock.setLedgerEntry(instance);
 
-    const missing = xdr.LedgerKey.contractCode(new xdr.LedgerKeyContractCode({ hash: new Uint8Array(32) }));
+    const missing = xdr.LedgerKey.contractCode(
+      new xdr.LedgerKeyContractCode({ hash: new Uint8Array(32) }),
+    );
     const response = await mock.client().getLedgerEntries(instance.key, missing, code.key);
     assert.equal(response.latestLedger, MOCK_GENESIS_LEDGER);
     assert.equal(response.entries.length, 2);
@@ -185,7 +202,12 @@ describe("MockSorobanRpc — getLedgerEntries", () => {
   });
 
   test("an empty key list is -32602 invalid params", async () => {
-    const { json } = await post(mock, { jsonrpc: "2.0", id: 1, method: "getLedgerEntries", params: { keys: [] } });
+    const { json } = await post(mock, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getLedgerEntries",
+      params: { keys: [] },
+    });
     assert.equal(json.error.code, JSON_RPC_ERRORS.invalidParams);
   });
 
@@ -212,7 +234,9 @@ describe("MockSorobanRpc — simulateTransaction", () => {
 
   test("success: the SDK parses retval, transactionData and fee", async () => {
     mock.onSimulate({ fn: "echo" }, (call) => simSuccess(call.args[0]!));
-    const sim = await server.simulateTransaction(invocation("echo", [nativeToScVal(42n, { type: "u64" })]));
+    const sim = await server.simulateTransaction(
+      invocation("echo", [nativeToScVal(42n, { type: "u64" })]),
+    );
     assert.ok(rpc.Api.isSimulationSuccess(sim));
     assert.equal(scValToNative(sim.result!.retval), 42n);
     assert.equal(sim.minResourceFee, "90000");
@@ -223,11 +247,23 @@ describe("MockSorobanRpc — simulateTransaction", () => {
   test("the invocation is decoded from the envelope (contract, function, args, source)", async () => {
     let seen: { contractId: string; fn: string; source: string; argc: number } | null = null;
     mock.onSimulate({}, (call) => {
-      seen = { contractId: call.contractId, fn: call.fn, source: call.source, argc: call.args.length };
+      seen = {
+        contractId: call.contractId,
+        fn: call.fn,
+        source: call.source,
+        argc: call.args.length,
+      };
       return simSuccess();
     });
-    await server.simulateTransaction(invocation("status", [xdr.ScVal.scvBool(true), xdr.ScVal.scvVoid()]));
-    assert.deepEqual(seen, { contractId: MOCK_GUARD, fn: "status", source: SOURCE.publicKey(), argc: 2 });
+    await server.simulateTransaction(
+      invocation("status", [xdr.ScVal.scvBool(true), xdr.ScVal.scvVoid()]),
+    );
+    assert.deepEqual(seen, {
+      contractId: MOCK_GUARD,
+      fn: "status",
+      source: SOURCE.publicKey(),
+      argc: 2,
+    });
   });
 
   test("contract trap: an error string and a decodable diagnostic error event", async () => {
@@ -294,7 +330,10 @@ describe("MockSorobanRpc — getEvents", () => {
       filters: [{ type: "contract", contractIds: [MOCK_GUARD] }],
     });
     assert.equal(page.events.length, 3);
-    assert.deepEqual(page.events.map((event) => event.ledger), [l1, l2, l2]);
+    assert.deepEqual(
+      page.events.map((event) => event.ledger),
+      [l1, l2, l2],
+    );
     assert.equal(scValToNative(page.events[0]!.topic[0]!), "event_initialized");
     assert.equal(String(page.events[0]!.contractId), MOCK_GUARD);
     assert.deepEqual(scValToNative(page.events[2]!.value), { at: 1_789_481_712n });
@@ -327,7 +366,10 @@ describe("MockSorobanRpc — getEvents", () => {
     assert.equal(empty.events.length, 0);
     mock.closeLedger([guardEvent.frozen(admin)]);
     const next = await server.getEvents({ cursor: empty.cursor, filters: [] });
-    assert.deepEqual(next.events.map((event) => scValToNative(event.topic[0]!)), ["event_frozen"]);
+    assert.deepEqual(
+      next.events.map((event) => scValToNative(event.topic[0]!)),
+      ["event_frozen"],
+    );
   });
 
   test("filters by contract id and by topic, with * and ** wildcards", async () => {
@@ -349,7 +391,10 @@ describe("MockSorobanRpc — getEvents", () => {
       startLedger: MOCK_GENESIS_LEDGER,
       filters: [{ topics: [[sym("event_auth_checked"), sym("blocked"), "*"]] }],
     });
-    assert.deepEqual(blocked.events.map((event) => scValToNative(event.topic[2]!)), ["per_tx_cap_exceeded"]);
+    assert.deepEqual(
+      blocked.events.map((event) => scValToNative(event.topic[2]!)),
+      ["per_tx_cap_exceeded"],
+    );
 
     const anyAuth = await server.getEvents({
       startLedger: MOCK_GENESIS_LEDGER,
@@ -359,12 +404,15 @@ describe("MockSorobanRpc — getEvents", () => {
   });
 
   test("rejects startLedger outside the retention window, as stellar-rpc does", async () => {
-    await assert.rejects(server.getEvents({ startLedger: MOCK_GENESIS_LEDGER + 50, filters: [] }), (error: unknown) => {
-      const rpcError = error as { code: number; message: string };
-      assert.equal(rpcError.code, JSON_RPC_ERRORS.invalidParams);
-      assert.match(rpcError.message, /startLedger must be between the oldest ledger/);
-      return true;
-    });
+    await assert.rejects(
+      server.getEvents({ startLedger: MOCK_GENESIS_LEDGER + 50, filters: [] }),
+      (error: unknown) => {
+        const rpcError = error as { code: number; message: string };
+        assert.equal(rpcError.code, JSON_RPC_ERRORS.invalidParams);
+        assert.match(rpcError.message, /startLedger must be between the oldest ledger/);
+        return true;
+      },
+    );
   });
 
   test("rejects a request mixing startLedger and cursor", async () => {
@@ -372,7 +420,10 @@ describe("MockSorobanRpc — getEvents", () => {
       jsonrpc: "2.0",
       id: 1,
       method: "getEvents",
-      params: { startLedger: MOCK_GENESIS_LEDGER, pagination: { cursor: eventId(MOCK_GENESIS_LEDGER, 1, 0, 0) } },
+      params: {
+        startLedger: MOCK_GENESIS_LEDGER,
+        pagination: { cursor: eventId(MOCK_GENESIS_LEDGER, 1, 0, 0) },
+      },
     });
     assert.equal(json.error.code, JSON_RPC_ERRORS.invalidParams);
   });
@@ -454,7 +505,12 @@ describe("MockSorobanRpc — sendTransaction / getTransaction", () => {
   });
 
   test("a malformed hash is -32602 invalid params", async () => {
-    const { json } = await post(mock, { jsonrpc: "2.0", id: 1, method: "getTransaction", params: { hash: "xyz" } });
+    const { json } = await post(mock, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getTransaction",
+      params: { hash: "xyz" },
+    });
     assert.equal(json.error.code, JSON_RPC_ERRORS.invalidParams);
   });
 });
@@ -490,8 +546,15 @@ describe("MockSorobanRpc — fault injection", () => {
   });
 
   test("a JSON-RPC error fault surfaces as the SDK's thrown RPC error", async () => {
-    mock.injectFault({ kind: "rpcError", code: JSON_RPC_ERRORS.internalError, message: "database is locked" });
-    await assert.rejects(server.getNetwork(), { code: JSON_RPC_ERRORS.internalError, message: "database is locked" });
+    mock.injectFault({
+      kind: "rpcError",
+      code: JSON_RPC_ERRORS.internalError,
+      message: "database is locked",
+    });
+    await assert.rejects(server.getNetwork(), {
+      code: JSON_RPC_ERRORS.internalError,
+      message: "database is locked",
+    });
   });
 });
 

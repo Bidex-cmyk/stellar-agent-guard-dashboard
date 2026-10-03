@@ -23,7 +23,12 @@ body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font:
+    15px/1.55 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 
 a {
@@ -219,6 +224,60 @@ label.field .hint {
   word-break: break-all;
 }
 
+/* Copy affordances (issue #33). The button is a hit-area of at least 24px in
+   both axes so it is usable on touch screens; the hint only ever renders after
+   a failed write, so it normally costs nothing. */
+.copyable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copyable .copy-btn,
+.copy-wrap .copy-btn {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  min-height: 24px;
+  min-width: 24px;
+  border-radius: 6px;
+}
+
+.copy-hint {
+  color: var(--danger);
+}
+
+.copy-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Per-read retry (issue #36). The skeleton is the pending state a retry
+   re-enters: an indeterminate shimmer row, aria-hidden because the polite
+   "re-reading…" status already carries the state to screen readers. */
+.retry-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.skeleton-row {
+  height: 14px;
+  margin: 8px 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #18202b 25%, #222c3a 50%, #18202b 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
 .pill {
   display: inline-block;
   padding: 2.5px 9px;
@@ -264,6 +323,16 @@ label.field .hint {
   margin-bottom: 3px;
 }
 
+/*
+ * Warning tier — the shared primitive for "safe, but not doing what the
+ * operator assumed", established by the default-deny status pass (issue #25)
+ * and reused by the telemetry feed's row severity (issue #26).
+ *
+ * Two intensities, two tokens, no third colour: `warn` for a state that is
+ * working as designed and needs reading, `danger` for one that is refusing
+ * work. `.pill.warn` / `.pill.danger` are the inline form of the same tier, so
+ * a badge and the banner it belongs to cannot drift apart.
+ */
 .notice {
   border-left: 3px solid var(--warn);
   background: #1b1710;
@@ -271,6 +340,11 @@ label.field .hint {
   border-radius: 0 7px 7px 0;
   margin: 10px 0;
   font-size: 13px;
+}
+
+.notice.danger {
+  border-left-color: var(--danger);
+  background: #1c1113;
 }
 
 .notice.info {
@@ -281,6 +355,50 @@ label.field .hint {
 .notice strong {
   display: block;
   margin-bottom: 4px;
+}
+
+.notice .cta {
+  display: inline-block;
+  margin-top: 8px;
+}
+
+/*
+ * Freeze dry-run output. Visually distinct from a write receipt (banner plus a
+ * bordered panel) so a simulation can never be mistaken for a broadcast freeze.
+ */
+.dry-run {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.dry-run-banner {
+  display: inline-block;
+  border: 1px dashed var(--warn);
+  background: #2a2010;
+  color: var(--warn);
+  border-radius: 7px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* Empty-state primitive, shared by every data surface (fleet table, telemetry
+ * feed, tx history): a centered title + recovery hint, with the surface adding
+ * its own recovery control below. Append here; do not fork per-component. */
+.fleet-empty strong,
+.empty-state strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.fleet-empty span,
+.empty-state span {
+  display: block;
 }
 
 .demo-badge {
@@ -323,6 +441,31 @@ table.chart-data td {
   border-bottom: 1px solid #1a212b;
   vertical-align: top;
 }
+
+/*
+ * Row severity tiers (issue #26) — the same two tokens as the warning-tier
+ * banner, so a feed row and a status banner cannot disagree about what "red"
+ * means. Every tier's wording is already in the row (the decision badge, the
+ * source pill), so the colour is emphasis, never the message.
+ *
+ * The marker is an inset box-shadow on the first cell rather than a border:
+ * `border-collapse: collapse` (above) makes a row-level border unreliable, and
+ * the row's cell padding stays as it was — no reflow, no layout shift.
+ */
+table.events tbody tr.severity-blocked {
+  background: #1c1113;
+}
+
+table.events tbody tr.severity-blocked td:first-child {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+table.events tbody tr.severity-diagnostic td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+/* Allowed and lifecycle rows are deliberately unmarked: the eye should go to the
+ * blocks, and an unmarked row is what "nothing happened here" looks like. */
 
 table.asset-caps {
   width: 100%;
@@ -415,6 +558,72 @@ code {
   .split {
     grid-template-columns: 1fr;
   }
+
+  /* Responsive contract for dense forms (PolicyForm on /configure): every
+   * row-container stacks to a single column and its children go full-width,
+   * so 12+ stacked fields stay usable at 375px. List-editor rows wrap and
+   * remove-buttons get a >=44px touch target (WCAG 2.5.5 / iOS HIG). */
+  .form-actions.row,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .form-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .asset-caps button.secondary {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 14px;
+  }
+
+  .checkline {
+    align-items: flex-start;
+  }
+
+  /* Inline date-range pair stacks instead of overflowing horizontally. */
+  .form-inline-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Sticky action bar: justified by measurement, not preference. PolicyForm
+ * stacks to roughly 12 label.field blocks × ~81px ≈ 972px — well past a
+ * 667px iPhone SE viewport — so Sign/Export would sit below the fold and
+ * invite mis-taps mid-scroll. Under the same 720px breakpoint the form's
+ * action bar pins to the viewport bottom instead. */
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  margin: 0 -18px;
+  padding: 12px 18px;
+}
+
+/*
+ * Policy presets: the archetype picker and its profile legend, visually grouped
+ * so the legend reads as documentation for the select rather than as form
+ * fields.
+ */
+.preset-picker {
+  margin-top: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.preset-legend {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 /*
@@ -510,14 +719,28 @@ code {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
-.toast-success { border-left-color: var(--ok); }
-.toast-info { border-left-color: var(--accent); }
-.toast-warning { border-left-color: var(--warn); }
-.toast-error { border-left-color: var(--danger); }
+.toast-success {
+  border-left-color: var(--ok);
+}
+.toast-info {
+  border-left-color: var(--accent);
+}
+.toast-warning {
+  border-left-color: var(--warn);
+}
+.toast-error {
+  border-left-color: var(--danger);
+}
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .toast-enter {
@@ -525,7 +748,9 @@ code {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast-enter { animation: none; }
+  .toast-enter {
+    animation: none;
+  }
 }
 
 .toast-head {
@@ -551,8 +776,85 @@ code {
   word-break: break-all;
 }
 
+/*
+ * Dead-man-switch expiration alert banners — shown at the top of the console
+ * while the DMS deadline approaches, escalating in three tiers:
+ * warning (yellow) below 25% of grace, critical (red, pulsing) below 10%, and
+ * expired (dark red) once the switch has tripped. High-contrast fills on the
+ * dark theme so the bar reads across the room — that is the point of a
+ * dead-man alert.
+ */
+.dms-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 9px;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dms-banner strong {
+  font-size: 13.5px;
+}
+
+.dms-banner .detail {
+  font-size: 12.5px;
+  opacity: 0.92;
+}
+
+.dms-banner.warning {
+  border-color: var(--warn);
+  background: #2a2010;
+  color: var(--warn);
+}
+
+.dms-banner.critical {
+  border-color: var(--danger);
+  background: #331111;
+  color: #ffd9d9;
+  animation: dms-critical-pulse 1.2s ease-in-out infinite;
+}
+
+.dms-banner.expired {
+  border-color: #8f2a2a;
+  background: #2a0505;
+  color: #ff9c9c;
+}
+
+/*
+ * The critical tier pulses so it cannot be mistaken for a static notice; the
+ * other two tiers stay still so escalation itself is what moves. Honoured by
+ * reduced-motion users, for whom a pulsing alarm is noise, not signal.
+ */
+@keyframes dms-critical-pulse {
+  0%,
+  100% {
+    background-color: #331111;
+    border-color: var(--danger);
+  }
+  50% {
+    background-color: #552020;
+    border-color: #ff8a8a;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dms-banner.critical {
+    animation: none;
+  }
+}
+
 @media print {
-  .no-print, button, nav, .theme-toggle, .wallet-bar, .demo-badge {
+  .no-print,
+  button,
+  nav,
+  .theme-toggle,
+  .wallet-bar,
+  .demo-badge {
     display: none !important;
   }
   .print-only {
@@ -561,7 +863,9 @@ code {
   span.print-only {
     display: inline !important;
   }
-  .panel, body, html {
+  .panel,
+  body,
+  html {
     background: white !important;
     color: black !important;
   }
@@ -569,9 +873,38 @@ code {
     color: black !important;
     border-color: #ccc !important;
   }
-  .pill.ok, .pill.warn, .pill.danger {
+  .pill.ok,
+  .pill.warn,
+  .pill.danger {
     background: transparent !important;
     border: 1px solid black !important;
+  }
+  /* The warning tier prints too — an operator who prints the compliance report
+   * must still read the default-deny banner, so the tier's dark surface has to
+   * become white rather than leaving black text on a black box. The two
+   * intensities lose their colour difference on paper by design: what separates
+   * them is the wording, which is why the copy names the consequence. */
+  .notice,
+  .notice.danger,
+  .notice.info {
+    background: white !important;
+    color: black !important;
+    border: 1px solid black !important;
+    border-left: 3px solid black !important;
+  }
+  /* Row severity has to survive the `* { color: black }` rule above. The
+   * inset shadow is not a border, so it prints unflattened — but a thin red rule
+   * on paper is worth nothing, so the tiers print as black rules of different
+   * weights (a block is heavier than a diagnostic) and the row's own words carry
+   * the distinction either way. */
+  table.events tbody tr.severity-blocked {
+    background: transparent !important;
+  }
+  table.events tbody tr.severity-blocked td:first-child {
+    box-shadow: inset 4px 0 0 #000 !important;
+  }
+  table.events tbody tr.severity-diagnostic td:first-child {
+    box-shadow: inset 2px 0 0 #000 !important;
   }
 }
 
@@ -604,16 +937,48 @@ code {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.tchart-allowed { fill: var(--ok); background: var(--ok); }
-.tchart-blocked { fill: var(--danger); background: var(--danger); }
-.tchart-spend { background: var(--accent); }
-.tchart-spend-area { fill: var(--accent); fill-opacity: 0.16; }
-.tchart-spend-line { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.tchart-grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.tchart-baseline { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.tchart-axis { fill: var(--muted); font-size: 10px; }
-.tchart-cursor { fill: var(--text); fill-opacity: 0.07; }
-.tchart-hit { fill: transparent; }
+.tchart-allowed {
+  fill: var(--ok);
+  background: var(--ok);
+}
+.tchart-blocked {
+  fill: var(--danger);
+  background: var(--danger);
+}
+.tchart-spend {
+  background: var(--accent);
+}
+.tchart-spend-area {
+  fill: var(--accent);
+  fill-opacity: 0.16;
+}
+.tchart-spend-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.tchart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.tchart-baseline {
+  stroke: var(--muted);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.tchart-axis {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.tchart-cursor {
+  fill: var(--text);
+  fill-opacity: 0.07;
+}
+.tchart-hit {
+  fill: transparent;
+}
 .tchart-key {
   display: inline-block;
   width: 9px;
@@ -636,5 +1001,7 @@ code {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 @media print {
-  .tchart-tip { display: none; }
+  .tchart-tip {
+    display: none;
+  }
 }

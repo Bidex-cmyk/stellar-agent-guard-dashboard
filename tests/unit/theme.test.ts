@@ -75,7 +75,7 @@ test("initializes with prefers-color-scheme when no localStorage", async () => {
 test("initializes with localStorage if set", async () => {
   localStorage.setItem("theme", "high-contrast");
   matchMediaResult = true; // prefers light but localStorage should win
-  
+
   const div = document.createElement("div");
   document.body.appendChild(div);
   root = createRoot(div);
@@ -131,7 +131,7 @@ test("listens to media query changes if no localStorage set", async () => {
   assert.equal(document.documentElement.getAttribute("data-theme"), "dark"); // initial matchMedia=false
 
   await act(() => {
-    mediaQueryCallbacks.forEach(cb => cb({ matches: true })); // Change to light
+    mediaQueryCallbacks.forEach((cb) => cb({ matches: true })); // Change to light
   });
 
   assert.equal(document.documentElement.getAttribute("data-theme"), "light");

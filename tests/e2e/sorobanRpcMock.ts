@@ -465,7 +465,11 @@ export class SorobanRpcMock {
         contractId,
         topic: event.topics,
         value: event.value,
-        txHash: event.transactionHash ?? "",
+        // Only a real transaction hash is served. `guardEventId` anchors a
+        // committed event on its tx hash, so an empty string would hand every
+        // no-transaction event (heartbeats) the same id and the feed's
+        // de-duplication would collapse them into one row.
+        ...(event.transactionHash ? { txHash: event.transactionHash } : {}),
         id: `${event.ledger}-${start + index}`,
         pagingToken: `${event.ledger}-${start + index}`,
       })),
@@ -483,7 +487,10 @@ function encodeEventValue(spec: MockEventSpec): string {
  * passes through to the Next.js server, and anything else is aborted so a test
  * can never reach an unexpected host.
  */
-export async function installSorobanRpcMock(page: Page, options: MockChainOptions = {}): Promise<SorobanRpcMock> {
+export async function installSorobanRpcMock(
+  page: Page,
+  options: MockChainOptions = {},
+): Promise<SorobanRpcMock> {
   const chain = new SorobanRpcMock(options);
   await page.route("**/*", (route) => {
     const url = new URL(route.request().url());

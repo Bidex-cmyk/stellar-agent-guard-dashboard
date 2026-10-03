@@ -7,7 +7,13 @@
  *   node scripts/inspect-instance.ts [--guard C…] [--json]
  */
 
-import { readPolicy, readStatus, readWindow, verifyWasmIdentity, createServer } from "../lib/guard/chain.ts";
+import {
+  readPolicy,
+  readStatus,
+  readWindow,
+  verifyWasmIdentity,
+  createServer,
+} from "../lib/guard/chain.ts";
 import { NETWORK, PHASE1_ARTIFACT } from "../lib/guard/network.ts";
 import { describePolicy, isDeadManFrozen, deadManRemaining } from "stellar-agent-guard-sdk";
 
@@ -22,12 +28,18 @@ function parseArgs(argv: string[]): Map<string, string | true> {
   for (let index = 0; index < argv.length; index++) {
     const token = argv[index];
     if (!token || !token.startsWith("--")) continue;
+    const body = token.slice(2);
+    const separator = body.indexOf("=");
+    if (separator !== -1) {
+      flags.set(body.slice(0, separator), body.slice(separator + 1));
+      continue;
+    }
     const value = argv[index + 1];
     if (value !== undefined && !value.startsWith("--")) {
-      flags.set(token.slice(2), value);
+      flags.set(body, value);
       index++;
     } else {
-      flags.set(token.slice(2), true);
+      flags.set(body, true);
     }
   }
   return flags;
@@ -36,7 +48,7 @@ function parseArgs(argv: string[]): Map<string, string | true> {
 async function main(): Promise<void> {
   const flags = parseArgs(process.argv.slice(2));
   const guard = (flags.get("guard") as string | undefined) ?? PHASE1_ARTIFACT.guard;
-  const asJson = flags.get("json") === true;
+  const asJson = process.argv.includes("--json") || flags.has("json");
 
   const [status, policy, window, identity] = await Promise.all([
     readStatus(server, guard),
@@ -48,6 +60,7 @@ async function main(): Promise<void> {
   ]);
 
   const report = {
+    schemaVersion: 1,
     rpcUrl: NETWORK.rpcUrl,
     guard,
     artifact: {
@@ -95,7 +108,9 @@ async function main(): Promise<void> {
     console.log(`policy              ${describePolicy(policy.value)}`);
     console.log(
       `dead-man remaining  ${
-        status.ok ? String(deadManRemaining(status.value, policy.value)) : "unknown (status unreadable)"
+        status.ok
+          ? String(deadManRemaining(status.value, policy.value))
+          : "unknown (status unreadable)"
       }`,
     );
   }
@@ -105,7 +120,9 @@ async function main(): Promise<void> {
   } else if (window.value === null) {
     console.log(`window              no spend recorded`);
   } else {
-    console.log(`window total        ${window.value.total} across ${window.value.entries.length} entry(ies)`);
+    console.log(
+      `window total        ${window.value.total} across ${window.value.entries.length} entry(ies)`,
+    );
   }
 }
 

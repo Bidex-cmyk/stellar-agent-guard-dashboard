@@ -22,14 +22,14 @@ mock.rateLimit({ method: "getEvents" });        // next getEvents -> HTTP 429
 await mock.stop();
 ```
 
-| Method                | Behaviour                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------- |
-| `simulateTransaction` | Decodes the envelope and answers from `onSimulate()` fixtures (success, contract trap, auth error). |
-| `getEvents`           | Handles `startLedger` or cursor pagination, contract/topic filters with `*`/`**`, and retention checks. |
-| `getLedgerEntries`    | Serves entries set with `setLedgerEntry()`.                                                         |
-| `getLatestLedger`     | Moves forward only when a test calls `closeLedger()` or `advanceLedgers()`.                         |
+| Method                | Behaviour                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `simulateTransaction` | Decodes the envelope and answers from `onSimulate()` fixtures (success, contract trap, auth error).           |
+| `getEvents`           | Handles `startLedger` or cursor pagination, contract/topic filters with `*`/`**`, and retention checks.       |
+| `getLedgerEntries`    | Serves entries set with `setLedgerEntry()`.                                                                   |
+| `getLatestLedger`     | Moves forward only when a test calls `closeLedger()` or `advanceLedgers()`.                                   |
 | `sendTransaction`     | Returns `PENDING` and includes the transaction on the next ledger close. Other outcomes come from `onSend()`. |
-| `getTransaction`      | Returns `NOT_FOUND`, then `SUCCESS` or `FAILED`, with the return value and events.                  |
+| `getTransaction`      | Returns `NOT_FOUND`, then `SUCCESS` or `FAILED`, with the return value and events.                            |
 
 The mock never reads the clock or the network, so every run returns the same
 bytes. `interceptFetch(url)` routes `fetch` calls for a URL, such as the real

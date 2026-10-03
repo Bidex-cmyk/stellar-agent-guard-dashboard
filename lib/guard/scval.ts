@@ -1,15 +1,20 @@
 /**
  * Small, isomorphic XDR/ledger helpers.
  *
+ * Byte rendering and hex digests come from the SDK (`toHex`, `sha256Hex`);
+ * what stays here is what the SDK does not publish: hex parsing, the raw-byte
+ * digest the contract-id preimage needs, and the guard's own ledger keys.
+ *
  * Deliberately free of `node:crypto` and `Buffer`: this module runs in the
  * operator's browser (the dashboard has no server half), so hashing goes through
  * Web Crypto and every byte field is a `Uint8Array`.
  */
 
-import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { GUARD_STORAGE_KEYS } from "stellar-agent-guard-sdk";
+import { Address, xdr } from "@stellar/stellar-sdk";
 
 /**
- * The Web Crypto implementation the hashing helpers run on.
+ * The Web Crypto implementation the raw-byte digest runs on.
  *
  * There is deliberately no `node:crypto` fallback: a `await import("node:crypto")`
  * is a bare `node:`-scheme specifier that webpack refuses to bundle for the
@@ -21,9 +26,7 @@ import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 async function getSubtleCrypto(): Promise<SubtleCrypto> {
   const subtle = globalThis.crypto?.subtle;
   if (!subtle) {
-    throw new Error(
-      "crypto.subtle is unavailable: hashing needs Web Crypto in this runtime",
-    );
+    throw new Error("crypto.subtle is unavailable: hashing needs Web Crypto in this runtime");
   }
   return subtle;
 }
@@ -35,7 +38,8 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** SHA-256 as raw bytes. */
+/** SHA-256 as raw bytes. The SDK exports only the hex form, and the
+ * contract-id preimage needs the digest as bytes, so this one stays local. */
 export async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
   const subtle = await getSubtleCrypto();
   const digest = await subtle.digest("SHA-256", toArrayBuffer(bytes));
@@ -62,7 +66,7 @@ export function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-export function bytesToHex(bytes: Uint8Array): string {
+export function toHex(bytes: Uint8Array): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -71,31 +75,20 @@ export function addressToScVal(address: string): xdr.ScVal {
   return new Address(address).toScVal();
 }
 
-/** An `i128` argument, kept as a bigint end to end so no cap loses precision. */
-export function i128ToScVal(value: bigint): xdr.ScVal {
-  return nativeToScVal(value, { type: "i128" });
-}
-
-/** A `u64` argument. */
-export function u64ToScVal(value: bigint): xdr.ScVal {
-  return nativeToScVal(value, { type: "u64" });
-}
-
-/** A `u32` argument. */
-export function u32ToScVal(value: number): xdr.ScVal {
-  return nativeToScVal(value, { type: "u32" });
-}
-
 /**
  * The guard's own persistent storage keys, as they exist in ledger state.
  *
- * A Rust `contracttype` enum is a vector of symbols on the wire
- * (`DataKey::Policy` → `[Symbol("Policy")]`), so these are built to match real
- * ledger state rather than as bare symbols.
+ * The key *names* come from the SDK's `GUARD_STORAGE_KEYS`, so this console
+ * cannot drift from the vocabulary the SDK declares footprint keys with.
+ *
+ * Wrapped rather than re-exported for one shape reason: this console's footprint
+ * declares exactly these four `DataKey` entries, while the SDK's internal builder
+ * additionally declares the contract-instance key — a key this read path has
+ * never needed, and adding it here would change every declared footprint.
  */
 export function guardStorageLedgerKeys(guard: string): xdr.LedgerKey[] {
   const scAddress = new Address(guard).toScAddress();
-  return (["Policy", "Window", "LastHeartbeat", "AdminFrozen"] as const).map((name) =>
+  return GUARD_STORAGE_KEYS.map((name) =>
     xdr.LedgerKey.contractData(
       new xdr.LedgerKeyContractData({
         contract: scAddress,
@@ -108,15 +101,15 @@ export function guardStorageLedgerKeys(guard: string): xdr.LedgerKey[] {
 
 /** A stable identity for a `LedgerKey`, for de-duplicating a footprint. */
 export function ledgerKeyId(key: xdr.LedgerKey): string {
-  return bytesToHex(new Uint8Array(key.toXDR()));
+  return toHex(new Uint8Array(key.toXDR()));
 }
 
 /** A 32-byte hash in whatever shape a helper hands it back, as lowercase hex. */
 export function hashToHex(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") return value.replace(/^0x/, "").toLowerCase();
-  if (value instanceof Uint8Array) return bytesToHex(value);
-  if (value instanceof ArrayBuffer) return bytesToHex(new Uint8Array(value));
+  if (value instanceof Uint8Array) return toHex(value);
+  if (value instanceof ArrayBuffer) return toHex(new Uint8Array(value));
   const candidate = value as {
     value?: unknown;
     toXdrObject?: () => unknown;
@@ -124,8 +117,8 @@ export function hashToHex(value: unknown): string | null {
   };
   // `xdr.Hash` wrappers carry the raw 32 bytes on `.value`; check it first so a
   // hash never falls through to the JSON heuristics below and come back null.
-  if (candidate.value instanceof Uint8Array) return bytesToHex(candidate.value);
-  if (candidate.value instanceof ArrayBuffer) return bytesToHex(new Uint8Array(candidate.value));
+  if (candidate.value instanceof Uint8Array) return toHex(candidate.value);
+  if (candidate.value instanceof ArrayBuffer) return toHex(new Uint8Array(candidate.value));
   if (typeof candidate.toXdrObject === "function") return hashToHex(candidate.toXdrObject());
   if (typeof candidate.toJSON === "function") {
     const rendered = candidate.toJSON();

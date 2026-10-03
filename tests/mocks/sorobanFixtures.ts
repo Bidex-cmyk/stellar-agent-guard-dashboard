@@ -12,7 +12,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { Address, SorobanDataBuilder, xdr } from "@stellar/stellar-sdk";
+import { Address, SorobanDataBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { NETWORK, PHASE1_ARTIFACT } from "../../lib/guard/network.ts";
 
 export const MOCK_PASSPHRASE = NETWORK.passphrase;
@@ -61,7 +61,12 @@ export function toid(ledger: number, txIndex: number, opIndex: number): bigint {
  * a zero-padded 19-digit TOID, a dash, and a zero-padded 10-digit event index.
  * Fixed widths mean ids compare correctly as plain strings.
  */
-export function eventId(ledger: number, txIndex: number, opIndex: number, eventIndex: number): string {
+export function eventId(
+  ledger: number,
+  txIndex: number,
+  opIndex: number,
+  eventIndex: number,
+): string {
   return `${toid(ledger, txIndex, opIndex).toString().padStart(19, "0")}-${String(eventIndex).padStart(10, "0")}`;
 }
 
@@ -73,7 +78,10 @@ export function ledgerCloseTime(sequence: number): number {
 // Ledger headers (getLatestLedger)
 // ---------------------------------------------------------------------------
 
-export function ledgerHeader(sequence: number, protocolVersion = MOCK_PROTOCOL_VERSION): xdr.LedgerHeader {
+export function ledgerHeader(
+  sequence: number,
+  protocolVersion = MOCK_PROTOCOL_VERSION,
+): xdr.LedgerHeader {
   const previous = fixtureHash(`ledger:${sequence - 1}`);
   return new xdr.LedgerHeader({
     ledgerVersion: protocolVersion,
@@ -212,12 +220,59 @@ export function contractInstanceEntry(params: {
  * One of a contract's persistent storage entries, keyed the way a Soroban
  * `#[contracttype] enum DataKey { Name }` variant is: `Vec[Symbol("Name")]`.
  */
-export function persistentDataEntry(contractId: string, dataKeyName: string, val: xdr.ScVal): LedgerEntryFixture {
+export function persistentDataEntry(
+  contractId: string,
+  dataKeyName: string,
+  val: xdr.ScVal,
+): LedgerEntryFixture {
   const key = xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(dataKeyName)]);
   const durability = xdr.ContractDataDurability.persistent;
   return {
     key: contractDataKey(contractId, key, durability),
     data: contractDataEntry(contractId, key, durability, val),
+  };
+}
+
+/**
+ * The native Stellar Asset Contract's persistent `Balance` entry for one
+ * address — the ledger key the RPC balance read
+ * (`Server.getAssetBalance(address, Asset.native(), …)`) resolves, and the
+ * fixture `readNativeXlmBalance` tests decode. The key is built exactly the
+ * way the SDK builds it (`["Balance", <address>]` under the SAC contract id),
+ * so the SDK's own lookup finds it; the value mirrors the field shape the SDK
+ * decodes (`amount`/`authorized`/`clawback`), which is what the unit tests
+ * need to pin — real-network confirmation of that shape belongs to the SDK's
+ * integration suite, not to a mock here.
+ */
+export function sacBalanceEntry(params: {
+  /** `Asset.native().contractId(MOCK_PASSPHRASE)` for the network under test. */
+  sacContractId: string;
+  /** The account (`G…`) or contract (`C…`) whose XLM balance this records. */
+  holder: string;
+  /** Balance in stroops (the SAC stores i128). */
+  amount: bigint;
+  authorized?: boolean;
+  clawback?: boolean;
+}): LedgerEntryFixture {
+  const key = nativeToScVal(["Balance", params.holder], { type: ["symbol", "address"] });
+  const durability = xdr.ContractDataDurability.persistent;
+  const val = xdr.ScVal.scvMap([
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol("amount"),
+      val: nativeToScVal(params.amount, { type: "i128" }),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol("authorized"),
+      val: xdr.ScVal.scvBool(params.authorized ?? true),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol("clawback"),
+      val: xdr.ScVal.scvBool(params.clawback ?? false),
+    }),
+  ]);
+  return {
+    key: contractDataKey(params.sacContractId, key, durability),
+    data: contractDataEntry(params.sacContractId, key, durability, val),
   };
 }
 
@@ -268,7 +323,10 @@ export function guardStatusScVal(status: {
 }
 
 /** The guard's internal rolling-window accounting (`DataKey::Window`). */
-export function windowScVal(window: { total: bigint; entries: Array<{ ts: bigint; amount: bigint }> }): xdr.ScVal {
+export function windowScVal(window: {
+  total: bigint;
+  entries: Array<{ ts: bigint; amount: bigint }>;
+}): xdr.ScVal {
   return structScVal({
     entries: xdr.ScVal.scvVec(
       window.entries.map((entry) => structScVal({ amount: i128(entry.amount), ts: u64(entry.ts) })),
@@ -306,7 +364,11 @@ function byAdmin(admin: string): xdr.ScVal {
  * empty symbol.
  */
 export const guardEvent = {
-  authChecked(result: "allowed" | "blocked", reason = "", contractId: string = MOCK_GUARD): EventFixture {
+  authChecked(
+    result: "allowed" | "blocked",
+    reason = "",
+    contractId: string = MOCK_GUARD,
+  ): EventFixture {
     return {
       contractId,
       topics: [sym("event_auth_checked"), sym(result), sym(result === "allowed" ? "" : reason)],
@@ -348,7 +410,9 @@ export function contractEvent(event: EventFixture): xdr.ContractEvent {
 
 /** A diagnostic event as `simulateTransaction` returns them (base64). */
 export function diagnosticEventXdr(event: EventFixture, inSuccessfulContractCall = false): string {
-  return new xdr.DiagnosticEvent({ inSuccessfulContractCall, event: contractEvent(event) }).toXDR("base64");
+  return new xdr.DiagnosticEvent({ inSuccessfulContractCall, event: contractEvent(event) }).toXDR(
+    "base64",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +454,11 @@ function errorEvent(contractId: string, error: xdr.ScError, message: string): Ev
  * stellar-rpc surfaces it as a simulation `error` string beginning
  * `HostError: Error(Contract, #<code>)`, plus the diagnostic event log.
  */
-export function contractTrap(code: number, contractId: string = MOCK_GUARD, extraEvents: EventFixture[] = []): SimulationFixture {
+export function contractTrap(
+  code: number,
+  contractId: string = MOCK_GUARD,
+  extraEvents: EventFixture[] = [],
+): SimulationFixture {
   return {
     kind: "error",
     error:
@@ -399,7 +467,11 @@ export function contractTrap(code: number, contractId: string = MOCK_GUARD, extr
       `data:"escalating error to VM trap from failed host function call: call"`,
     events: [
       ...extraEvents,
-      errorEvent(contractId, xdr.ScError.sceContract(code), "escalating error to VM trap from failed host function call: call"),
+      errorEvent(
+        contractId,
+        xdr.ScError.sceContract(code),
+        "escalating error to VM trap from failed host function call: call",
+      ),
     ],
   };
 }
@@ -416,7 +488,11 @@ export function authError(contractId: string = MOCK_GUARD): SimulationFixture {
       `   0: [Diagnostic Event] contract:${contractId}, topics:[error, Error(Auth, InvalidAction)], ` +
       `data:"failed account authentication with error"`,
     events: [
-      errorEvent(contractId, xdr.ScError.sceAuth(xdr.ScErrorCode.scecInvalidAction), "failed account authentication with error"),
+      errorEvent(
+        contractId,
+        xdr.ScError.sceAuth(xdr.ScErrorCode.scecInvalidAction),
+        "failed account authentication with error",
+      ),
     ],
   };
 }
@@ -427,7 +503,10 @@ export function authError(contractId: string = MOCK_GUARD): SimulationFixture {
  */
 export function guardBlocked(reason: string, contractId: string = MOCK_GUARD): SimulationFixture {
   const base = authError(contractId);
-  return { ...base, events: [guardEvent.authChecked("blocked", reason, contractId), ...(base.events ?? [])] };
+  return {
+    ...base,
+    events: [guardEvent.authChecked("blocked", reason, contractId), ...(base.events ?? [])],
+  };
 }
 
 export function emptySorobanDataXdr(): string {
@@ -438,7 +517,8 @@ export function emptySorobanDataXdr(): string {
 // Transaction outcomes (sendTransaction / getTransaction)
 // ---------------------------------------------------------------------------
 
-export type TransactionResultCode = "txBadSeq" | "txInsufficientFee" | "txBadAuth" | "txMalformed" | "txSorobanInvalid";
+export type TransactionResultCode =
+  "txBadSeq" | "txInsufficientFee" | "txBadAuth" | "txMalformed" | "txSorobanInvalid";
 
 /** The `errorResultXdr` for a transaction refused at submission. */
 export function rejectedResultXdr(code: TransactionResultCode, feeCharged = 100n): string {
@@ -460,7 +540,9 @@ export function includedResultXdr(success: boolean, retval: xdr.ScVal, feeCharge
   );
   return new xdr.TransactionResult({
     feeCharged,
-    result: success ? xdr.TransactionResultResult.txSuccess([op]) : xdr.TransactionResultResult.txFailed([op]),
+    result: success
+      ? xdr.TransactionResultResult.txSuccess([op])
+      : xdr.TransactionResultResult.txFailed([op]),
     ext: xdr.TransactionResultExt.v0(),
   }).toXDR("base64");
 }
@@ -472,10 +554,17 @@ export function transactionMetaXdr(retval: xdr.ScVal | null, events: EventFixtur
       ext: xdr.ExtensionPoint.v0(),
       txChangesBefore: [],
       operations: [
-        new xdr.OperationMetaV2({ ext: xdr.ExtensionPoint.v0(), changes: [], events: events.map(contractEvent) }),
+        new xdr.OperationMetaV2({
+          ext: xdr.ExtensionPoint.v0(),
+          changes: [],
+          events: events.map(contractEvent),
+        }),
       ],
       txChangesAfter: [],
-      sorobanMeta: new xdr.SorobanTransactionMetaV2({ ext: xdr.SorobanTransactionMetaExt.v0(), returnValue: retval }),
+      sorobanMeta: new xdr.SorobanTransactionMetaV2({
+        ext: xdr.SorobanTransactionMetaExt.v0(),
+        returnValue: retval,
+      }),
       events: [],
       diagnosticEvents: [],
     }),

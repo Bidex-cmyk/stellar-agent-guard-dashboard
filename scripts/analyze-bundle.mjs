@@ -197,13 +197,10 @@ function delta(currentBytes, baselineBytes) {
  */
 export function renderReport(current, baseline, { budgetBytes, metric }) {
   const routes = Object.keys(current.pages).sort();
-  const metricOf = (page) =>
-    metric === "initial" ? page.initialJsGzipBytes : page.ownJsBytes;
+  const metricOf = (page) => (metric === "initial" ? page.initialJsGzipBytes : page.ownJsBytes);
   const budgetName = metric === "initial" ? "initial JS (gzip)" : "page bundle";
 
-  const violations = routes.filter(
-    (route) => metricOf(current.pages[route]) > budgetBytes,
-  );
+  const violations = routes.filter((route) => metricOf(current.pages[route]) > budgetBytes);
   const initialWarnings = routes.filter(
     (route) => current.pages[route].initialJsGzipBytes > budgetBytes,
   );
@@ -213,14 +210,18 @@ export function renderReport(current, baseline, { budgetBytes, metric }) {
   lines.push("## Bundle size report");
   lines.push("");
   if (baseline) {
-    lines.push(`Baseline: \`${baseline.headCommit ?? "main"}\` — sizes below show the change against it.`);
+    lines.push(
+      `Baseline: \`${baseline.headCommit ?? "main"}\` — sizes below show the change against it.`,
+    );
   } else {
     lines.push(
       "Baseline for `main` could not be built on this run (expected while the analyzer setup is landing), so only absolute sizes are shown.",
     );
   }
   lines.push("");
-  lines.push("| Route | Page bundle | vs main | Initial JS (raw) | Initial JS (gzip) | vs main (gzip) |");
+  lines.push(
+    "| Route | Page bundle | vs main | Initial JS (raw) | Initial JS (gzip) | vs main (gzip) |",
+  );
   lines.push("| --- | ---: | ---: | ---: | ---: | ---: |");
   for (const route of routes) {
     const page = current.pages[route];
@@ -264,9 +265,7 @@ export function renderReport(current, baseline, { budgetBytes, metric }) {
         `${violations.map((route) => `\`${route}\``).join(", ")}.`,
     );
   } else {
-    lines.push(
-      `✅ **Budget met:** every ${budgetName} is within ${kb(budgetBytes)}.`,
-    );
+    lines.push(`✅ **Budget met:** every ${budgetName} is within ${kb(budgetBytes)}.`);
   }
   lines.push("");
 
@@ -275,9 +274,7 @@ export function renderReport(current, baseline, { budgetBytes, metric }) {
 
 /** Per-chunk deltas sorted by absolute gzip movement, largest first. */
 export function chunkDeltas(currentChunks, baselineChunks, limit = 10) {
-  const baselineByChunk = new Map(
-    (baselineChunks ?? []).map((chunk) => [chunk.chunk, chunk]),
-  );
+  const baselineByChunk = new Map((baselineChunks ?? []).map((chunk) => [chunk.chunk, chunk]));
   const deltas = [];
   for (const chunk of currentChunks ?? []) {
     const base = baselineByChunk.get(chunk.chunk);
@@ -379,8 +376,7 @@ function main() {
   process.exitCode = 2;
 }
 
-const invokedDirectly =
-  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
   try {
     main();

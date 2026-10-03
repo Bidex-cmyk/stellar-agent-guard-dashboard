@@ -57,14 +57,21 @@ export interface FieldIssue {
 }
 
 export type ValidationResult =
-  | { ok: true; config: PolicyConfig; scval: xdr.ScVal }
-  | { ok: false; issues: FieldIssue[] };
+  { ok: true; config: PolicyConfig; scval: xdr.ScVal } | { ok: false; issues: FieldIssue[] };
 
-function parseCap(value: string, field: keyof PolicyDraft, label: string, issues: FieldIssue[]): bigint {
+function parseCap(
+  value: string,
+  field: keyof PolicyDraft,
+  label: string,
+  issues: FieldIssue[],
+): bigint {
   const trimmed = value.trim();
   if (trimmed === "") return 0n;
   if (!/^\d+$/.test(trimmed)) {
-    issues.push({ field, message: `${label} must be a whole number of units, or blank to disable` });
+    issues.push({
+      field,
+      message: `${label} must be a whole number of units, or blank to disable`,
+    });
     return 0n;
   }
   try {
@@ -76,7 +83,12 @@ function parseCap(value: string, field: keyof PolicyDraft, label: string, issues
   }
 }
 
-function parseAddresses(value: string, field: keyof PolicyDraft, label: string, issues: FieldIssue[]): string[] {
+function parseAddresses(
+  value: string,
+  field: keyof PolicyDraft,
+  label: string,
+  issues: FieldIssue[],
+): string[] {
   const out: string[] = [];
   for (const line of value.split(/[\n,]/)) {
     const trimmed = line.trim();
@@ -129,7 +141,13 @@ export function buildPolicyConfig(draft: PolicyDraft): ValidationResult {
       });
       continue;
     }
-    const fns = tail && tail.trim() !== "" ? tail.split(",").map((fn) => fn.trim()).filter(Boolean) : null;
+    const fns =
+      tail && tail.trim() !== ""
+        ? tail
+            .split(",")
+            .map((fn) => fn.trim())
+            .filter(Boolean)
+        : null;
     protocols.push({ contract: head, fns });
   }
 
@@ -188,7 +206,9 @@ export function draftFromConfig(config: PolicyConfig): PolicyDraft {
     recipients: config.recipients.join("\n"),
     allowAnyRecipient: config.allow_any_recipient,
     protocols: config.protocols
-      .map((rule) => (rule.fns && rule.fns.length > 0 ? `${rule.contract}:${rule.fns.join(",")}` : rule.contract))
+      .map((rule) =>
+        rule.fns && rule.fns.length > 0 ? `${rule.contract}:${rule.fns.join(",")}` : rule.contract,
+      )
       .join("\n"),
     activeFrom: renderBigint(config.active_from),
     activeUntil: renderBigint(config.active_until),

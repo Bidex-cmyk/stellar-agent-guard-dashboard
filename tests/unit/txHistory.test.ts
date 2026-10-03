@@ -37,10 +37,7 @@ function entry(overrides: Partial<TxHistoryEntry> = {}): TxHistoryEntry {
 test("a recorded transaction is persisted and reloaded newest first", () => {
   const storage = fakeStorage();
   recordTx({ hash: "h1", operation: "freeze", status: "confirmed", feeStroops: "100" }, storage);
-  recordTx(
-    { hash: "h2", operation: "set_policy", status: "failed", feeStroops: null },
-    storage,
-  );
+  recordTx({ hash: "h2", operation: "set_policy", status: "failed", feeStroops: null }, storage);
 
   const loaded = loadTxHistory(storage);
   assert.equal(loaded.length, 2);
@@ -79,7 +76,10 @@ test("the history is capped at 200 entries, dropping the oldest", () => {
   assert.equal(loaded.length, TX_HISTORY_LIMIT);
   // Newest first: the very last record is on top, the very first was dropped.
   assert.equal(loaded[0]?.hash, `h${TX_HISTORY_LIMIT + 4}`);
-  assert.equal(loaded.some((item) => item.hash === "h0"), false);
+  assert.equal(
+    loaded.some((item) => item.hash === "h0"),
+    false,
+  );
 });
 
 test("re-recording a hash replaces the entry instead of duplicating it", () => {

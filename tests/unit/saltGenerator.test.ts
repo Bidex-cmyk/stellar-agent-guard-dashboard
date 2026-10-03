@@ -44,8 +44,14 @@ function hexPair(bytes: Uint8Array): string {
  * second opinion about what `predictContractId` should return.
  */
 function contractIdPerSpec(deployer: string, salt: Uint8Array, passphrase: string): string {
-  const u32 = (value: number): number[] => [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff];
-  const hash = (bytes: Uint8Array): Uint8Array => new Uint8Array(createHash("sha256").update(bytes).digest());
+  const u32 = (value: number): number[] => [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
+  const hash = (bytes: Uint8Array): Uint8Array =>
+    new Uint8Array(createHash("sha256").update(bytes).digest());
 
   const pubkey = StrKey.decodeEd25519PublicKey(deployer);
   const networkId = hash(new TextEncoder().encode(passphrase));
@@ -146,7 +152,10 @@ test("address derivation matches the Soroban contract-id specification", async (
   assert.equal(preview.address, expected);
 
   // The same value the deploy flow compares against after signing.
-  assert.equal(await predictContractId({ deployerPublicKey: DEPLOYER, salt: salt.bytes }), expected);
+  assert.equal(
+    await predictContractId({ deployerPublicKey: DEPLOYER, salt: salt.bytes }),
+    expected,
+  );
 });
 
 test("a different salt or network moves the predicted address", async () => {
@@ -180,7 +189,11 @@ test("a reusable predictor pins the deployer and varies only the salt", async ()
     deployerPublicKey: DEPLOYER,
     passphrase: "some network",
     predict: async (params) => {
-      seen.push({ salt: hexPair(params.salt), deployer: params.deployerPublicKey, passphrase: params.passphrase });
+      seen.push({
+        salt: hexPair(params.salt),
+        deployer: params.deployerPublicKey,
+        passphrase: params.passphrase,
+      });
       return `C${params.salt[0]}`;
     },
   });
@@ -197,7 +210,10 @@ test("an unreachable vanity pattern is refused before any attempt is spent", () 
   assert.equal(validateVanityPattern("cab77", "suffix"), null, "case is cosmetic");
   assert.match(validateVanityPattern("  ", "prefix") ?? "", /Enter the text/);
   assert.match(validateVanityPattern("A".repeat(13), "prefix") ?? "", /out of reach/);
-  assert.match(validateVanityPattern("A".repeat(13), "prefix") ?? "", /each character is 1 chance in 32/);
+  assert.match(
+    validateVanityPattern("A".repeat(13), "prefix") ?? "",
+    /each character is 1 chance in 32/,
+  );
   // Strkey base32 is A-Z plus 2-7: the digits 0, 1, 8 and 9 do not exist in it.
   assert.match(validateVanityPattern("AB08", "prefix") ?? "", /base32/);
   assert.match(validateVanityPattern("A B", "suffix") ?? "", /base32/);
@@ -218,8 +234,15 @@ test("a vanity search returns the salt whose address really matches", async () =
   if (outcome.status !== "found") return;
   assert.equal(outcome.attempts, 3);
   assert.equal(outcome.address, makeAddress("CAB77"));
-  assert.equal(hexPair(outcome.salt), "33".repeat(SALT_BYTES), "the salt reported is the one that produced the address");
-  assert.deepEqual(progress.map((entry) => entry.attempts), [3]);
+  assert.equal(
+    hexPair(outcome.salt),
+    "33".repeat(SALT_BYTES),
+    "the salt reported is the one that produced the address",
+  );
+  assert.deepEqual(
+    progress.map((entry) => entry.attempts),
+    [3],
+  );
 });
 
 test("a suffix pattern is matched at the end of the address", async () => {
@@ -275,7 +298,10 @@ test("the closest candidate is the best partial match, not the largest string", 
   assert.equal(outcome.reason, "exhausted");
   assert.equal(progress.length, 1, "progress is reported once per 64 attempts");
   assert.equal(progress[0]?.attempts, 64);
-  assert.ok(progress[0]?.closest.startsWith("CQA"), `expected the 2-character match, got ${progress[0]?.closest}`);
+  assert.ok(
+    progress[0]?.closest.startsWith("CQA"),
+    `expected the 2-character match, got ${progress[0]?.closest}`,
+  );
 });
 
 test("an invalid pattern never calls the predictor", async () => {
@@ -340,7 +366,10 @@ test("contract addresses are told apart from account addresses", () => {
   assert.equal(isContractAddress(PHASE1_ARTIFACT.guard), true);
   assert.equal(isContractAddress(` ${PHASE1_ARTIFACT.token} `), true);
   assert.equal(isContractAddress(DEPLOYER), false);
-  assert.equal(isContractAddress("CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU8"), false);
+  assert.equal(
+    isContractAddress("CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU8"),
+    false,
+  );
 });
 
 /** A 56-character strkey-shaped string with the given head. */

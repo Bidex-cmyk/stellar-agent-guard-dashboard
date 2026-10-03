@@ -142,7 +142,11 @@ export function validateRange(range: TimeRange): string | null {
   if (range.fromUnixSecs === null && range.toUnixSecs === null) {
     return "Pick a start and end date, or use a preset.";
   }
-  if (range.fromUnixSecs !== null && range.toUnixSecs !== null && range.fromUnixSecs > range.toUnixSecs) {
+  if (
+    range.fromUnixSecs !== null &&
+    range.toUnixSecs !== null &&
+    range.fromUnixSecs > range.toUnixSecs
+  ) {
     return "The start date must not be after the end date.";
   }
   return null;
@@ -165,8 +169,13 @@ export function ledgerWindowForRange(
   // The oldest ledger RPC may still serve bounds how far back a query can
   // reach at all; a start earlier than that is clamped so the request does
   // not fail outright (the caller can warn on the clamp).
-  const startLedger = Math.max(1, estimateLedgerAtTime(anchor, range.fromUnixSecs, averageCloseSecs));
+  const startLedger = Math.max(
+    1,
+    estimateLedgerAtTime(anchor, range.fromUnixSecs, averageCloseSecs),
+  );
   const endLedger =
-    range.toUnixSecs === null ? null : estimateLedgerAtTime(anchor, range.toUnixSecs, averageCloseSecs);
+    range.toUnixSecs === null
+      ? null
+      : estimateLedgerAtTime(anchor, range.toUnixSecs, averageCloseSecs);
   return { startLedger, endLedger };
 }

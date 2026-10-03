@@ -222,5 +222,9 @@ test("the chosen timeout persists and validates on reload", () => {
   saveIdleTimeoutMs(30 * 60 * 1000, storage);
   assert.equal(loadIdleTimeoutMs(storage), 30 * 60 * 1000);
   data.set(IDLE_TIMEOUT_STORAGE_KEY, "12345"); // not an offered option
-  assert.equal(loadIdleTimeoutMs(storage), IDLE_TIMEOUT_OPTIONS[1]?.valueMs, "invalid value → default");
+  assert.equal(
+    loadIdleTimeoutMs(storage),
+    IDLE_TIMEOUT_OPTIONS[1]?.valueMs,
+    "invalid value → default",
+  );
 });

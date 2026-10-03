@@ -1,0 +1,22 @@
+# Generated, vendored and served-verbatim trees: reformatting them would churn
+# bytes nobody authors. `public/**` mirrors the eslint ignore for the same
+# reason (a plain worker/service-worker script, exercised by tests/unit/pwa.test.ts).
+node_modules/
+.next/
+out/
+dist/
+.cache/
+test-results/
+playwright-report/
+vendor/
+public/
+package-lock.json
+
+# Evidence stays byte-stable: the pinned WASM artifact and the captured/golden
+# RPC and proof JSON are read by tests and compared against their hashes, so a
+# format run must never touch them (same golden-file rationale as
+# stellar-agent-guard-sdk#138 — stable diffs across format runs).
+tests/fixtures/
+
+# Screenshots are binary evidence, not source.
+docs/screens/

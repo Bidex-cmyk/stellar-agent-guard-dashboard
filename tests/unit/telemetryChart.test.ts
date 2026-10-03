@@ -5,10 +5,11 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { after, before, mock, test } from "node:test";
 import type axeCore from "axe-core";
-import type { GuardEvent } from "stellar-agent-guard-sdk";
+import type { TelemetryEvent } from "../../lib/guard/telemetry.ts";
 import { installDom, loadReact, sleep, type Act } from "./domHarness.ts";
+import { withIdentity } from "../mocks/eventFixtures.ts";
 import { TelemetryChart } from "../../components/TelemetryChart.tsx";
 import { GuardContext, GuardEventsContext } from "../../components/GuardProvider.tsx";
 
@@ -21,12 +22,22 @@ let axe: typeof axeCore;
 
 const GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
 
-// Anchor fixtures to the start of the current 5-minute interval, so the
-// recent events always share the chart's last bucket whatever the wall clock.
-const BUCKET_START = Math.floor(Date.now() / 300_000) * 300_000;
+// Pin the wall clock. The chart picks its intervals from `Date.now()` when it
+// renders, so anchoring fixtures to the real clock at module load raced the
+// chart across the 5-minute boundary between load and render: a CI run that
+// loaded at 15:09:11 put its events in the 15:05 bucket, but the chart rendered
+// at 15:10:06 and had already rolled to 15:10, so it showed every bucket empty.
+// A frozen clock makes module load and render read the same instant, whatever
+// the wall clock happens to do. Mid-interval, so the boundary is never near.
+const FIXED_NOW = Date.UTC(2026, 9, 2, 15, 7, 30);
+mock.timers.enable({ apis: ["Date"], now: FIXED_NOW });
 
-function event(minutesAgo: number, result: "allowed" | "blocked"): GuardEvent {
-  return {
+// Anchor fixtures to the start of the frozen 5-minute interval, so the recent
+// events always share the chart's last bucket.
+const BUCKET_START = Math.floor(FIXED_NOW / 300_000) * 300_000;
+
+function event(minutesAgo: number, result: "allowed" | "blocked"): TelemetryEvent {
+  return withIdentity({
     kind: "auth_checked",
     topic: "event_auth_checked",
     source: result === "allowed" ? "ledger" : "diagnostic",
@@ -34,15 +45,24 @@ function event(minutesAgo: number, result: "allowed" | "blocked"): GuardEvent {
     ledger: result === "allowed" ? 1000 + minutesAgo : null,
     ledgerClosedAt: new Date(BUCKET_START + 1_000 - minutesAgo * 60_000).toISOString(),
     transactionHash: null,
-    decision: { result, reason: result === "blocked" ? "per_tx_cap_exceeded" : null, source: "ledger" },
+    decision: {
+      result,
+      reason: result === "blocked" ? "per_tx_cap_exceeded" : null,
+      source: "ledger",
+    },
     data: {},
-  };
+  });
 }
 
 const bucketSecs = BigInt(BUCKET_START / 1000);
 
 // Three in the current interval (offsets of seconds), one 40 minutes earlier.
-const EVENTS: GuardEvent[] = [event(0, "allowed"), event(0.01, "allowed"), event(0.015, "blocked"), event(40, "allowed")];
+const EVENTS: TelemetryEvent[] = [
+  event(0, "allowed"),
+  event(0.01, "allowed"),
+  event(0.015, "blocked"),
+  event(40, "allowed"),
+];
 
 // A partial context is enough for the chart.
 const CONTEXT: any = {
@@ -82,7 +102,11 @@ before(async () => {
       react.createElement(
         GuardContext.Provider,
         { value: CONTEXT },
-        react.createElement(GuardEventsContext.Provider, { value: EVENTS }, react.createElement(TelemetryChart)),
+        react.createElement(
+          GuardEventsContext.Provider,
+          { value: EVENTS },
+          react.createElement(TelemetryChart),
+        ),
       ),
     );
   });
@@ -95,7 +119,10 @@ before(async () => {
   };
 });
 
-after(() => unmount());
+after(async () => {
+  await unmount();
+  mock.timers.reset();
+});
 
 function svg(): SVGSVGElement {
   const found = container.querySelector<SVGSVGElement>('svg[role="img"]');
@@ -115,7 +142,9 @@ test("passes automated axe-core WCAG 2.1 AA checks with data present", async () 
     rules: { "color-contrast": { enabled: false } },
   });
   assert.deepEqual(
-    results.violations.map((violation) => `${violation.id}: ${violation.nodes[0]?.target.join(" ")}`),
+    results.violations.map(
+      (violation) => `${violation.id}: ${violation.nodes[0]?.target.join(" ")}`,
+    ),
     [],
   );
 });
@@ -132,8 +161,14 @@ test("arrow keys move through intervals and the readout is announced", async () 
   const status = container.querySelector('[role="status"]');
   assert.ok(status);
   await key("End");
-  assert.match(status.textContent ?? "", /2 allowed, 1 blocked, 12,345,678,901,234,567,000 stroops settled/);
-  assert.ok(container.querySelector(".tchart-tip"), "the visual tooltip follows keyboard focus too");
+  assert.match(
+    status.textContent ?? "",
+    /2 allowed, 1 blocked, 12,345,678,901,234,567,000 stroops settled/,
+  );
+  assert.ok(
+    container.querySelector(".tchart-tip"),
+    "the visual tooltip follows keyboard focus too",
+  );
   await key("Home");
   assert.match(status.textContent ?? "", /0 allowed, 0 blocked, 0 stroops/);
   await key("Escape");
@@ -155,7 +190,10 @@ test("hovering a column shows the tooltip with exact counts and stroops", async 
 
 test("the window toggle switches between 1h, 6h and 24h", async () => {
   const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="group"] button')];
-  assert.deepEqual(buttons.map((button) => button.textContent), ["1h", "6h", "24h"]);
+  assert.deepEqual(
+    buttons.map((button) => button.textContent),
+    ["1h", "6h", "24h"],
+  );
   assert.equal(buttons[0]!.getAttribute("aria-pressed"), "true");
   await act(async () => buttons[2]!.click());
   assert.equal(buttons[2]!.getAttribute("aria-pressed"), "true");

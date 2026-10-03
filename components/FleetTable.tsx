@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatStroopsWithUnit } from "../lib/guard/formatters.ts";
+import { POLLING, jitteredInterval } from "../lib/guard/polling.ts";
 import {
   pollFleet,
   filterFleet,
@@ -15,6 +16,7 @@ import { loadInstances } from "../lib/guard/instance.ts";
 import { freezeGuard } from "../lib/guard/guardOps.ts";
 import { NETWORK } from "../lib/guard/network.ts";
 import { useGuard } from "./GuardProvider.tsx";
+import { fleetTableState, fleetEmptyCopy } from "../lib/guard/fleetTableState.ts";
 import { starLink } from "./bits.tsx";
 import { useRouter } from "next/navigation";
 import { freighterSigner } from "../lib/guard/wallet.ts";
@@ -22,10 +24,10 @@ import { freighterSigner } from "../lib/guard/wallet.ts";
 export function FleetTable() {
   const { wallet, server } = useGuard();
   const router = useRouter();
-  
+
   const [rows, setRows] = useState<FleetRow[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [search, setSearch] = useState("");
   const [networkFilter, setNetworkFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<DerivedStatus | null>(null);
@@ -46,9 +48,9 @@ export function FleetTable() {
         setLoading(false);
       }
     };
-    
+
     fetchFleet();
-    const interval = setInterval(fetchFleet, 5000);
+    const interval = setInterval(fetchFleet, jitteredInterval(POLLING.fleetMs));
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -58,6 +60,19 @@ export function FleetTable() {
   const filteredAndSorted = useMemo(() => {
     return sortFleet(filterFleet(rows, search, networkFilter, statusFilter), sortKey);
   }, [rows, search, networkFilter, statusFilter, sortKey]);
+
+  const tableState = fleetTableState({
+    loading,
+    registryCount: rows.length,
+    filteredCount: filteredAndSorted.length,
+  });
+  const empty = fleetEmptyCopy(tableState);
+
+  const clearFilters = () => {
+    setSearch("");
+    setNetworkFilter(null);
+    setStatusFilter(null);
+  };
 
   const handleFreeze = async (guard: string) => {
     if (!wallet) {
@@ -107,7 +122,7 @@ export function FleetTable() {
             placeholder="Search by name or address..."
           />
         </label>
-        
+
         <div className="row" style={{ flex: 3 }}>
           <label className="field" style={{ marginBottom: 0, flex: 1 }}>
             <span className="lbl">Network</span>
@@ -123,9 +138,7 @@ export function FleetTable() {
             <span className="lbl">Status</span>
             <select
               value={statusFilter || ""}
-              onChange={(e) =>
-                setStatusFilter((e.target.value as DerivedStatus) || null)
-              }
+              onChange={(e) => setStatusFilter((e.target.value as DerivedStatus) || null)}
             >
               <option value="">All Statuses</option>
               <option value="Active">Active</option>
@@ -160,46 +173,64 @@ export function FleetTable() {
             </tr>
           </thead>
           <tbody>
-            {loading && rows.length === 0 ? (
+            {tableState.kind === "loading" && (
               <tr>
                 <td
                   colSpan={6}
-                  className="tiny muted"
+                  className="tiny muted fleet-empty"
                   style={{ textAlign: "center", padding: "20px" }}
                 >
-                  Loading fleet data...
+                  <strong>{empty!.title}</strong>
+                  <span className="tiny muted">{empty!.hint}</span>
                 </td>
               </tr>
-            ) : filteredAndSorted.length === 0 ? (
+            )}
+            {tableState.kind === "registry-empty" && (
               <tr>
                 <td
                   colSpan={6}
-                  className="tiny muted"
-                  style={{ textAlign: "center", padding: "20px" }}
+                  className="fleet-empty"
+                  style={{ textAlign: "center", padding: "28px 20px" }}
                 >
-                  No guards found
+                  <strong>{empty!.title}</strong>
+                  <span className="tiny muted">{empty!.hint}</span>
+                  <div style={{ marginTop: 10 }}>
+                    <Link href="/configure">Open the Configure page</Link>
+                  </div>
                 </td>
               </tr>
-            ) : (
+            )}
+            {tableState.kind === "filter-empty" && (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="fleet-empty"
+                  style={{ textAlign: "center", padding: "28px 20px" }}
+                >
+                  <strong>{empty!.title}</strong>
+                  <span className="tiny muted">{empty!.hint}</span>
+                  <div style={{ marginTop: 10 }}>
+                    <button className="secondary" onClick={clearFilters}>
+                      Clear search and filters
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {tableState.kind === "rows" &&
               filteredAndSorted.map((row) => (
                 <tr key={row.contact.address}>
                   <td>
                     <div>
                       <strong>{row.contact.label}</strong>
                     </div>
-                    <div className="mono tiny">
-                      {starLink(row.contact.address)}
-                    </div>
+                    <div className="mono tiny">{starLink(row.contact.address)}</div>
                   </td>
                   <td className="tiny">{row.network}</td>
                   <td>{renderStatus(row.derivedStatus)}</td>
+                  <td className="mono tiny">{formatStroopsWithUnit(row.spend24h)}</td>
                   <td className="mono tiny">
-                    {formatStroopsWithUnit(row.spend24h)}
-                  </td>
-                  <td className="mono tiny">
-                    {row.dmsCountdownSecs !== null
-                      ? `${row.dmsCountdownSecs}s`
-                      : "—"}
+                    {row.dmsCountdownSecs !== null ? `${row.dmsCountdownSecs}s` : "—"}
                   </td>
                   <td>
                     <div className="row" style={{ gap: "8px" }}>
@@ -221,8 +252,7 @@ export function FleetTable() {
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
+              ))}
           </tbody>
         </table>
       </div>

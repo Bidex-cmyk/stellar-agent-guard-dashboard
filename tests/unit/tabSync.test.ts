@@ -103,7 +103,12 @@ const GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
 describe("tab sync event validation", () => {
   it("accepts a well-formed event", () => {
     assert.equal(
-      isTabSyncEvent({ type: "GUARD_CHANGED", origin: "tab-a", at: FIXED_TIME.toISOString(), guard: GUARD }),
+      isTabSyncEvent({
+        type: "GUARD_CHANGED",
+        origin: "tab-a",
+        at: FIXED_TIME.toISOString(),
+        guard: GUARD,
+      }),
       true,
     );
   });
@@ -119,7 +124,12 @@ describe("tab sync event validation", () => {
       "an empty origin cannot be trusted",
     );
     assert.equal(
-      isTabSyncEvent({ type: "POLICY_UPDATED", origin: "tab-a", at: "now", payload: "not an object" }),
+      isTabSyncEvent({
+        type: "POLICY_UPDATED",
+        origin: "tab-a",
+        at: "now",
+        payload: "not an object",
+      }),
       false,
     );
   });
@@ -128,7 +138,11 @@ describe("tab sync event validation", () => {
 describe("BroadcastChannel transport", () => {
   it("broadcasts an event to another tab on the same channel name", () => {
     const hub = createMockHub();
-    const tabA = createTabSync({ channelFactory: hub.create, origin: "tab-a", now: () => FIXED_TIME });
+    const tabA = createTabSync({
+      channelFactory: hub.create,
+      origin: "tab-a",
+      now: () => FIXED_TIME,
+    });
     const tabB = createTabSync({ channelFactory: hub.create, origin: "tab-b" });
 
     try {
@@ -303,7 +317,12 @@ describe("localStorage fallback transport", () => {
   it("never replays its own write to the tab that wrote it", () => {
     const { storage, raw } = createMockStorage();
     const events = createMockEventTarget();
-    const tabA = createTabSync({ channelFactory: null, storage, eventTarget: events.target, origin: "tab-a" });
+    const tabA = createTabSync({
+      channelFactory: null,
+      storage,
+      eventTarget: events.target,
+      origin: "tab-a",
+    });
 
     try {
       const received: TabSyncEvent[] = [];
@@ -360,9 +379,15 @@ describe("localStorage fallback transport", () => {
       const received: TabSyncEvent[] = [];
       coordinator.subscribe((event) => received.push(event));
 
-      events.emit({ key: "some.other.key", newValue: '{"nonce":"x","event":{"type":"POLICY_UPDATED","origin":"tab-a","at":"now"}}' });
+      events.emit({
+        key: "some.other.key",
+        newValue: '{"nonce":"x","event":{"type":"POLICY_UPDATED","origin":"tab-a","at":"now"}}',
+      });
       events.emit({ key: TAB_SYNC_STORAGE_KEY, newValue: "{not json" });
-      events.emit({ key: TAB_SYNC_STORAGE_KEY, newValue: JSON.stringify({ nonce: "y", event: { type: "NOPE" } }) });
+      events.emit({
+        key: TAB_SYNC_STORAGE_KEY,
+        newValue: JSON.stringify({ nonce: "y", event: { type: "NOPE" } }),
+      });
       events.emit({ key: TAB_SYNC_STORAGE_KEY, newValue: null });
 
       assert.deepEqual(received, []);
@@ -391,7 +416,12 @@ describe("localStorage fallback transport", () => {
 
 describe("no transport available", () => {
   it("degrades to an inert coordinator rather than throwing", () => {
-    const coordinator = createTabSync({ channelFactory: null, storage: null, eventTarget: null, origin: "tab-a" });
+    const coordinator = createTabSync({
+      channelFactory: null,
+      storage: null,
+      eventTarget: null,
+      origin: "tab-a",
+    });
     try {
       assert.equal(coordinator.transport, "none");
       const received: TabSyncEvent[] = [];

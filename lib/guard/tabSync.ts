@@ -34,10 +34,7 @@ export const TAB_SYNC_STORAGE_KEY = "stellar-agent-guard-dashboard.tab-sync.v1";
  * payloads are the chain's to describe, not this module's.
  */
 export type TabSyncEventType =
-  | "GUARD_CHANGED"
-  | "FREEZE_STATE_CHANGED"
-  | "WALLET_DISCONNECTED"
-  | "POLICY_UPDATED";
+  "GUARD_CHANGED" | "FREEZE_STATE_CHANGED" | "WALLET_DISCONNECTED" | "POLICY_UPDATED";
 
 export const TAB_SYNC_EVENT_TYPES: readonly TabSyncEventType[] = [
   "GUARD_CHANGED",
@@ -71,7 +68,10 @@ export function isTabSyncEvent(value: unknown): value is TabSyncEvent {
   if (typeof event.origin !== "string" || event.origin.length === 0) return false;
   if (typeof event.at !== "string") return false;
   if (event.guard !== undefined && typeof event.guard !== "string") return false;
-  if (event.payload !== undefined && (typeof event.payload !== "object" || event.payload === null)) {
+  if (
+    event.payload !== undefined &&
+    (typeof event.payload !== "object" || event.payload === null)
+  ) {
     return false;
   }
   return true;
@@ -357,7 +357,8 @@ export function createTabSync(options: TabSyncOptions = {}): TabSyncCoordinator 
   }
 
   const storage = options.storage === undefined ? defaultStorage() : options.storage;
-  const eventTarget = options.eventTarget === undefined ? defaultEventTarget() : options.eventTarget;
+  const eventTarget =
+    options.eventTarget === undefined ? defaultEventTarget() : options.eventTarget;
   if (storage && eventTarget) {
     return createStorageCoordinator({ channelName, origin, now, storage, eventTarget, randomId });
   }

@@ -83,7 +83,10 @@ test("getSnapshot is referentially stable between changes", () => {
 
 test("formatHashForDevice uppercases and groups the hash into 8-character blocks", () => {
   const formatted = formatHashForDevice(HASH64);
-  assert.equal(formatted, "A1B2C3D4 E5F60718 293A4B5C 6D7E8F90 A1B2C3D4 E5F60718 293A4B5C 6D7E8F90");
+  assert.equal(
+    formatted,
+    "A1B2C3D4 E5F60718 293A4B5C 6D7E8F90 A1B2C3D4 E5F60718 293A4B5C 6D7E8F90",
+  );
   // Grouping preserves every character — nothing is dropped for readability.
   assert.equal(formatted.replace(/ /g, ""), HASH64.toUpperCase());
 });

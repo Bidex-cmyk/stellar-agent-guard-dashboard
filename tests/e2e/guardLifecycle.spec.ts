@@ -25,8 +25,7 @@ const AGENT_ADDRESS = StrKey.encodeEd25519PublicKey(new Uint8Array(32).fill(7));
 /** The agent's raw 32-byte Ed25519 key, hex (never the G… strkey form). */
 const AGENT_PUBKEY_HEX = "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0";
 
-const AGENT_PUBKEY_PLACEHOLDER =
-  "53b093e0281a2d8f4276b77fd21e3380b3329f09097ace3d9e60cf0f2f9039e2";
+const AGENT_PUBKEY_PLACEHOLDER = "53b093e0281a2d8f4276b77fd21e3380b3329f09097ace3d9e60cf0f2f9039e2";
 
 /** Enter the deploy step's parameters, the ones `initialize` will be audited against. */
 async function fillInitParameters(page: Page): Promise<void> {
@@ -92,9 +91,9 @@ test.describe("guard lifecycle: deploy → configure → freeze → unfreeze", (
     // The artifact gate: deployment is only permitted once the chain's own
     // bytes hash to the pinned Phase 1 artifact.
     await expect(page.getByText("deploy is permitted")).toBeVisible();
-    await expect(
-      page.locator(".stat", { hasText: "Identity" }).locator(".v"),
-    ).toHaveText("matches");
+    await expect(page.locator(".stat", { hasText: "Identity" }).locator(".v")).toHaveText(
+      "matches",
+    );
 
     // Parameters are entered *before* anything is signed, so the pre-flight
     // checklist is green by the time the wallet is prompted.
@@ -143,6 +142,11 @@ test.describe("guard lifecycle: deploy → configure → freeze → unfreeze", (
     await expect(policyPanel.locator(".error")).toHaveCount(0);
 
     await policyPanel.getByRole("button", { name: "Sign and install policy" }).click();
+    // The diff is the operator's last look before the wallet prompt, so it has to
+    // be acknowledged explicitly before anything is signed.
+    const policyDiff = page.getByRole("dialog", { name: "Policy changes" });
+    await expect(policyDiff).toBeVisible();
+    await policyDiff.getByRole("button", { name: "Confirm and sign" }).click();
     await expect(page.getByText("set_policy landed on chain")).toBeVisible({ timeout: 60_000 });
 
     // The form re-seeds from what the chain now reports — the receipt is the
@@ -203,7 +207,9 @@ test.describe("guard lifecycle: deploy → configure → freeze → unfreeze", (
     await expect(page.getByText("Unfreeze confirmed on chain")).toBeVisible({ timeout: 60_000 });
     await expect(adminFreeze.locator(".v")).toHaveText("clear");
     await expect(adminFreeze.locator(".v")).toHaveClass(/ok/);
-    await expect(page.getByText("Chain currently reports:").locator(".pill.ok")).toHaveText("clear");
+    await expect(page.getByText("Chain currently reports:").locator(".pill.ok")).toHaveText(
+      "clear",
+    );
     await expect(freezeButton).toBeEnabled();
 
     // The mock chain really did apply the writes, in order — this is the
