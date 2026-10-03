@@ -17,7 +17,7 @@ import { freezeGuard } from "../lib/guard/guardOps.ts";
 import { NETWORK } from "../lib/guard/network.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { fleetTableState, fleetEmptyCopy } from "../lib/guard/fleetTableState.ts";
-import { starLink } from "./bits.tsx";
+import { Skeleton, starLink } from "./bits.tsx";
 import { useRouter } from "next/navigation";
 import { freighterSigner } from "../lib/guard/wallet.ts";
 
@@ -173,18 +173,32 @@ export function FleetTable() {
             </tr>
           </thead>
           <tbody>
-            {tableState.kind === "loading" && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="tiny muted fleet-empty"
-                  style={{ textAlign: "center", padding: "20px" }}
-                >
-                  <strong>{empty!.title}</strong>
-                  <span className="tiny muted">{empty!.hint}</span>
-                </td>
-              </tr>
-            )}
+            {tableState.kind === "loading" &&
+              /* The initial fleet poll is a pending read, so it reserves the
+                 table's shape with skeleton rows instead of a text line that
+                 collapses when the rows land. Not zeros, not an empty state. */
+              [0, 1, 2].map((row) => (
+                <tr key={row} aria-busy="true" aria-hidden="true">
+                  <td>
+                    <Skeleton lines={1} />
+                  </td>
+                  <td>
+                    <Skeleton lines={1} />
+                  </td>
+                  <td>
+                    <Skeleton lines={1} />
+                  </td>
+                  <td>
+                    <Skeleton lines={1} />
+                  </td>
+                  <td>
+                    <Skeleton lines={1} />
+                  </td>
+                  <td>
+                    <Skeleton lines={1} />
+                  </td>
+                </tr>
+              ))}
             {tableState.kind === "registry-empty" && (
               <tr>
                 <td

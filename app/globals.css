@@ -753,6 +753,50 @@ code {
   }
 }
 
+/* ── Skeleton placeholders for pending reads (#31) ──────────────────────────
+
+   Sized in em so a skeleton inherits the font size of the slot it occupies
+   (`.stat .v` at 19px, `.stat .n` at 12px) and reserves the same height the
+   resolved value will — class parity with the loaded element is what prevents
+   the layout shift this component exists to prevent. */
+
+.skeleton {
+  display: inline-block;
+  height: 1em;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--line) 25%, var(--panel-2) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+/* Note-slot lines are shorter and thinner than value-slot lines. */
+.skeleton.slim {
+  height: 0.8em;
+  width: 70%;
+}
+
+.skeleton:not(.slim) {
+  width: 55%;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+/* Motion-sensitive users get a static block: the reservation (and therefore
+   the no-shift contract) is untouched — only the animation stops. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 .toast-head {
   display: flex;
   align-items: baseline;

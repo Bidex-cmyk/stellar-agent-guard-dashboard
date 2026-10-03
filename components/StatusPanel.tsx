@@ -8,11 +8,13 @@ import {
   Read,
   ReadSkeleton,
   ReadWithRetry,
+  Skeleton,
   Stat,
   TimeAgo,
   WarningBanner,
   short,
 } from "./bits.tsx";
+import { INITIAL_GRID_LABELS, skeletonSpecFor } from "../lib/guard/statusReadState.ts";
 import { CopyButton } from "./CopyButton.tsx";
 import { PHASE1_ARTIFACT, NETWORK } from "../lib/guard/network.ts";
 import { configureHref } from "../lib/guard/deeplink.ts";
@@ -98,10 +100,16 @@ export function StatusPanel() {
       ? evaluateDmsAlert(snapshot.status.value, snapshot.policy.ok ? snapshot.policy.value : null)
       : null;
 
+  // The panel is `aria-busy` exactly while the first read is in flight (no
+  // snapshot yet, no failure yet). A background refresh is NOT busy: the values
+  // on screen are the previous successful read (stale-while-revalidate), so
+  // re-announcing "busy" on every poll would only be noise.
+  const initialLoadPending = snapshot === null && snapshotError === null;
+
   return (
     <>
       {dmsAlert && dmsAlert.level !== "none" && <DmsAlertBanner alert={dmsAlert} />}
-      <div className="panel">
+      <div className="panel" aria-busy={initialLoadPending}>
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h2 style={{ margin: 0 }}>On-chain state</h2>
 
@@ -135,7 +143,23 @@ export function StatusPanel() {
           />
         )}
 
-        {!snapshot && !snapshotError && <p className="muted tiny">Reading the chain…</p>}
+        {!snapshot && !snapshotError && (
+          /* First-paint skeleton, before the first snapshot lands. The grid is
+             shaped like the resolved one — same labels, same value/note slots
+             (via skeletonSpecFor) — so the panel's height does not collapse
+             and jump when the reads resolve. The placeholders carry no values:
+             pending text is skeleton geometry, never a number (no fake zeros). */
+          <div className="grid" style={{ marginTop: 12 }}>
+            {INITIAL_GRID_LABELS.map((label) => (
+              <div className="stat" key={label} aria-hidden="true">
+                <div className="k">{label}</div>
+                <div className="v">
+                  <Skeleton lines={skeletonSpecFor(label).lines} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {policyState === "default-deny" && (
           <WarningBanner

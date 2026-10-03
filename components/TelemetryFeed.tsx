@@ -7,7 +7,7 @@ import { STREAM_BUFFER_LIMIT, type TelemetryEvent } from "../lib/guard/telemetry
 import { useGuard, useGuardEvents } from "./GuardProvider.tsx";
 import { TelemetryAlerts } from "./TelemetryAlerts.tsx";
 import { TelemetryChart } from "./TelemetryChart.tsx";
-import { ErrorBlock, TimeAgo, short, starLink, TxHashCell } from "./bits.tsx";
+import { ErrorBlock, Skeleton, TimeAgo, short, starLink, TxHashCell } from "./bits.tsx";
 import { DateRangePicker } from "./DateRangePicker.tsx";
 import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
 import {
@@ -376,11 +376,45 @@ export function TelemetryFeed() {
       <TelemetryChart />
 
       {events.length === 0 ? (
-        <p className="tiny muted">
-          {feed.watching
-            ? "No events from this guard yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
-            : "Start watching to tail this guard's events."}
-        </p>
+        feed.watching && feed.latestLedger === null ? (
+          /* The initial load: watching has started but the first poll has not
+             returned (no ledger cursor yet). This is a pending read, not an
+             empty result, so it renders as skeleton rows in the same table
+             shape the events will land in — not as an empty-looking message
+             and not as zeros. */
+          <div className="scrolly" aria-busy="true">
+            <table className="events">
+              {feedHead}
+              <tbody aria-hidden="true">
+                {[0, 1, 2].map((row) => (
+                  <tr key={row}>
+                    <td>
+                      <Skeleton lines={1} />
+                    </td>
+                    <td>
+                      <Skeleton lines={1} />
+                    </td>
+                    <td>
+                      <Skeleton lines={1} />
+                    </td>
+                    <td>
+                      <Skeleton lines={1} />
+                    </td>
+                    <td>
+                      <Skeleton lines={1} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="tiny muted">
+            {feed.watching
+              ? "No events from this guard yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
+              : "Start watching to tail this guard's events."}
+          </p>
+        )
       ) : rows.length === 0 ? (
         <p className="tiny muted">
           No events match the current filter. The feed still holds {events.length} event(s); widen
@@ -389,15 +423,7 @@ export function TelemetryFeed() {
       ) : (
         <div className="scrolly">
           <table className="events">
-            <thead>
-              <tr>
-                <th>Event</th>
-                <th>Decision</th>
-                <th>Source</th>
-                <th>Time</th>
-                <th>Transaction</th>
-              </tr>
-            </thead>
+            {feedHead}
             <tbody>
               {rows.map((event) => (
                 <TelemetryRow key={event.id} event={event} />
@@ -483,6 +509,18 @@ const TelemetryRow = memo(function TelemetryRow({ event }: { event: TelemetryEve
     </tr>
   );
 });
+
+const feedHead = (
+  <thead>
+    <tr>
+      <th>Event</th>
+      <th>Decision</th>
+      <th>Source</th>
+      <th>Time</th>
+      <th>Transaction</th>
+    </tr>
+  </thead>
+);
 
 function labelFor(event: GuardEvent): string {
   switch (event.kind) {
