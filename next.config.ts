@@ -13,7 +13,9 @@ import bundleAnalyzer from "@next/bundle-analyzer";
 // the one stage where the scheme has not yet been treated as an unreadable
 // resource. Server runtimes (`nextRuntime` set) keep the real `node:crypto`.
 type NodeCryptoResolveData = { request?: string } | null | undefined;
-type BeforeResolveHook = { tap(name: string, callback: (data: NodeCryptoResolveData) => void): void };
+type BeforeResolveHook = {
+  tap(name: string, callback: (data: NodeCryptoResolveData) => void): void;
+};
 type NodeCryptoShimCompiler = {
   hooks: {
     normalModuleFactory: {
@@ -56,7 +58,9 @@ const config: NextConfig = {
   turbopack: {},
   webpack(config, { nextRuntime }) {
     if (!nextRuntime) {
-      config.plugins.push(nodeCryptoShimPlugin(path.join(process.cwd(), "lib/compat/nodeCryptoShim.ts")));
+      config.plugins.push(
+        nodeCryptoShimPlugin(path.join(process.cwd(), "lib/compat/nodeCryptoShim.ts")),
+      );
     }
     return config;
   },

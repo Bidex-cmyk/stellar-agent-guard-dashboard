@@ -19,6 +19,7 @@ import {
   refusedEventsFromDiagnostics,
   type TelemetryEvent,
 } from "../../lib/guard/telemetry.ts";
+import { withIdentity } from "../mocks/eventFixtures.ts";
 
 const GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
 const ADMIN = Keypair.fromRawEd25519Seed(new Uint8Array(32).fill(1)).publicKey();
@@ -27,7 +28,7 @@ const U64_MAX = 18_446_744_073_709_551_615n;
 const I128_BIG = 170_141_183_460_469_231_731_687_303_715_884_105_727n;
 
 function event(overrides: Partial<TelemetryEvent> = {}): TelemetryEvent {
-  return {
+  return withIdentity({
     kind: "auth_checked",
     topic: "event_auth_checked",
     source: "ledger",
@@ -38,7 +39,7 @@ function event(overrides: Partial<TelemetryEvent> = {}): TelemetryEvent {
     decision: { result: "allowed", reason: null, source: "ledger" },
     data: {},
     ...overrides,
-  };
+  });
 }
 
 const sym = (name: string) => xdr.ScVal.scvSymbol(name);
@@ -71,7 +72,10 @@ describe("NDJSON formatting", () => {
     const separators = `a${String.fromCharCode(0x2028)}b${String.fromCharCode(0x2029)}c`;
     const line = ndjsonLine({ text: separators });
     assert.equal(line, '{"text":"a\\u2028b\\u2029c"}');
-    assert.equal(line.includes(String.fromCharCode(0x2028)) || line.includes(String.fromCharCode(0x2029)), false);
+    assert.equal(
+      line.includes(String.fromCharCode(0x2028)) || line.includes(String.fromCharCode(0x2029)),
+      false,
+    );
     assert.equal(JSON.parse(line).text, separators);
   });
 
@@ -151,7 +155,15 @@ describe("audit records", () => {
   });
 
   test("the full log is a header line then one line per event", () => {
-    const events = [event(), event({ kind: "heartbeat", topic: "event_heartbeat", decision: null, data: { at: 1_789_481_712n } })];
+    const events = [
+      event(),
+      event({
+        kind: "heartbeat",
+        topic: "event_heartbeat",
+        decision: null,
+        data: { at: 1_789_481_712n },
+      }),
+    ];
     const out = telemetryToAuditLog({
       events,
       bufferedCount: 2,
@@ -229,13 +241,21 @@ describe("filename", () => {
   test("is timestamped, filesystem-safe and ends in .ndjson", () => {
     const at = new Date("2026-09-25T14:03:07.123Z");
     assert.equal(auditLogFilename(at), "guard-audit-log-2026-09-25T14-03-07Z.ndjson");
-    assert.equal(auditLogFilename(at, "filtered"), "guard-audit-log-filtered-2026-09-25T14-03-07Z.ndjson");
+    assert.equal(
+      auditLogFilename(at, "filtered"),
+      "guard-audit-log-filtered-2026-09-25T14-03-07Z.ndjson",
+    );
     assert.equal(/[:/\\]/.test(auditLogFilename(at)), false);
   });
 });
 
 describe("raw XDR capture", () => {
-  function rawEvent(ledger: number, topics: xdr.ScVal[], value: xdr.ScVal, id: string): rpc.Api.EventResponse {
+  function rawEvent(
+    ledger: number,
+    topics: xdr.ScVal[],
+    value: xdr.ScVal,
+    id: string,
+  ): rpc.Api.EventResponse {
     return {
       id,
       type: "contract",
@@ -252,7 +272,7 @@ describe("raw XDR capture", () => {
   }
 
   function decoded(ledger: number, topic: string, kind: GuardEvent["kind"]): GuardEvent {
-    return {
+    return withIdentity({
       kind,
       topic,
       source: "ledger",
@@ -262,7 +282,7 @@ describe("raw XDR capture", () => {
       transactionHash: TX,
       decision: null,
       data: {},
-    };
+    });
   }
 
   test("pairs decoded ledger events with their raw page, skipping ones the SDK dropped", () => {
@@ -271,7 +291,12 @@ describe("raw XDR capture", () => {
     ]);
     const raw = [
       rawEvent(10, [sym("event_heartbeat")], heartbeatValue, "0000000042949672960-0000000000"),
-      rawEvent(10, [sym("not_a_guard_event")], xdr.ScVal.scvVoid(), "0000000042949672960-0000000001"),
+      rawEvent(
+        10,
+        [sym("not_a_guard_event")],
+        xdr.ScVal.scvVoid(),
+        "0000000042949672960-0000000001",
+      ),
       rawEvent(11, [sym("event_frozen")], xdr.ScVal.scvMap([]), "0000000047244640256-0000000000"),
     ];
     const out = attachLedgerXdr(
@@ -289,9 +314,14 @@ describe("raw XDR capture", () => {
   });
 
   test("GuardFeed attaches raw XDR from the getEvents page it polled", async () => {
-    const page = [rawEvent(10, [sym("event_heartbeat")], xdr.ScVal.scvMap([
-      new xdr.ScMapEntry({ key: sym("at"), val: xdr.ScVal.scvU64(U64_MAX) }),
-    ]), "0000000042949672960-0000000000")];
+    const page = [
+      rawEvent(
+        10,
+        [sym("event_heartbeat")],
+        xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: sym("at"), val: xdr.ScVal.scvU64(U64_MAX) })]),
+        "0000000042949672960-0000000000",
+      ),
+    ];
     const stub = {
       getLatestLedger: async () => ({ sequence: 10 }),
       getEvents: async () => ({ events: page, cursor: "c1", latestLedger: 10 }),
@@ -329,11 +359,16 @@ describe("raw XDR capture", () => {
         ext: xdr.ExtensionPoint.v0(),
         contractId,
         type: xdr.ContractEventType.diagnostic,
-        body: xdr.ContractEventBody.v0(new xdr.ContractEventV0({ topics: [sym("fn_call")], data: xdr.ScVal.scvVoid() })),
+        body: xdr.ContractEventBody.v0(
+          new xdr.ContractEventV0({ topics: [sym("fn_call")], data: xdr.ScVal.scvVoid() }),
+        ),
       }),
     });
 
-    for (const input of [[noise, diagnostic], [noise.toXDR("base64"), diagnostic.toXDR("base64")]]) {
+    for (const input of [
+      [noise, diagnostic],
+      [noise.toXDR("base64"), diagnostic.toXDR("base64")],
+    ]) {
       const [refused] = refusedEventsFromDiagnostics(input, GUARD);
       assert.ok(refused);
       assert.equal(refused.decision?.reason, "admin_frozen");

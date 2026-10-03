@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { ReadResult } from "../lib/guard/chain.ts";
 import { ENFORCEMENT_SCOPE_STATEMENT } from "../lib/guard/network.ts";
 import { lookupLabel, subscribeAddressBook } from "../lib/guard/addressBook.ts";
+import { CopyButton } from "./CopyButton.tsx";
 import {
   formatRawStroops,
   formatStroopsWithUnit,
@@ -23,7 +24,11 @@ export function Tabs() {
   return (
     <nav className="tabs">
       {tabs.map((tab) => (
-        <Link key={tab.href} href={tab.href} aria-current={pathname === tab.href ? "page" : undefined}>
+        <Link
+          key={tab.href}
+          href={tab.href}
+          aria-current={pathname === tab.href ? "page" : undefined}
+        >
           {tab.label}
         </Link>
       ))}
@@ -51,6 +56,39 @@ export function ScopeNotice({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/**
+ * The warning tier: one prominent banner for a state that is *safe* but not
+ * doing what the operator probably assumes it is doing.
+ *
+ * Established here by the default-deny status pass (issue #25) and shared, so
+ * the telemetry feed's per-row severity (issue #26) and the pending-status
+ * surfaces reuse one set of tokens rather than each inventing a red. `tier`
+ * picks the intensity: `warn` for "working as designed, read this", `danger` for
+ * "frozen/refused, act now" — the same two tiers as `.notice` and `.error`.
+ *
+ * `role="status"` announces it politely rather than interrupting: a state that
+ * is already true when the page loads is context, not an event.
+ */
+export function WarningBanner({
+  tier = "warn",
+  title,
+  children,
+  action,
+}: {
+  tier?: "warn" | "danger";
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className={`notice${tier === "danger" ? " danger" : ""}`} data-tier={tier} role="status">
+      <strong>{title}</strong>
+      {children}
+      {action}
+    </div>
+  );
+}
+
 export function ErrorBlock({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="error">
@@ -58,6 +96,75 @@ export function ErrorBlock({ title, detail }: { title: string; detail: string })
       <span className="mono">{detail}</span>
     </div>
   );
+}
+
+/**
+ * A read's label as a DOM-safe test id slug: `"status()"` → `"status-"`.
+ */
+function readSlug(label: string): string {
+  return label.replace(/[^a-z0-9]+/gi, "-");
+}
+
+/**
+ * Render a read's value, or its failure — with a retry that re-invokes only
+ * that read.
+ *
+ * There is no third branch on purpose: a read that did not succeed has no value
+ * to show, and substituting a zero would make an outage indistinguishable from a
+ * genuinely empty policy. While a retry is in flight the retry button is
+ * replaced by a status line — one re-read at a time, and a failing retry is
+ * never a dead end because the button comes back with the error.
+ */
+export function ReadWithRetry<T>({
+  result,
+  label,
+  onRetry,
+  retrying,
+  render,
+}: {
+  result: ReadResult<T>;
+  label: string;
+  onRetry: () => void;
+  retrying: boolean;
+  render: (value: T) => ReactNode;
+}) {
+  if (!result.ok) {
+    return (
+      <div className="error retryable" data-testid={`retryable-${readSlug(label)}`} role="alert">
+        <span className="t">{`${label}: read failed`}</span>
+        <span className="mono">{result.error}</span>
+        {retrying ? (
+          <span className="tiny" role="status">
+            Retrying…
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="secondary"
+            aria-label={`Retry ${label} fetch`}
+            onClick={onRetry}
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+  return <>{render(result.value)}</>;
+}
+
+/**
+ * The same read-with-retry component under the name call sites use when they
+ * are talking about the retry affordance itself; identical props.
+ */
+export const RetryableRead = ReadWithRetry;
+
+/**
+ * Inline pending state for one retried read, so the retried field can show
+ * progress without resetting the panels around it.
+ */
+export function ReadSkeleton({ label }: { label: string }) {
+  return <div className="skeleton-row" data-testid={`skeleton-${label}`} aria-hidden="true" />;
 }
 
 /**
@@ -88,13 +195,16 @@ export function Stat({
 }: {
   label: string;
   value: ReactNode;
-  note?: ReactNode;
-  tone?: "ok" | "warn" | "danger";
+  note?: ReactNode | undefined;
+  tone?: "ok" | "warn" | "danger" | undefined;
 }) {
   return (
     <div className="stat">
       <div className="k">{label}</div>
-      <div className={`v${tone ? ` ${tone}` : ""}`} style={tone ? { color: `var(--${tone})` } : undefined}>
+      <div
+        className={`v${tone ? ` ${tone}` : ""}`}
+        style={tone ? { color: `var(--${tone})` } : undefined}
+      >
         {value}
       </div>
       {note !== undefined && <div className="n">{note}</div>}
@@ -151,12 +261,27 @@ export function AddressText({
   );
 }
 
-export function relativeTime(iso: string | null): string {
-  if (!iso) return "never";
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  return `${Math.round(seconds / 3600)}h ago`;
+import { formatTimeAgo } from "../lib/guard/time.ts";
+
+export function TimeAgo({ iso, suffix = "" }: { iso: string | null; suffix?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!iso) return <span>never</span>;
+
+  const ts = Math.floor(new Date(iso).getTime() / 1000);
+  const nowSecs = Math.floor(now / 1000);
+  const rel = formatTimeAgo(ts, nowSecs);
+
+  return (
+    <time dateTime={iso} title={iso} className="timeago">
+      {rel}
+      {suffix}
+    </time>
+  );
 }
 
 /**
@@ -169,7 +294,10 @@ export function relativeTime(iso: string | null): string {
 export function OutcomeList({
   steps,
 }: {
-  steps: Array<{ label: string; result: { kind: string; hash?: string; ledger?: number | null; detail?: string } }>;
+  steps: Array<{
+    label: string;
+    result: { kind: string; hash?: string; ledger?: number | null; detail?: string };
+  }>;
 }) {
   return (
     <div style={{ marginTop: 8 }}>
@@ -186,7 +314,8 @@ export function OutcomeList({
           <span className="mono">{step.label}</span>
           {step.result.hash && (
             <div className="mono" style={{ marginLeft: 4 }}>
-              tx {starLink(step.result.hash)} ledger {step.result.ledger ?? "-"}
+              tx {starLink(step.result.hash)} ledger {step.result.ledger ?? "-"}{" "}
+              <CopyButton value={step.result.hash} label={`${step.label} transaction hash`} />
             </div>
           )}
           {step.result.detail && <div className="mono muted">{step.result.detail}</div>}
@@ -204,6 +333,22 @@ export function starLink(hash: string): ReactNode {
   );
 }
 
+/**
+ * A transaction hash as an explorer link plus a copy button (issue #33).
+ *
+ * The link is for looking the transaction up; the button is for taking the
+ * exact hash somewhere else — support tickets, other explorers, runbook
+ * records. Both, because each alone loses the other use.
+ */
+export function TxHashCell({ hash }: { hash: string }): ReactNode {
+  return (
+    <span className="copyable">
+      {starLink(hash)}
+      <CopyButton value={hash} label="transaction hash" />
+    </span>
+  );
+}
+
 export interface AmountDisplayProps extends FormatStroopsOptions {
   /** Amount in stroops (BigInt-safe). */
   stroops: bigint | number | string;
@@ -216,14 +361,19 @@ export interface AmountDisplayProps extends FormatStroopsOptions {
  */
 export function AmountDisplay({ stroops, symbol, decimals }: AmountDisplayProps) {
   const [showRaw, setShowRaw] = useState(false);
-  const human = formatStroopsWithUnit(stroops, { symbol, decimals });
+  const human = formatStroopsWithUnit(stroops, {
+    ...(symbol !== undefined ? { symbol } : {}),
+    ...(decimals !== undefined ? { decimals } : {}),
+  });
   const raw = formatRawStroops(stroops);
   return (
     <button
       type="button"
       className="mono"
       onClick={() => setShowRaw((v) => !v)}
-      aria-label={showRaw ? `Raw amount: ${raw}` : `Amount: ${human}. Activate to show raw stroops.`}
+      aria-label={
+        showRaw ? `Raw amount: ${raw}` : `Amount: ${human}. Activate to show raw stroops.`
+      }
       title={showRaw ? "Show human-readable amount" : "Show raw stroops"}
     >
       {showRaw ? raw : human}

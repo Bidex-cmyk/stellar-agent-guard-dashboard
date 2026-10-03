@@ -1,0 +1,64 @@
+name: visual-tests
+
+# Visual regression runs on every pull request, and on `main` so the committed
+# baselines are exercised against the merged tree. It is a separate workflow from
+# `ci` on purpose: the required status check for `main` is named exactly `ci`, and
+# a visual failure should be additive signal, not a rewrite of that gate.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: visual regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The official Playwright image pins the browser build *and* the font set.
+    # Baselines are generated in this exact image, so a diff here means the
+    # interface changed — not that the runner happens to have different fonts.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The image already ships Node and the browsers under $PLAYWRIGHT_BROWSERS_PATH,
+      # so nothing needs downloading beyond the package dependencies.
+      - name: Install dependencies
+        run: npm ci
+
+      # The suite runs against the production build; the dev server overlays its
+      # own UI, which is not part of what ships.
+      - name: Build
+        run: npm run build
+
+      - name: Visual regression
+        run: npm run test:visual
+
+      # Uploaded on any outcome so the report is inspectable after a flake, but
+      # the diff images themselves only exist when the run failed.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: test-results/
+          retention-days: 14

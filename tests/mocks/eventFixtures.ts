@@ -12,7 +12,52 @@
  * the console's event-keyed de-duplication can never collapse two fixture rows.
  */
 
-import { GUARD_EVENT_TOPICS, type GuardEvent } from "stellar-agent-guard-sdk";
+import {
+  GUARD_EVENT_TOPICS,
+  type GuardAuthDecision,
+  type GuardEvent,
+  type GuardReasonName,
+  guardEventId,
+} from "stellar-agent-guard-sdk";
+
+import type { TelemetryEvent } from "../../lib/guard/telemetry.ts";
+
+/** A `GuardEvent` before the SDK's identity fields are derived from its content. */
+export type BareGuardEvent = Omit<GuardEvent, "id" | "stream" | "observedAt"> & {
+  id?: string;
+  stream?: string;
+  observedAt?: string | null;
+};
+
+/**
+ * Complete a descriptor-built event with the SDK's own identity fields.
+ *
+ * `id` is the SDK's `guardEventId` over the event's own content, so a fixture
+ * row de-duplicates under exactly the rule the live feed does. Any identity
+ * the caller already supplied is kept, and `observedAt` defaults to `null`
+ * unless the caller set one.
+ */
+export function withIdentity<Bare extends BareGuardEvent>(
+  bare: Bare,
+  simulationIndex: number | null = null,
+): TelemetryEvent {
+  return {
+    ...bare,
+    stream: bare.stream ?? (bare.source === "ledger" ? "committed" : "diagnostic"),
+    observedAt: bare.observedAt ?? "2025-01-01T00:00:00.000Z",
+    id:
+      bare.id ??
+      guardEventId({
+        source: bare.source,
+        topics: [bare.topic],
+        data: bare.data,
+        contractId: bare.contractId,
+        ledger: bare.ledger,
+        transactionHash: bare.transactionHash,
+        simulationIndex,
+      }),
+  } as unknown as TelemetryEvent;
+}
 
 export type MockEventKind =
   | "auth_checked"
@@ -26,7 +71,7 @@ export type MockEventKind =
 export interface MockEventSpec {
   kind: MockEventKind;
   /** Only for `auth_checked`: what the guard decided, and why. */
-  decision?: { result: "allowed" | "blocked"; reason?: string };
+  decision?: { result: "allowed" | "blocked"; reason?: GuardReasonName };
   ledger: number;
   ledgerClosedAt: string;
   /** 64-hex transaction hash, or `null` for events with no transaction. */
@@ -102,7 +147,10 @@ function heartbeat(options: SpecOptions): MockEventSpec {
  * decisions and 5 heartbeats, interleaved deterministically so filters have
  * something realistic to cut through.
  */
-export function mixedTelemetryEvents(baseLedger = 5_000_000, baseTimeMs = Date.UTC(2026, 0, 1)): MockEventSpec[] {
+export function mixedTelemetryEvents(
+  baseLedger = 5_000_000,
+  baseTimeMs = Date.UTC(2026, 0, 1),
+): MockEventSpec[] {
   const events: MockEventSpec[] = [];
   let blockedUsed = 0;
   for (let index = 0; index < MIXED_FEED_TOTAL; index += 1) {
@@ -127,7 +175,11 @@ export function mixedTelemetryEvents(baseLedger = 5_000_000, baseTimeMs = Date.U
  * A stream of `count` events cycling approved → blocked → heartbeat → approved,
  * for the throughput benchmark in issue #114.
  */
-export function throughputTelemetryEvents(count: number, baseLedger = 6_000_000, baseTimeMs = Date.UTC(2026, 0, 1)): MockEventSpec[] {
+export function throughputTelemetryEvents(
+  count: number,
+  baseLedger = 6_000_000,
+  baseTimeMs = Date.UTC(2026, 0, 1),
+): MockEventSpec[] {
   const events: MockEventSpec[] = [];
   const cycle = [allowed, blocked, heartbeat, allowed] as const;
   for (let index = 0; index < count; index += 1) {
@@ -160,7 +212,7 @@ const TOPIC_BY_KIND: Record<string, string> = {
 export function specToGuardEvent(spec: MockEventSpec, contractId: string): GuardEvent {
   const closedAt = spec.ledgerClosedAt;
   if (spec.kind === "heartbeat") {
-    return {
+    return withIdentity({
       kind: "heartbeat",
       topic: GUARD_EVENT_TOPICS.heartbeat,
       source: "ledger",
@@ -170,10 +222,17 @@ export function specToGuardEvent(spec: MockEventSpec, contractId: string): Guard
       transactionHash: spec.transactionHash,
       decision: null,
       data: spec.data,
-    };
+    });
   }
   if (spec.kind === "auth_checked") {
-    return {
+    const decision: GuardAuthDecision | null = spec.decision
+      ? {
+          result: spec.decision.result,
+          reason: spec.decision.reason ?? null,
+          source: "ledger",
+        }
+      : null;
+    return withIdentity({
       kind: "auth_checked",
       topic: GUARD_EVENT_TOPICS.authChecked,
       source: "ledger",
@@ -181,17 +240,11 @@ export function specToGuardEvent(spec: MockEventSpec, contractId: string): Guard
       ledger: spec.ledger,
       ledgerClosedAt: closedAt,
       transactionHash: spec.transactionHash,
-      decision: spec.decision
-        ? {
-            result: spec.decision.result,
-            reason: spec.decision.reason ?? null,
-            source: "ledger",
-          }
-        : null,
+      decision,
       data: spec.data,
-    };
+    });
   }
-  return {
+  return withIdentity({
     kind: spec.kind,
     topic: TOPIC_BY_KIND[spec.kind] ?? spec.kind,
     source: "ledger",
@@ -201,7 +254,7 @@ export function specToGuardEvent(spec: MockEventSpec, contractId: string): Guard
     transactionHash: spec.transactionHash,
     decision: null,
     data: spec.data,
-  };
+  });
 }
 
 /** The whole mixed feed as `GuardEvent`s, ready for unit tests. */

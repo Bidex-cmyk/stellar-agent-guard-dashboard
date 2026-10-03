@@ -39,7 +39,8 @@ export function SubmitSignedXDRPanel() {
     <div className="panel">
       <h2>Submit Signed XDR</h2>
       <p className="tiny muted">
-        Broadcast an externally assembled and signed transaction envelope. Use this for offline or multi-sig operations.
+        Broadcast an externally assembled and signed transaction envelope. Use this for offline or
+        multi-sig operations.
       </p>
       <textarea
         value={xdr}

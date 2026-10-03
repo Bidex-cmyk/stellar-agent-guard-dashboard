@@ -19,21 +19,40 @@ describe("fleet polling", () => {
       if (address === "C1") {
         return {
           guard: "C1",
-          status: { ok: true, value: { admin_frozen: false, heartbeat_expired: false, last_heartbeat: 100n, now: 120n } },
+          status: {
+            ok: true,
+            value: {
+              admin_frozen: false,
+              heartbeat_expired: false,
+              last_heartbeat: 100n,
+              now: 120n,
+            },
+          },
           policy: { ok: true, value: { dms_grace_secs: 60n } },
           window: { ok: true, value: { total: 5000n, entries: [] } },
         };
       } else if (address === "C2") {
         return {
           guard: "C2",
-          status: { ok: true, value: { admin_frozen: true, heartbeat_expired: false, last_heartbeat: 100n, now: 120n } },
+          status: {
+            ok: true,
+            value: {
+              admin_frozen: true,
+              heartbeat_expired: false,
+              last_heartbeat: 100n,
+              now: 120n,
+            },
+          },
           policy: { ok: true, value: { dms_grace_secs: 60n } },
           window: { ok: true, value: { total: 0n, entries: [] } },
         };
       } else if (address === "C3") {
         return {
           guard: "C3",
-          status: { ok: true, value: { admin_frozen: false, heartbeat_expired: true, last_heartbeat: 10n, now: 120n } },
+          status: {
+            ok: true,
+            value: { admin_frozen: false, heartbeat_expired: true, last_heartbeat: 10n, now: 120n },
+          },
           policy: { ok: true, value: { dms_grace_secs: 60n } },
           window: { ok: true, value: { total: 1000n, entries: [] } },
         };
@@ -42,9 +61,9 @@ describe("fleet polling", () => {
     };
 
     const rows = await pollFleet(server, contacts, mockReadSnapshot as any);
-    
+
     assert.equal(rows.length, 3);
-    
+
     assert.equal(rows[0]!.derivedStatus, "Active");
     assert.equal(rows[0]!.spend24h, 5000n);
     assert.equal(rows[0]!.dmsCountdownSecs, 40n); // 100 + 60 - 120
@@ -66,19 +85,22 @@ describe("fleet polling", () => {
       }
       return {
         guard: "C2",
-        status: { ok: true, value: { admin_frozen: false, heartbeat_expired: false, last_heartbeat: 100n, now: 120n } },
+        status: {
+          ok: true,
+          value: { admin_frozen: false, heartbeat_expired: false, last_heartbeat: 100n, now: 120n },
+        },
         policy: { ok: false, error: "not found" },
         window: { ok: false, error: "not found" },
       };
     };
 
     const rows = await pollFleet(server, contacts, mockReadSnapshot as any);
-    
+
     assert.equal(rows.length, 2);
-    
+
     assert.equal(rows[0]!.derivedStatus, "Unknown");
     assert.equal(rows[0]!.error, "Network error");
-    
+
     assert.equal(rows[1]!.derivedStatus, "Active");
     assert.equal(rows[1]!.dmsCountdownSecs, null);
   });

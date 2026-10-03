@@ -99,9 +99,7 @@ function capitalize(value: string): string {
  * session keeps reading as itself. Returning `undefined` here would hand the
  * problem to the SDK's error path and make the console look broken.
  */
-export function readSourceFor(
-  wallet: ObserverWalletState | null | undefined,
-): string {
+export function readSourceFor(wallet: ObserverWalletState | null | undefined): string {
   return isObserverSession(wallet) ? READ_SOURCE_FALLBACK : (wallet?.address as string);
 }
 

@@ -117,7 +117,9 @@ function cdpValue(metrics: CdpMetric[], name: string): number {
 }
 
 test.describe("telemetry feed: 10,000-event throughput benchmark", () => {
-  test("streams 10k events in 30s while holding ≥50 FPS and bounded heap", async ({ page }, testInfo) => {
+  test("streams 10k events in 30s while holding ≥50 FPS and bounded heap", async ({
+    page,
+  }, testInfo) => {
     // 30s benchmark + a cold dev-server compile of the page + two GC/heap
     // probes; the config's 120s default leaves too little margin on a laptop.
     test.setTimeout(180_000);
@@ -131,7 +133,9 @@ test.describe("telemetry feed: 10,000-event throughput benchmark", () => {
     await expect(feed(page).getByRole("heading", { name: "Telemetry", exact: true })).toBeVisible();
     // The dev-only injection seam must be live (it is stripped from production).
     await page.waitForFunction(
-      () => typeof (window as typeof window & { __guardFeedInject?: unknown }).__guardFeedInject === "function",
+      () =>
+        typeof (window as typeof window & { __guardFeedInject?: unknown }).__guardFeedInject ===
+        "function",
     );
 
     // Preload the events outside the measured window: serialising ~10k
@@ -146,11 +150,13 @@ test.describe("telemetry feed: 10,000-event throughput benchmark", () => {
     // Warm-up: fill the feed to its 250-row cap and let the render path
     // compile, so the measurement starts from the steady state the whole
     // benchmark then runs in.
-    await page.evaluate((warmup: GuardEvent[]) => {
-      (window as typeof window & { __guardFeedInject?: (incoming: GuardEvent[]) => void }).__guardFeedInject!(
-        warmup,
-      );
-    }, events.slice(0, FEED_ROW_CAP));
+    await page.evaluate(
+      (warmup: GuardEvent[]) => {
+        (window as typeof window & { __guardFeedInject?: (incoming: GuardEvent[]) => void })
+          .__guardFeedInject!(warmup);
+      },
+      events.slice(0, FEED_ROW_CAP),
+    );
     await expect(feed(page).locator("table.events tbody tr")).toHaveCount(FEED_ROW_CAP);
 
     const heapBefore = await liveHeapMb(page);
@@ -214,7 +220,8 @@ test.describe("telemetry feed: 10,000-event throughput benchmark", () => {
     const longestGapMs = spans.length > 0 ? Math.max(...spans) : 0;
     const gapsOverDiagnosticMs = spans.filter((gap) => gap > GAP_DIAGNOSTIC_MS).length;
     const totalFrames = run.frameTimestamps.length;
-    const measuredSpanMs = totalFrames > 1 ? run.frameTimestamps[totalFrames - 1]! - run.frameTimestamps[0]! : 0;
+    const measuredSpanMs =
+      totalFrames > 1 ? run.frameTimestamps[totalFrames - 1]! - run.frameTimestamps[0]! : 0;
     const averageFps = measuredSpanMs > 0 ? ((totalFrames - 1) * 1000) / measuredSpanMs : 0;
 
     // Per-second FPS over the full seconds of the window only — the trailing
@@ -231,11 +238,16 @@ test.describe("telemetry feed: 10,000-event throughput benchmark", () => {
     const secondsBelowFpsFloor = perSecondFps.filter((fps) => fps < MIN_FPS).length;
 
     // ── CPU over the same window (renderer task time / wall time) ──────────
-    const taskSeconds = cdpValue(metricsAfter, "TaskDuration") - cdpValue(metricsBefore, "TaskDuration");
-    const scriptMs = (cdpValue(metricsAfter, "ScriptDuration") - cdpValue(metricsBefore, "ScriptDuration")) * 1000;
-    const layoutMs = (cdpValue(metricsAfter, "LayoutDuration") - cdpValue(metricsBefore, "LayoutDuration")) * 1000;
+    const taskSeconds =
+      cdpValue(metricsAfter, "TaskDuration") - cdpValue(metricsBefore, "TaskDuration");
+    const scriptMs =
+      (cdpValue(metricsAfter, "ScriptDuration") - cdpValue(metricsBefore, "ScriptDuration")) * 1000;
+    const layoutMs =
+      (cdpValue(metricsAfter, "LayoutDuration") - cdpValue(metricsBefore, "LayoutDuration")) * 1000;
     const styleMs =
-      (cdpValue(metricsAfter, "RecalcStyleDuration") - cdpValue(metricsBefore, "RecalcStyleDuration")) * 1000;
+      (cdpValue(metricsAfter, "RecalcStyleDuration") -
+        cdpValue(metricsBefore, "RecalcStyleDuration")) *
+      1000;
     const cpuPercent = (taskSeconds * 1000 * 100) / run.wallMs;
 
     // ── DOM: the feed must still be capped, not holding 10k rows ───────────

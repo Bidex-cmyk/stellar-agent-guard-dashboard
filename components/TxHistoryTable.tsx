@@ -20,7 +20,7 @@ import {
   type TxHistoryEntry,
 } from "../lib/guard/txHistory.ts";
 import { useAnnounce } from "../lib/guard/useAnnounce.ts";
-import { starLink } from "./bits.tsx";
+import { starLink, TxHashCell } from "./bits.tsx";
 
 const PAGE_SIZE = 10;
 
@@ -57,9 +57,7 @@ export function TxHistoryTable() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    announce(
-      `Exported ${filtered.length} transaction${filtered.length === 1 ? "" : "s"} as CSV`,
-    );
+    announce(`Exported ${filtered.length} transaction${filtered.length === 1 ? "" : "s"} as CSV`);
   }
 
   return (
@@ -153,7 +151,9 @@ export function TxHistoryTable() {
                         <span className="pill danger">Failed</span>
                       )}
                     </td>
-                    <td>{starLink(entry.hash)}</td>
+                    <td>
+                      <TxHashCell hash={entry.hash} />
+                    </td>
                     <td className="mono tiny">
                       {entry.feeStroops !== null ? `${entry.feeStroops} stroops` : "—"}
                     </td>

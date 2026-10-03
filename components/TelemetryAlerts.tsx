@@ -147,7 +147,11 @@ export function TelemetryAlerts() {
   const armed = alertsArmed(settings);
 
   return (
-    <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }} data-testid="telemetry-alerts">
+    <div
+      className="row"
+      style={{ justifyContent: "space-between", alignItems: "flex-start" }}
+      data-testid="telemetry-alerts"
+    >
       <div>
         <div className="row">
           <span className="lbl" style={{ margin: 0 }}>

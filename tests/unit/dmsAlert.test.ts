@@ -1,0 +1,196 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { GuardStatus, PolicyConfig } from "stellar-agent-guard-sdk";
+import {
+  DMS_CRITICAL_FRACTION,
+  DMS_WARNING_FRACTION,
+  DMS_WARNING_SECONDS,
+  evaluateDmsAlert,
+  formatDmsDuration,
+} from "../../lib/guard/dmsAlert.ts";
+
+/** A `status()` read with controllable ledger-clock fields. */
+function status(overrides: Partial<GuardStatus> = {}): GuardStatus {
+  return {
+    has_policy: true,
+    admin_frozen: false,
+    heartbeat_expired: false,
+    last_heartbeat: 1_000_000n,
+    now: 1_000_000n,
+    ...overrides,
+  };
+}
+
+/** A `policy()` read whose only meaningful field here is the DMS grace. */
+function policy(dmsGraceSecs: bigint): PolicyConfig {
+  return {
+    per_tx_cap: 1_000n,
+    window_secs: 3_600n,
+    window_cap: 10_000n,
+    assets: [],
+    protocols: [],
+    recipients: [],
+    allow_any_recipient: false,
+    active_from: 0n,
+    active_until: 0n,
+    paused: false,
+    dms_grace_secs: dmsGraceSecs,
+  };
+}
+
+/**
+ * A status/policy pair positioned so exactly `remainingSecs` of grace are left
+ * on the ledger clock, given a grace window of `graceSecs`.
+ */
+function countdown(
+  remainingSecs: number,
+  graceSecs: number,
+): {
+  st: GuardStatus;
+  pol: PolicyConfig;
+} {
+  const heartbeat = 1_000_000n;
+  const grace = BigInt(graceSecs);
+  return {
+    st: status({ last_heartbeat: heartbeat, now: heartbeat + grace - BigInt(remainingSecs) }),
+    pol: policy(grace),
+  };
+}
+
+// ── Threshold escalation ────────────────────────────────────────────────────
+
+test("no alert while the switch is comfortably inside its grace window", () => {
+  const { st, pol } = countdown(30_000, 100_000); // 30% remaining, > 1h left
+  const alert = evaluateDmsAlert(st, pol);
+  assert.equal(alert.level, "none");
+  assert.equal(alert.remainingSecs, 30_000);
+});
+
+test("warning escalates strictly below 25% of grace remaining", () => {
+  const boundary = countdown(25_000, 100_000); // exactly 25% → still quiet
+  assert.equal(evaluateDmsAlert(boundary.st, boundary.pol).level, "none");
+
+  const below = countdown(24_999, 100_000); // 24.999% → yellow
+  const alert = evaluateDmsAlert(below.st, below.pol);
+  assert.equal(alert.level, "warning");
+  assert.equal(alert.remainingSecs, 24_999);
+  assert.equal(alert.fractionRemaining, 24_999 / 100_000);
+});
+
+test("critical escalates strictly below 10% of grace remaining", () => {
+  const tenPercent = countdown(10_000, 100_000); // exactly 10% → warning, not critical
+  assert.equal(evaluateDmsAlert(tenPercent.st, tenPercent.pol).level, "warning");
+
+  const below = countdown(9_999, 100_000); // below 10% → red
+  assert.equal(evaluateDmsAlert(below.st, below.pol).level, "critical");
+});
+
+test("warning also escalates inside the final hour regardless of percentage", () => {
+  const boundary = countdown(3_600, 7_200); // exactly 1h left (50%) → still quiet
+  assert.equal(evaluateDmsAlert(boundary.st, boundary.pol).level, "none");
+
+  const inside = countdown(3_599, 7_200); // under 1h, half the grace left → yellow
+  assert.equal(evaluateDmsAlert(inside.st, inside.pol).level, "warning");
+});
+
+test("acceptance trigger: an alert fires under 1 hour or 20% remaining", () => {
+  // Under 1 hour on a long window: fires (here as critical, since the
+  // absolute hour is also under 10% of a day).
+  const finalHour = countdown(3_599, 86_400);
+  assert.notEqual(evaluateDmsAlert(finalHour.st, finalHour.pol).level, "none");
+
+  // Under 20% on a window with hours to spare: fires as a warning.
+  const twentyPercent = countdown(19_999, 100_000);
+  assert.equal(evaluateDmsAlert(twentyPercent.st, twentyPercent.pol).level, "warning");
+
+  // Over an hour and over 25%: nothing to warn about.
+  const calm = countdown(30_000, 100_000);
+  assert.equal(evaluateDmsAlert(calm.st, calm.pol).level, "none");
+});
+
+test("expired once the deadline is reached or passed", () => {
+  const atDeadline = countdown(0, 100_000);
+  assert.equal(evaluateDmsAlert(atDeadline.st, atDeadline.pol).level, "expired");
+
+  const pastDeadline = countdown(-42, 100_000);
+  const alert = evaluateDmsAlert(pastDeadline.st, pastDeadline.pol);
+  assert.equal(alert.level, "expired");
+  assert.equal(alert.remainingSecs, -42);
+
+  // `heartbeat_expired` from `status()` is the chain's own verdict and wins —
+  // even when the policy read needed to reconstruct the countdown failed.
+  const chainSaysExpired = evaluateDmsAlert(
+    status({ heartbeat_expired: true, last_heartbeat: 7n }),
+    null,
+  );
+  assert.equal(chainSaysExpired.level, "expired");
+  assert.equal(chainSaysExpired.remainingSecs, null);
+});
+
+test("no alert when the switch is disabled, unreadable, or never armed", () => {
+  // No policy read at all (failed read or default-deny): no countdown to run.
+  assert.equal(evaluateDmsAlert(status({ now: 1_050_000n }), null).level, "none");
+  // Grace of 0 disables the switch on chain.
+  assert.equal(evaluateDmsAlert(status({ now: 1_050_000n }), policy(0n)).level, "none");
+  // The agent has never sent a heartbeat, so nothing is being measured against.
+  const never = countdown(50_000, 100_000);
+  assert.equal(evaluateDmsAlert(status({ last_heartbeat: 0n }), never.pol).level, "none");
+  // No status read: nothing may be claimed.
+  assert.equal(evaluateDmsAlert(null, never.pol).level, "none");
+});
+
+// ── Ledger clock synchronization ────────────────────────────────────────────
+
+test("the countdown reads the ledger clock, never the browser clock", () => {
+  // 1970-era ledger timestamps: if any of this were computed against
+  // Date.now() (the test runs in 2026), the switch would read as long tripped.
+  const st = status({ last_heartbeat: 1_000_000n, now: 1_025_000n });
+  const alert = evaluateDmsAlert(st, policy(100_000n));
+
+  assert.equal(alert.level, "none");
+  assert.equal(alert.remainingSecs, 75_000); // 1_000_000 + 100_000 − 1_025_000
+  assert.equal(alert.elapsedSecs, 25_000); // now − last_heartbeat
+  assert.equal(alert.totalSecs, 100_000);
+  assert.equal(alert.expiresAtMs, 1_100_000_000); // (heartbeat + grace) × 1000
+  assert.equal(new Date(alert.expiresAtMs).getUTCFullYear(), 1970);
+});
+
+test("each ledger step moves the countdown by exactly the same seconds", () => {
+  const heartbeat = 1_000_000n;
+  const pol = policy(100_000n);
+
+  const before = evaluateDmsAlert(status({ last_heartbeat: heartbeat, now: 1_025_000n }), pol);
+  const after = evaluateDmsAlert(status({ last_heartbeat: heartbeat, now: 1_035_000n }), pol);
+
+  assert.equal(before.remainingSecs! - after.remainingSecs!, 10_000);
+  assert.equal(after.elapsedSecs! - before.elapsedSecs!, 10_000);
+  // The estimated expiration is a property of the heartbeat, not of the read.
+  assert.equal(before.expiresAtMs, after.expiresAtMs);
+});
+
+test("a ledger clock already past the deadline reads as tripped", () => {
+  const heartbeat = 1_000_000n;
+  const alert = evaluateDmsAlert(
+    status({ last_heartbeat: heartbeat, now: heartbeat + 100_000n + 5n }),
+    policy(100_000n),
+  );
+  assert.equal(alert.level, "expired");
+  assert.equal(alert.remainingSecs, -5);
+});
+
+// ── Display formatting ──────────────────────────────────────────────────────
+
+test("formatDmsDuration renders the two largest units, largest first", () => {
+  assert.equal(formatDmsDuration(0), "0s");
+  assert.equal(formatDmsDuration(47), "47s");
+  assert.equal(formatDmsDuration(724), "12m 4s");
+  assert.equal(formatDmsDuration(8_100), "2h 15m");
+  assert.equal(formatDmsDuration(97_200), "1d 3h");
+  assert.equal(formatDmsDuration(-5), "0s"); // a duration never shows a minus
+});
+
+test("escalation constants match the alerting spec", () => {
+  assert.equal(DMS_WARNING_FRACTION, 0.25);
+  assert.equal(DMS_CRITICAL_FRACTION, 0.1);
+  assert.equal(DMS_WARNING_SECONDS, 3_600);
+});

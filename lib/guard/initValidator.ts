@@ -34,10 +34,7 @@ export interface InitParameters {
 export const MIN_DMS_SECONDS = 300n;
 
 export type CheckId =
-  | "separation-of-duties"
-  | "dms-duration"
-  | "window-covers-per-tx"
-  | "spend-caps-positive";
+  "separation-of-duties" | "dms-duration" | "window-covers-per-tx" | "spend-caps-positive";
 
 export interface InitCheck {
   id: CheckId;
@@ -118,11 +115,12 @@ export function validateInitParameters(params: InitParameters): InitValidation {
     label: "Dead-man grace is at least 300 seconds",
     passed: dmsPassed,
     fatal: true,
-    detail: dms === null
-      ? "Enter the dead-man grace in whole seconds (0 disables it)."
-      : dms < MIN_DMS_SECONDS
-        ? `A ${dms}s grace is shorter than the 300s minimum; the switch could trip during ordinary ledger or RPC delay. Set at least ${MIN_DMS_SECONDS}s.`
-        : `Grace of ${dms}s meets the minimum.`,
+    detail:
+      dms === null
+        ? "Enter the dead-man grace in whole seconds (0 disables it)."
+        : dms < MIN_DMS_SECONDS
+          ? `A ${dms}s grace is shorter than the 300s minimum; the switch could trip during ordinary ledger or RPC delay. Set at least ${MIN_DMS_SECONDS}s.`
+          : `Grace of ${dms}s meets the minimum.`,
   });
 
   const perTxCap = parseAmount(params.perTxCap);
@@ -132,8 +130,7 @@ export function validateInitParameters(params: InitParameters): InitValidation {
   // than a single allowed transaction means the window can never be filled by a
   // permitted payment, so it does nothing (or blocks everything once the first
   // legitimate spend lands).
-  const windowPassed =
-    perTxCap !== null && windowCap !== null && windowCap >= perTxCap;
+  const windowPassed = perTxCap !== null && windowCap !== null && windowCap >= perTxCap;
   checks.push({
     id: "window-covers-per-tx",
     label: "Rolling-window cap is at least the per-transaction cap",

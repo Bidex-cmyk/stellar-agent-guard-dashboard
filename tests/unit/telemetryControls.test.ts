@@ -7,18 +7,19 @@ import {
   STREAM_BUFFER_LIMIT,
   clearStreamRows,
   emptyStreamBuffer,
-  eventKey,
   ingestEvents,
   pauseStream,
   resumeStream,
   type StreamBuffer,
+  type TelemetryEvent,
 } from "../../lib/guard/telemetry.ts";
+import { withIdentity } from "../mocks/eventFixtures.ts";
 
 const GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
 
 /** A distinct committed event per ledger number. */
-function ev(ledger: number, overrides: Partial<GuardEvent> = {}): GuardEvent {
-  return {
+function ev(ledger: number, overrides: Partial<TelemetryEvent> = {}): TelemetryEvent {
+  return withIdentity({
     kind: "heartbeat",
     topic: "event_heartbeat",
     source: "ledger",
@@ -29,13 +30,16 @@ function ev(ledger: number, overrides: Partial<GuardEvent> = {}): GuardEvent {
     decision: null,
     data: { at: BigInt(ledger) },
     ...overrides,
-  };
+  });
 }
 
-const ledgers = (events: readonly GuardEvent[]) => events.map((event) => event.ledger);
+const ledgers = (events: readonly TelemetryEvent[]) => events.map((event) => event.ledger);
 
-function apply(buffer: StreamBuffer, batches: GuardEvent[][], limit?: number): StreamBuffer {
-  return batches.reduce((current, batch) => ingestEvents(current, batch, { limit }), buffer);
+function apply(buffer: StreamBuffer, batches: TelemetryEvent[][], limit?: number): StreamBuffer {
+  return batches.reduce(
+    (current, batch) => ingestEvents(current, batch, limit === undefined ? {} : { limit }),
+    buffer,
+  );
 }
 
 describe("live ingest", () => {
@@ -46,7 +50,10 @@ describe("live ingest", () => {
   });
 
   test("a re-delivered event is not shown twice", () => {
-    const buffer = apply(emptyStreamBuffer(), [[ev(1), ev(2)], [ev(2), ev(1), ev(3)]]);
+    const buffer = apply(emptyStreamBuffer(), [
+      [ev(1), ev(2)],
+      [ev(2), ev(1), ev(3)],
+    ]);
     assert.deepEqual(ledgers(buffer.rows), [3, 1, 2]);
   });
 
@@ -67,9 +74,28 @@ describe("live ingest", () => {
     assert.equal(buffer.rows.length, 2);
   });
 
-  test("eventKey handles bigint data (a heartbeat's `at`) without throwing", () => {
-    assert.match(eventKey(ev(5, { data: { at: 18_446_744_073_709_551_615n } })), /18446744073709551615n/);
-    assert.notEqual(eventKey(ev(5, { data: { at: 1n } })), eventKey(ev(5, { data: { at: 1 } })));
+  test("the SDK's event id covers bigint data (a heartbeat's `at`) without throwing", () => {
+    // The identity is now the SDK's `guardEventId`, which renders decoded data
+    // canonically — bigints included — instead of this console's own key.
+    const max = ev(5, {
+      source: "diagnostic",
+      transactionHash: null,
+      data: { at: 18_446_744_073_709_551_615n },
+    });
+    const small = ev(5, { source: "diagnostic", transactionHash: null, data: { at: 1n } });
+    assert.ok(
+      typeof max.id === "string" && max.id.length > 0,
+      "a diagnostic id is derived from the event's content",
+    );
+    assert.notEqual(max.id, small.id, "different decoded data is a different event");
+    assert.equal(
+      max.id,
+      ev(5, {
+        source: "diagnostic",
+        transactionHash: null,
+        data: { at: 18_446_744_073_709_551_615n },
+      }).id,
+    );
   });
 });
 
@@ -85,7 +111,10 @@ describe("pause queue", () => {
 
   test("duplicates are rejected while paused too: against the rows and within the queue", () => {
     const live = apply(emptyStreamBuffer(), [[ev(1), ev(2)]]);
-    const paused = apply(pauseStream(live), [[ev(2), ev(3)], [ev(3), ev(1), ev(4)]]);
+    const paused = apply(pauseStream(live), [
+      [ev(2), ev(3)],
+      [ev(3), ev(1), ev(4)],
+    ]);
     assert.deepEqual(ledgers(paused.pending), [4, 3]);
   });
 
@@ -97,7 +126,11 @@ describe("pause queue", () => {
   });
 
   test("a long pause keeps the newest queued events and counts what fell off", () => {
-    const paused = apply(pauseStream(emptyStreamBuffer()), [[ev(1)], [ev(2)], [ev(3)], [ev(4)], [ev(5)]], 3);
+    const paused = apply(
+      pauseStream(emptyStreamBuffer()),
+      [[ev(1)], [ev(2)], [ev(3)], [ev(4)], [ev(5)]],
+      3,
+    );
     assert.deepEqual(ledgers(paused.pending), [5, 4, 3]);
     assert.equal(paused.dropped, 2);
     assert.equal(resumeStream(paused, 3).dropped, 0);
@@ -118,10 +151,10 @@ describe("resume reconciliation", () => {
     // shape a cursor-polled feed plus re-pushed diagnostics produces.
     let seed = 42;
     const next = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31);
-    const batches: GuardEvent[][] = [];
+    const batches: TelemetryEvent[][] = [];
     let ledger = 1;
     for (let i = 0; i < 40; i++) {
-      const batch: GuardEvent[] = [];
+      const batch: TelemetryEvent[] = [];
       for (let n = next() % 4; n > 0; n--) batch.push(ev(ledger++));
       if (ledger > 3 && next() % 3 === 0) batch.push(ev(1 + (next() % (ledger - 1)))); // a repeat
       batches.push(batch);
@@ -135,11 +168,19 @@ describe("resume reconciliation", () => {
         batches.forEach((batch, index) => {
           if (index === pauseAt) buffer = pauseStream(buffer);
           if (index === resumeAt) buffer = resumeStream(buffer, limit);
-          buffer = ingestEvents(buffer, batch, { limit });
+          buffer = ingestEvents(buffer, batch, limit === undefined ? {} : { limit });
         });
         buffer = resumeStream(buffer, limit);
-        assert.deepEqual(ledgers(buffer.rows), ledgers(unpaused.rows), `pause@${pauseAt} resume@${resumeAt}`);
-        assert.equal(new Set(buffer.rows.map(eventKey)).size, buffer.rows.length, "no duplicate rows");
+        assert.deepEqual(
+          ledgers(buffer.rows),
+          ledgers(unpaused.rows),
+          `pause@${pauseAt} resume@${resumeAt}`,
+        );
+        assert.equal(
+          new Set(buffer.rows.map((event) => event.id)).size,
+          buffer.rows.length,
+          "no duplicate rows",
+        );
       }
     }
   });
@@ -174,7 +215,10 @@ describe("with the real poller", () => {
     const server = {
       getLatestLedger: async () => ({ sequence: 100 }),
       getEvents: async (request: { cursor?: string; startLedger?: number }) => {
-        requests.push({ cursor: request.cursor, startLedger: request.startLedger });
+        requests.push({
+          ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+          ...(request.startLedger === undefined ? {} : { startLedger: request.startLedger }),
+        });
         const page = pages[call] ?? [];
         call += 1;
         const events = page.map(
@@ -220,7 +264,11 @@ describe("with the real poller", () => {
     assert.equal(feed.position().cursor, "cursor-3");
 
     buffer = clearStreamRows(buffer);
-    assert.equal(feed.position().cursor, "cursor-3", "clearing the display leaves the cursor alone");
+    assert.equal(
+      feed.position().cursor,
+      "cursor-3",
+      "clearing the display leaves the cursor alone",
+    );
 
     buffer = resumeStream(buffer);
     buffer = ingestEvents(buffer, (await feed.pollOnce()).events);

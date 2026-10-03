@@ -13,10 +13,11 @@
  * deploy will produce", and those are exactly the kind of definitions that drift.
  */
 
+import { toHex } from "./scval.ts";
 import { StrKey } from "@stellar/stellar-sdk";
 import { predictContractId } from "./chain.ts";
 import { SALT_BYTES } from "./network.ts";
-import { bytesToHex, hexToBytes } from "./scval.ts";
+import { hexToBytes } from "./scval.ts";
 
 export type SaltEncoding = "hex" | "utf8";
 
@@ -28,7 +29,9 @@ function defaultRandomFiller(): RandomFiller {
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     return (target) => globalThis.crypto.getRandomValues(target);
   }
-  throw new Error("no source of randomness available: neither crypto.getRandomValues nor an injected one");
+  throw new Error(
+    "no source of randomness available: neither crypto.getRandomValues nor an injected one",
+  );
 }
 
 /** A fresh 32-byte salt, the shape the contract expects. */
@@ -62,7 +65,10 @@ export function parseSalt(raw: string, encoding: SaltEncoding): SaltParse {
   if (encoding === "hex") {
     const clean = trimmed.replace(/^0x/i, "");
     if (!/^[0-9a-fA-F]+$/.test(clean)) {
-      return { ok: false, message: "Hex salt: use 0-9 and a-f only (optionally prefixed with 0x)." };
+      return {
+        ok: false,
+        message: "Hex salt: use 0-9 and a-f only (optionally prefixed with 0x).",
+      };
     }
     if (clean.length !== SALT_BYTES * 2) {
       return {
@@ -91,7 +97,7 @@ export function parseSalt(raw: string, encoding: SaltEncoding): SaltParse {
 
 /** The salt as lowercase hex, for display and for the address preview key. */
 export function formatSalt(bytes: Uint8Array): string {
-  return bytesToHex(bytes);
+  return toHex(bytes);
 }
 
 export type AddressPreview = { ok: true; address: string } | { ok: false; message: string };
@@ -103,18 +109,16 @@ export type AddressPreview = { ok: true; address: string } | { ok: false; messag
  * re-hashing the passphrase per candidate, and so tests can drive the shape
  * without a chain.
  */
-export async function predictSaltAddress(
-  params: {
+export async function predictSaltAddress(params: {
+  deployerPublicKey: string;
+  salt: Uint8Array;
+  passphrase?: string;
+  predict?: (params: {
     deployerPublicKey: string;
     salt: Uint8Array;
     passphrase?: string;
-    predict?: (params: {
-      deployerPublicKey: string;
-      salt: Uint8Array;
-      passphrase?: string;
-    }) => Promise<string>;
-  },
-): Promise<AddressPreview> {
+  }) => Promise<string>;
+}): Promise<AddressPreview> {
   const predict = params.predict ?? predictContractId;
   try {
     return { ok: true, address: await predict(params) };
@@ -147,7 +151,7 @@ export function createSaltAddressPredictor(params: {
     predict({
       deployerPublicKey: params.deployerPublicKey,
       salt,
-      passphrase: params.passphrase,
+      ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
     });
 }
 
@@ -224,7 +228,11 @@ export async function searchVanitySalt(request: VanityRequest): Promise<VanityOu
     const matched =
       request.position === "prefix" ? address.startsWith(pattern) : address.endsWith(pattern);
     if (matched) {
-      request.onProgress?.({ attempts: attempt, closest: address, elapsedMs: Date.now() - started });
+      request.onProgress?.({
+        attempts: attempt,
+        closest: address,
+        elapsedMs: Date.now() - started,
+      });
       return { status: "found", salt, address, attempts: attempt };
     }
     const affinity = affinityOf(address, pattern, request.position);

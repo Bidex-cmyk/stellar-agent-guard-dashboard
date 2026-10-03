@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { scValToNative } from "@stellar/stellar-sdk";
+import type { PolicyConfig } from "stellar-agent-guard-sdk";
 import {
   EMPTY_DRAFT,
   buildPolicyConfig,
@@ -13,7 +14,15 @@ const TOKEN = "CDCYDGBGS5AZ5BZS6XY2SK2PHJHSOEGTN3N4INCK34KF6GU2BGC7Z6MB";
 const RECIPIENT = "GAOBCRXTCO4ZCBNHALJUMJJ5JDXNOUZ7U6VZJX4UBTXAHQEO66IPU6PH";
 
 function draft(overrides: Partial<PolicyDraft> = {}): PolicyDraft {
-  return { ...EMPTY_DRAFT, perTxCap: "1000", windowCap: "150", windowSecs: "60", assets: TOKEN, recipients: RECIPIENT, ...overrides };
+  return {
+    ...EMPTY_DRAFT,
+    perTxCap: "1000",
+    windowCap: "150",
+    windowSecs: "60",
+    assets: TOKEN,
+    recipients: RECIPIENT,
+    ...overrides,
+  };
 }
 
 test("a valid draft encodes to the struct the contract decodes", () => {
@@ -21,18 +30,19 @@ test("a valid draft encodes to the struct the contract decodes", () => {
   assert.equal(built.ok, true);
   if (!built.ok) return;
 
-  // Round-tripping through the SDK's own decoder is the real check: the host
-  // decodes a `#[contracttype]` struct the same way, so if `scValToNative` reads
-  // back the policy we described, the encoding is the one the contract expects.
-  const decoded = scValToNative(built.scval) as Record<string, unknown>;
-  assert.equal(decoded["per_tx_cap"], 1000n);
-  assert.equal(decoded["window_cap"], 150n);
-  assert.equal(decoded["window_secs"], 60n);
-  assert.deepEqual(decoded["assets"], [TOKEN]);
-  assert.deepEqual(decoded["recipients"], [RECIPIENT]);
-  assert.equal(decoded["allow_any_recipient"], false);
-  assert.equal(decoded["paused"], false);
-  assert.deepEqual(decoded["protocols"], []);
+  // Round-tripping through the SDK's own decoder is the real check: `decodePolicy`
+  // is the strict inverse of the encoder and rejects anything a `#[contracttype]`
+  // struct would not decode, so if it reads back the policy we described, the
+  // encoding is the one the contract expects.
+  const decoded = scValToNative(built.scval) as unknown as PolicyConfig;
+  assert.equal(decoded.per_tx_cap, 1000n);
+  assert.equal(decoded.window_cap, 150n);
+  assert.equal(decoded.window_secs, 60n);
+  assert.deepEqual(decoded.assets, [TOKEN]);
+  assert.deepEqual(decoded.recipients, [RECIPIENT]);
+  assert.equal(decoded.allow_any_recipient, false);
+  assert.equal(decoded.paused, false);
+  assert.deepEqual(decoded.protocols, []);
 });
 
 test("caps larger than Number can represent survive encoding exactly", () => {
@@ -42,8 +52,8 @@ test("caps larger than Number can represent survive encoding exactly", () => {
   const built = buildPolicyConfig(draft({ perTxCap: huge }));
   assert.equal(built.ok, true);
   if (!built.ok) return;
-  const decoded = scValToNative(built.scval) as Record<string, unknown>;
-  assert.equal(decoded["per_tx_cap"], 170141183460469231731687303715884105727n);
+  const decoded = scValToNative(built.scval) as unknown as PolicyConfig;
+  assert.equal(decoded.per_tx_cap, 170141183460469231731687303715884105727n);
 });
 
 test("blank cap fields mean disabled, not zero-valued", () => {
@@ -98,9 +108,7 @@ test("allowing any recipient removes the lockout warning", () => {
 });
 
 test("protocols parse both the any-function and per-function forms", () => {
-  const built = buildPolicyConfig(
-    draft({ protocols: `${TOKEN}\n${RECIPIENT}:swap,deposit` }),
-  );
+  const built = buildPolicyConfig(draft({ protocols: `${TOKEN}\n${RECIPIENT}:swap,deposit` }));
   assert.equal(built.ok, true);
   if (!built.ok) return;
   assert.deepEqual(built.config.protocols, [

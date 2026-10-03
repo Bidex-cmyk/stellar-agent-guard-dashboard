@@ -60,7 +60,8 @@ export function detectNetworkMismatch(
   const observed = (walletPassphrase ?? "").trim();
   if (observed && observed === targetPassphrase) return null;
   return {
-    walletNetwork: options.walletNetwork || normalizeWalletNetwork({ passphrase: observed, name: null }).name,
+    walletNetwork:
+      options.walletNetwork || normalizeWalletNetwork({ passphrase: observed, name: null }).name,
     walletPassphrase: observed,
     targetNetwork: options.targetNetwork ?? NETWORK.name,
     targetPassphrase,
@@ -123,7 +124,10 @@ export function mismatchExplanation(mismatch: NetworkMismatch): string {
 }
 
 function describeTarget(mismatch: NetworkMismatch): string {
-  return networkDisplayName({ passphrase: mismatch.walletPassphrase, name: mismatch.walletNetwork });
+  return networkDisplayName({
+    passphrase: mismatch.walletPassphrase,
+    name: mismatch.walletNetwork,
+  });
 }
 
 function describeDashboard(mismatch: NetworkMismatch): string {
@@ -167,7 +171,9 @@ export interface NetworkSwitchRequest {
 }
 
 export interface FreighterNetworkApi {
-  requestNetworkAccess?(request: NetworkSwitchRequest): Promise<NetworkSwitchReply | undefined | void>;
+  requestNetworkAccess?(
+    request: NetworkSwitchRequest,
+  ): Promise<NetworkSwitchReply | undefined | void>;
   getNetworkDetails(): Promise<{ network?: string; networkPassphrase?: string; error?: unknown }>;
 }
 
@@ -207,7 +213,8 @@ export async function requestFreighterNetworkSwitch(options: {
     };
   }
 
-  const requested = FREIGHTER_NETWORK_NAMES[targetNetwork.toLowerCase()] ?? targetNetwork.toLowerCase();
+  const requested =
+    FREIGHTER_NETWORK_NAMES[targetNetwork.toLowerCase()] ?? targetNetwork.toLowerCase();
   let reply: NetworkSwitchReply;
   try {
     reply = await api.requestNetworkAccess({ network: requested });
@@ -230,7 +237,7 @@ export async function requestFreighterNetworkSwitch(options: {
       kind: "declined",
       message: `Freighter is still on ${networkDisplayName({
         passphrase,
-        name: details.network,
+        ...(details.network !== undefined ? { name: details.network } : {}),
       })}. The switch request was not approved.`,
     };
   } catch (error) {
@@ -244,7 +251,8 @@ export async function requestFreighterNetworkSwitch(options: {
 function readReplyError(reply: NetworkSwitchReply): string | null {
   if (!reply || typeof reply !== "object") return null;
   const record = reply as { isError?: boolean; error?: string | null; message?: string | null };
-  if (record.isError) return record.error || record.message || "Freighter refused the network change.";
+  if (record.isError)
+    return record.error || record.message || "Freighter refused the network change.";
   if (typeof record.error === "string" && record.error) return record.error;
   return null;
 }

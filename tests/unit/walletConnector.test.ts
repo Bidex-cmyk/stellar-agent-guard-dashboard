@@ -42,7 +42,9 @@ const ADDRESS = "GD5S5O2MZ6FSMFH6QILG37KSQNRVR3RPSWBTTV4JOUJ7J6TWLLL5LAVS";
 // ── Freighter ──────────────────────────────────────────────────────────────
 
 function createFakeFreighterApi(
-  overrides: Partial<FreighterApiModule> & { networkDetails?: { network?: string; networkPassphrase?: string } } = {},
+  overrides: Partial<FreighterApiModule> & {
+    networkDetails?: { network?: string; networkPassphrase?: string };
+  } = {},
 ): { api: FreighterApiModule; calls: Record<string, unknown[]> } {
   const calls: Record<string, unknown[]> = {};
   const record = (name: string) => (args: unknown) => {
@@ -59,7 +61,9 @@ function createFakeFreighterApi(
     },
     getNetworkDetails: async () => {
       record("getNetworkDetails")({});
-      return overrides.networkDetails ?? { network: "TESTNET", networkPassphrase: TESTNET_PASSPHRASE };
+      return (
+        overrides.networkDetails ?? { network: "TESTNET", networkPassphrase: TESTNET_PASSPHRASE }
+      );
     },
     signTransaction: async (xdr, options) => {
       record("signTransaction")({ xdr, options });
@@ -98,7 +102,10 @@ describe("the common connector interface", () => {
     assert.equal(connection.address, ADDRESS);
     assert.equal(connection.network.passphrase, TESTNET_PASSPHRASE);
     assert.equal(await connector.getPublicKey(), ADDRESS);
-    assert.deepEqual(await connector.getNetwork(), { name: "testnet", passphrase: TESTNET_PASSPHRASE });
+    assert.deepEqual(await connector.getNetwork(), {
+      name: "testnet",
+      passphrase: TESTNET_PASSPHRASE,
+    });
   });
 
   it("drives all three providers through that same interface", async () => {
@@ -115,8 +122,14 @@ describe("the common connector interface", () => {
 
     for (const connector of connectors) {
       const connection = await connector.connect();
-      assert.match(connection.address, /^G[A-Z0-9]{55}$/, `${connector.id} reports an account address`);
-      const signed = await connector.signTransaction("TX_XDR", { networkPassphrase: TESTNET_PASSPHRASE });
+      assert.match(
+        connection.address,
+        /^G[A-Z0-9]{55}$/,
+        `${connector.id} reports an account address`,
+      );
+      const signed = await connector.signTransaction("TX_XDR", {
+        networkPassphrase: TESTNET_PASSPHRASE,
+      });
       assert.ok(signed.length > 0, `${connector.id} returns a signed envelope`);
     }
   });
@@ -142,23 +155,32 @@ describe("Freighter connector", () => {
   it("pins the target passphrase when signing, so a wrong-network signature is impossible", async () => {
     const { api, calls } = createFakeFreighterApi();
     const connector = createFreighterConnector(freighterLoader(api));
-    await connector.signTransaction("TX", { networkPassphrase: PUBLIC_PASSPHRASE, address: ADDRESS });
+    await connector.signTransaction("TX", {
+      networkPassphrase: PUBLIC_PASSPHRASE,
+      address: ADDRESS,
+    });
     assert.deepEqual(calls.signTransaction, [
       { xdr: "TX", options: { networkPassphrase: PUBLIC_PASSPHRASE, address: ADDRESS } },
     ]);
   });
 
   it("reads a declined auth entry as a refusal, not an empty result", async () => {
-    const { api } = createFakeFreighterApi({ signAuthEntry: async () => ({ signedAuthEntry: null }) });
+    const { api } = createFakeFreighterApi({
+      signAuthEntry: async () => ({ signedAuthEntry: null }),
+    });
     await assert.rejects(
       () => createFreighterConnector(freighterLoader(api)).signAuthEntry("AUTH"),
-      (error: unknown) => error instanceof WalletUserRejectedError && error.provider === "freighter",
+      (error: unknown) =>
+        error instanceof WalletUserRejectedError && error.provider === "freighter",
     );
   });
 
   it("reports a wallet that is not installed rather than throwing at import time", async () => {
     const connector = createFreighterConnector(null);
-    await assert.rejects(() => connector.connect(), (error: unknown) => error instanceof WalletNotInstalledError);
+    await assert.rejects(
+      () => connector.connect(),
+      (error: unknown) => error instanceof WalletNotInstalledError,
+    );
 
     const rejecting = createFreighterConnector(async () => {
       throw new Error("Cannot find module '@stellar/freighter-api'");
@@ -186,7 +208,10 @@ function createFakeXbull(overrides: Partial<XbullProvider> = {}): XbullProvider 
 describe("xBull connector", () => {
   it("builds the passphrase from the network name the wallet reports", async () => {
     const connector = createXbullConnector(createFakeXbull());
-    assert.deepEqual(await connector.getNetwork(), { name: "testnet", passphrase: TESTNET_PASSPHRASE });
+    assert.deepEqual(await connector.getNetwork(), {
+      name: "testnet",
+      passphrase: TESTNET_PASSPHRASE,
+    });
     const connection = await connector.connect();
     assert.equal(connection.network.passphrase, TESTNET_PASSPHRASE);
   });
@@ -214,7 +239,15 @@ describe("xBull connector", () => {
   });
 
   it("says plainly when a provider cannot sign a Soroban auth entry", async () => {
-    const connector = createXbullConnector(createFakeXbull({ signAuthEntry: undefined }));
+    // A provider whose injected API has no signAuthEntry at all (as some xBull
+    // builds do not): the absent method must read as "unsupported", not crash.
+    // It is spelled as an omitted property because exactOptionalPropertyTypes
+    // forbids assigning an explicit `undefined` over the fake's default.
+    const connector = createXbullConnector({
+      connect: async () => ({ publicKey: ADDRESS, network: "testnet" }),
+      getNetwork: async () => "testnet",
+      signTransaction: async (xdr) => `xbull:${xdr}`,
+    });
     await assert.rejects(
       () => connector.signAuthEntry("AUTH"),
       (error: unknown) =>
@@ -264,9 +297,14 @@ describe("Albedo connector", () => {
 
   it("prefers the passphrase Albedo reports over its own name lookup", async () => {
     const connector = createAlbedoConnector(
-      createFakeAlbedo({ network: async () => ({ network: "mystery", networkPassphrase: PUBLIC_PASSPHRASE }) }),
+      createFakeAlbedo({
+        network: async () => ({ network: "mystery", networkPassphrase: PUBLIC_PASSPHRASE }),
+      }),
     );
-    assert.deepEqual(await connector.getNetwork(), { name: "public", passphrase: PUBLIC_PASSPHRASE });
+    assert.deepEqual(await connector.getNetwork(), {
+      name: "public",
+      passphrase: PUBLIC_PASSPHRASE,
+    });
   });
 
   it("turns Albedo's in-payload error into a refusal", async () => {
@@ -277,7 +315,9 @@ describe("Albedo connector", () => {
   });
 
   it("reads an empty auth answer as a decline", async () => {
-    const connector = createAlbedoConnector(createFakeAlbedo({ signedAuth: async () => ({ auth: "" }) }));
+    const connector = createAlbedoConnector(
+      createFakeAlbedo({ signedAuth: async () => ({ auth: "" }) }),
+    );
     await assert.rejects(
       () => connector.signAuthEntry("AUTH"),
       (error: unknown) => error instanceof WalletUserRejectedError && error.provider === "albedo",
@@ -287,7 +327,10 @@ describe("Albedo connector", () => {
 
 describe("network normalization", () => {
   it("resolves a name to a passphrase and back, which is what makes a mismatch detectable", () => {
-    assert.deepEqual(normalizeWalletNetwork({ name: "TESTNET" }), { name: "testnet", passphrase: TESTNET_PASSPHRASE });
+    assert.deepEqual(normalizeWalletNetwork({ name: "TESTNET" }), {
+      name: "testnet",
+      passphrase: TESTNET_PASSPHRASE,
+    });
     assert.deepEqual(normalizeWalletNetwork({ name: "public" }).passphrase, PUBLIC_PASSPHRASE);
     assert.deepEqual(normalizeWalletNetwork({ passphrase: TESTNET_PASSPHRASE }), {
       name: "testnet",
@@ -310,11 +353,13 @@ describe("error mapping across providers", () => {
   it("maps each provider's failure vocabulary onto one of three outcomes", () => {
     for (const id of ["freighter", "albedo", "xbull"] as WalletProviderId[]) {
       assert.ok(
-        mapConnectorError(new Error("No provider found"), id, "connect") instanceof WalletNotInstalledError,
+        mapConnectorError(new Error("No provider found"), id, "connect") instanceof
+          WalletNotInstalledError,
         `${id}: a missing wallet is installable, not broken`,
       );
       assert.ok(
-        mapConnectorError(new Error("User rejected the request"), id, "connect") instanceof WalletUserRejectedError,
+        mapConnectorError(new Error("User rejected the request"), id, "connect") instanceof
+          WalletUserRejectedError,
         `${id}: a decline is the operator's own choice`,
       );
       assert.ok(
@@ -322,7 +367,10 @@ describe("error mapping across providers", () => {
         `${id}: anything else keeps its message`,
       );
     }
-    assert.match(mapConnectorError("boom", "xbull", "sign the transaction").message, /xBull could not sign/);
+    assert.match(
+      mapConnectorError("boom", "xbull", "sign the transaction").message,
+      /xBull could not sign/,
+    );
   });
 
   it("passes an already-mapped WalletError through unchanged, so nothing is double-wrapped", () => {
@@ -340,7 +388,10 @@ describe("error mapping across providers", () => {
 
 describe("provider detection and selection", () => {
   it("lists only the wallets this browser can serve", async () => {
-    assert.deepEqual(await detectInstalledProviders({ freighterLoader: null, albedo: null, xbull: null }), []);
+    assert.deepEqual(
+      await detectInstalledProviders({ freighterLoader: null, albedo: null, xbull: null }),
+      [],
+    );
     assert.deepEqual(
       await detectInstalledProviders({
         freighterLoader: async () => {
@@ -353,21 +404,29 @@ describe("provider detection and selection", () => {
     );
     const { api } = createFakeFreighterApi();
     assert.deepEqual(
-      await detectInstalledProviders({ freighterLoader: freighterLoader(api), albedo: null, xbull: createFakeXbull() }),
+      await detectInstalledProviders({
+        freighterLoader: freighterLoader(api),
+        albedo: null,
+        xbull: createFakeXbull(),
+      }),
       ["freighter", "xbull"],
     );
   });
 
   it("never prompts for access while detecting", async () => {
     const { api, calls } = createFakeFreighterApi();
-    await detectInstalledProviders({ freighterLoader: freighterLoader(api), albedo: null, xbull: null });
+    await detectInstalledProviders({
+      freighterLoader: freighterLoader(api),
+      albedo: null,
+      xbull: null,
+    });
     assert.equal(calls.requestAccess, undefined, "detection must not open a permission prompt");
     assert.ok(calls.getNetworkDetails);
   });
 
   it("reads the injected wallet objects off a window-like scope", () => {
     const xbull = createFakeXbull();
-    const scope = readWalletScope({ xbull, albedo: undefined }, null);
+    const scope = readWalletScope({ xbull }, null);
     assert.equal(scope.xbull, xbull);
     assert.equal(scope.albedo, null);
   });
@@ -393,7 +452,11 @@ describe("provider detection and selection", () => {
   it("reconnects silently only where reconnecting is silent", () => {
     assert.equal(canReconnectSilently("freighter"), true);
     assert.equal(canReconnectSilently("xbull"), true);
-    assert.equal(canReconnectSilently("albedo"), false, "a web wallet must never open a popup on load");
+    assert.equal(
+      canReconnectSilently("albedo"),
+      false,
+      "a web wallet must never open a popup on load",
+    );
     assert.equal(canReconnectSilently(null), true);
   });
 });
@@ -430,7 +493,11 @@ describe("preferred provider persistence", () => {
 describe("adapting a connector to the dashboard's signer", () => {
   it("is shaped exactly like WalletSigner and pins the target passphrase", async () => {
     const { api, calls } = createFakeFreighterApi();
-    const signer = connectorSigner(createFreighterConnector(freighterLoader(api)), ADDRESS, TESTNET_PASSPHRASE);
+    const signer = connectorSigner(
+      createFreighterConnector(freighterLoader(api)),
+      ADDRESS,
+      TESTNET_PASSPHRASE,
+    );
     assert.equal(typeof signer.signTransaction, "function");
     assert.equal(typeof signer.signAuthEntry, "function");
     assert.equal(signer.address, ADDRESS);
@@ -447,7 +514,11 @@ describe("adapting a connector to the dashboard's signer", () => {
     const { api } = createFakeFreighterApi({
       signTransaction: async () => ({ error: { message: "user rejected" } }),
     });
-    const signer = connectorSigner(createFreighterConnector(freighterLoader(api)), ADDRESS, TESTNET_PASSPHRASE);
+    const signer = connectorSigner(
+      createFreighterConnector(freighterLoader(api)),
+      ADDRESS,
+      TESTNET_PASSPHRASE,
+    );
     await assert.rejects(
       () => signer.signTransaction("TX"),
       (error: unknown) => error instanceof WalletError,

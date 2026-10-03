@@ -20,7 +20,7 @@ jobs:
       # any time, which would let changed third-party code execute here with no
       # reviewable diff in this repository. Dependabot (.github/dependabot.yml)
       # keeps these pins current through reviewable PRs.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -37,6 +37,13 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # Formatting is a separate gate from linting: eslint-config-next carries
+      # no stylistic rules, so prettier is the only thing that can catch
+      # whitespace/line-ending drift. It runs before the tests so a format
+      # failure reads as style, not as a broken build.
+      - name: Format
+        run: npm run format:check
 
       # Unit tests only. The integration proof (scripts/prove-phase3.ts) spends
       # real testnet funds and needs funded testnet keys, so it is run

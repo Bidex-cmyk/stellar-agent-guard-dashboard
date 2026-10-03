@@ -22,13 +22,11 @@ export function PwaRegistrar() {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
 
     const register = () => {
-      void navigator.serviceWorker
-        .register(SERVICE_WORKER_PATH)
-        .catch((error: unknown) => {
-          // A failed registration only costs the offline shell; the console
-          // itself keeps working, so this is logged, never surfaced as an error.
-          console.warn("Service worker registration failed:", error);
-        });
+      void navigator.serviceWorker.register(SERVICE_WORKER_PATH).catch((error: unknown) => {
+        // A failed registration only costs the offline shell; the console
+        // itself keeps working, so this is logged, never surfaced as an error.
+        console.warn("Service worker registration failed:", error);
+      });
     };
 
     if (document.readyState === "complete") {

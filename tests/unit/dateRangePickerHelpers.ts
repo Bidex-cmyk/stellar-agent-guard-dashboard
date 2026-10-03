@@ -15,10 +15,7 @@ interface TimestampedLike {
   ledgerClosedAt: string | null;
 }
 
-export function pollRangeFiltersByTimestamp(
-  events: TimestampedLike[],
-  range: TimeRange,
-): string[] {
+export function pollRangeFiltersByTimestamp(events: TimestampedLike[], range: TimeRange): string[] {
   return events
     .filter((event) => {
       if (range.fromUnixSecs !== null && event.ledgerClosedAt) {

@@ -71,7 +71,8 @@ export type WasmInspection =
  * next to a hash an operator is about to trust.
  */
 export function inspectWasm(bytes: Uint8Array): WasmInspection {
-  if (bytes.length < 8) return { ok: false, reason: `too short to be a WASM module (${bytes.length} bytes)` };
+  if (bytes.length < 8)
+    return { ok: false, reason: `too short to be a WASM module (${bytes.length} bytes)` };
   for (const [index, expected] of MAGIC.entries()) {
     if (bytes[index] !== expected) {
       return { ok: false, reason: "missing the \\0asm magic: this is not a WASM module" };
@@ -337,7 +338,16 @@ export async function buildIntegrityReport(params: {
 }
 
 /** The names worth showing first: the guard's own entrypoints, then the rest. */
-const GUARD_ENTRYPOINTS = ["initialize", "set_policy", "check", "transfer", "transfer_from", "freeze", "status", "policy"];
+const GUARD_ENTRYPOINTS = [
+  "initialize",
+  "set_policy",
+  "check",
+  "transfer",
+  "transfer_from",
+  "freeze",
+  "status",
+  "policy",
+];
 
 export function sortEntrypoints(entrypoints: readonly string[]): string[] {
   const known = GUARD_ENTRYPOINTS.filter((name) => entrypoints.includes(name));
@@ -349,7 +359,10 @@ export function sortEntrypoints(entrypoints: readonly string[]): string[] {
 export function describeBuild(metadata: BuildMetadata | null): string {
   if (!metadata) return "No readable build metadata.";
   if (metadata.tools.length === 0 && metadata.compiledAt === null) {
-    const sections = metadata.customSections.length > 0 ? ` (custom sections: ${metadata.customSections.join(", ")})` : "";
+    const sections =
+      metadata.customSections.length > 0
+        ? ` (custom sections: ${metadata.customSections.join(", ")})`
+        : "";
     return `This build embeds no producer metadata${sections}.`;
   }
   const tools = metadata.tools.map((tool) => `${tool.name} ${tool.value}`.trim()).join(", ");

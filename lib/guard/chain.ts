@@ -1,3 +1,4 @@
+import { getCachedByteLength, getCachedHash, setCachedHash } from "./bytecodeCache.ts";
 /**
  * Read-only access to a guard deployment, straight off Soroban RPC.
  *
@@ -10,6 +11,7 @@
 import {
   Account,
   Address,
+  Asset,
   Contract,
   Operation,
   StrKey,
@@ -20,8 +22,9 @@ import {
   type xdr as Xdr,
 } from "@stellar/stellar-sdk";
 import { NETWORK, PHASE1_ARTIFACT, READ_SOURCE_FALLBACK } from "./network.ts";
-import { bytesToHex, guardStorageLedgerKeys, hashToHex, sha256, sha256Hex } from "./scval.ts";
-import type { GuardStatus, PolicyConfig } from "stellar-agent-guard-sdk";
+import { guardStorageLedgerKeys, hashToHex, sha256, sha256Hex } from "./scval.ts";
+import { type GuardStatus, type PolicyConfig, decodePolicy } from "stellar-agent-guard-sdk";
+import { withTimeout, DashboardReadError } from "./timeout.ts";
 
 export function createServer(rpcUrl: string = NETWORK.rpcUrl): rpc.Server {
   return new rpc.Server(rpcUrl);
@@ -36,6 +39,10 @@ export type ReadResult<T> = { ok: true; value: T } | { ok: false; error: string 
  * Uses `Operation.invokeContractFunction` with pre-encoded `ScVal` arguments
  * rather than a spec-typed `Contract.call`, so a struct argument (the policy)
  * crosses the boundary exactly as `policyToScVal` built it.
+ *
+ * `decode` defaults to `scValToNative` — a struct caller with no SDK decoder of
+ * its own — and a caller that has one passes it instead, so the decoding rule
+ * lives with the type it belongs to rather than being re-stated here.
  */
 export async function readContract<T = unknown>(
   server: rpc.Server,
@@ -43,77 +50,108 @@ export async function readContract<T = unknown>(
   fn: string,
   args: Xdr.ScVal[] = [],
   source: string = READ_SOURCE_FALLBACK,
+  decode: (retval: Xdr.ScVal) => T = (retval) => scValToNative(retval) as T,
 ): Promise<ReadResult<T>> {
   try {
-    const account = new Account(source, "0");
-    const tx = new TransactionBuilder(account, {
-      fee: "100",
-      networkPassphrase: NETWORK.passphrase,
-    })
-      .addOperation(
-        Operation.invokeContractFunction({ contract: contractId, function: fn, args }),
-      )
-      .setTimeout(30)
-      .build();
-    const simulation = await server.simulateTransaction(tx);
-    if (rpc.Api.isSimulationError(simulation)) {
-      return { ok: false, error: stringifyError(simulation.error) };
-    }
-    const success = simulation as rpc.Api.SimulateTransactionSuccessResponse;
-    const retval = success.result?.retval;
-    if (retval === undefined) {
-      return { ok: false, error: `simulation of ${fn}() returned no value` };
-    }
-    return { ok: true, value: scValToNative(retval) as T };
+    return await withTimeout(async () => {
+      const account = new Account(source, "0");
+      const tx = new TransactionBuilder(account, {
+        fee: "100",
+        networkPassphrase: NETWORK.passphrase,
+      })
+        .addOperation(
+          Operation.invokeContractFunction({ contract: contractId, function: fn, args }),
+        )
+        .setTimeout(30)
+        .build();
+      const simulation = await server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationError(simulation)) {
+        return { ok: false, error: stringifyError(simulation.error) };
+      }
+      const success = simulation as rpc.Api.SimulateTransactionSuccessResponse;
+      const retval = success.result?.retval;
+      if (retval === undefined) {
+        return { ok: false, error: `simulation of ${fn}() returned no value` };
+      }
+      return { ok: true, value: decode(retval) };
+    });
   } catch (error) {
+    if (error instanceof DashboardReadError) throw error;
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-export function readStatus(server: rpc.Server, guard: string, source?: string): Promise<ReadResult<GuardStatus>> {
-  return readContract<GuardStatus>(server, guard, "status", [], source);
+export async function readStatus(
+  server: rpc.Server,
+  guard: string,
+  source?: string,
+): Promise<ReadResult<GuardStatus>> {
+  return await withTimeout(async () => {
+    return readContract<GuardStatus>(server, guard, "status", [], source);
+  });
 }
 
-/** The installed policy, or `null` for the contract's default-deny state. */
+/**
+ * The installed policy, or `null` for the contract's default-deny state.
+ *
+ * The retval goes through the SDK's `decodePolicy` — the same strict decoder the
+ * SDK validates policy XDR with — rather than an unchecked native cast that
+ * would hand the console a half-filled object. The one shape kept here is the
+ * console's own: default-deny reads as `null`, not as a failed read.
+ */
 export function readPolicy(
   server: rpc.Server,
   guard: string,
   source?: string,
 ): Promise<ReadResult<PolicyConfig | null>> {
-  return readContract<PolicyConfig | null>(server, guard, "policy", [], source);
+  return readContract<PolicyConfig | null>(server, guard, "policy", [], source, (retval) =>
+    retval.type === "scvVoid" ? null : decodePolicy(retval),
+  );
 }
 
-/** One of the guard's own persistent storage entries (e.g. the rolling `Window`). */
+/**
+ * One of the guard's own persistent storage entries (e.g. the rolling `Window`).
+ *
+ * The ledger-entry lookup and its decode belong to the SDK's
+ * `readPersistentEntry`; the only thing this wrapper adds is the console's
+ * `ReadResult` shape, because every read surface here reports success-or-error
+ * instead of throwing at the caller.
+ */
 export async function readPersistentEntry<T = unknown>(
   server: rpc.Server,
   contractId: string,
   dataKeyName: string,
 ): Promise<ReadResult<T | null>> {
   try {
-    const key = xdr.LedgerKey.contractData(
-      new xdr.LedgerKeyContractData({
-        contract: new Address(contractId).toScAddress(),
-        key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(dataKeyName)]),
-        durability: xdr.ContractDataDurability.persistent,
-      }),
-    );
-    const response = await server.getLedgerEntries(key);
-    const entry = response.entries[0] as unknown as {
-      val?: { contractData?: { val?: Xdr.ScVal } | (() => { val?: () => Xdr.ScVal }) };
-    } | undefined;
-    if (!entry?.val) return { ok: true, value: null };
-    // The decoded XDR wrapper exposes `contractData` as a plain property in this
-    // SDK build, but keep the callable shape working too rather than pinning to
-    // one internal representation.
-    const contractData =
-      typeof entry.val.contractData === "function"
-        ? entry.val.contractData()
-        : entry.val.contractData;
-    const scval =
-      typeof contractData?.val === "function" ? contractData.val() : contractData?.val;
-    if (!scval) return { ok: true, value: null };
-    return { ok: true, value: scValToNative(scval) as T };
+    return await withTimeout(async () => {
+      const key = xdr.LedgerKey.contractData(
+        new xdr.LedgerKeyContractData({
+          contract: new Address(contractId).toScAddress(),
+          key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(dataKeyName)]),
+          durability: xdr.ContractDataDurability.persistent,
+        }),
+      );
+      const response = await server.getLedgerEntries(key);
+      const entry = response.entries?.[0] as unknown as
+        | {
+            val?: { contractData?: { val?: Xdr.ScVal } | (() => { val?: () => Xdr.ScVal }) };
+          }
+        | undefined;
+      if (!entry?.val) return { ok: true, value: null };
+      // The decoded XDR wrapper exposes `contractData` as a plain property in this
+      // SDK build, but keep the callable shape working too rather than pinning to
+      // one internal representation.
+      const contractData =
+        typeof entry.val.contractData === "function"
+          ? entry.val.contractData()
+          : entry.val.contractData;
+      const scval =
+        typeof contractData?.val === "function" ? contractData.val() : contractData?.val;
+      if (!scval) return { ok: true, value: null };
+      return { ok: true, value: scValToNative(scval) as T };
+    });
   } catch (error) {
+    if (error instanceof DashboardReadError) throw error;
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
@@ -124,11 +162,50 @@ export interface WindowState {
   entries: Array<{ ts: bigint; amount: bigint }>;
 }
 
-export async function readWindow(server: rpc.Server, guard: string): Promise<ReadResult<WindowState | null>> {
+export async function readWindow(
+  server: rpc.Server,
+  guard: string,
+): Promise<ReadResult<WindowState | null>> {
   const raw = await readPersistentEntry<WindowState>(server, guard, "Window");
   if (!raw.ok) return raw;
   if (raw.value === null || raw.value === undefined) return { ok: true, value: null };
   return { ok: true, value: raw.value };
+}
+
+/**
+ * The guard's live XLM balance, in stroops.
+ *
+ * This is the balance source for the freeze-confirmation threshold (issue
+ * #15, consumed by `requiresFreezeChallenge` in `lib/guard/freezeChallenge.ts`),
+ * so it must be a live number, never a cached or derived one: it reads the
+ * native Stellar Asset Contract's persistent `Balance` ledger entry for the
+ * guard's address straight from Soroban RPC. The SDK's
+ * `Server.getAssetBalance(address, Asset.native(), passphrase)` resolves
+ * exactly that key — the same value a simulation of the SAC `balance(holder)`
+ * view returns, which is the balance source SPEC §8 classifies — and unlike
+ * `Server.getAccountEntry` it works for the guard's contract (`C…`) address,
+ * not just `G…` accounts.
+ *
+ * Absence is a real answer, not a failure: the SAC keeps no `Balance` entry
+ * for an address holding no XLM (the SDK documents `balanceEntry` as present
+ * only when there is one), so a successful lookup with no entry reads as
+ * `0n`. Everything else — transport error, HTTP 429, unparseable amount — is
+ * an error, and callers must fail safe on it (escalate the freeze challenge)
+ * rather than treat uncertainty as a small balance.
+ */
+export async function readNativeXlmBalance(
+  server: rpc.Server,
+  guard: string,
+  passphrase: string = NETWORK.passphrase,
+): Promise<ReadResult<bigint>> {
+  try {
+    const response = await server.getAssetBalance(guard, Asset.native(), passphrase);
+    const entry = response.balanceEntry;
+    if (!entry) return { ok: true, value: 0n };
+    return { ok: true, value: BigInt(entry.amount) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export interface WasmIdentity {
@@ -139,6 +216,16 @@ export interface WasmIdentity {
   bytes: number;
   /** True when the ledger's declared hash and the fetched bytes agree. */
   match: boolean;
+}
+
+/**
+ * The cache namespace for a server. `rpc.Server` exposes its endpoint as a
+ * `URL`, so it has to be stringified before it can be inspected.
+ */
+function networkCacheKey(server: rpc.Server): string {
+  const endpoint = (server as unknown as { serverURL?: URL | string }).serverURL;
+  const text = endpoint instanceof URL ? endpoint.toString() : String(endpoint ?? "");
+  return text.includes("testnet") ? "testnet" : "public";
 }
 
 /**
@@ -153,19 +240,38 @@ export async function verifyWasmIdentity(
   server: rpc.Server,
   contractId: string,
 ): Promise<WasmIdentity> {
-  const instance = (await server.getContractInstance(contractId)) as unknown as {
-    executable?: { wasmHash?: unknown };
-  };
-  const reportedWasmHash = hashToHex(instance.executable?.wasmHash);
-  const wasm = await server.getContractWasmByContractId(contractId);
-  const bytes = toBytes(wasm);
-  const fetchedSha256 = await sha256Hex(bytes);
-  return {
-    reportedWasmHash,
-    fetchedSha256,
-    bytes: bytes.length,
-    match: reportedWasmHash === fetchedSha256,
-  };
+  return await withTimeout(async () => {
+    const instance = (await server.getContractInstance(contractId)) as unknown as {
+      executable?: { wasmHash?: unknown };
+    };
+    const reportedWasmHash = hashToHex(instance.executable?.wasmHash);
+
+    // Contract code is immutable, so an unchanged instance lets us skip the
+    // (large) WASM download and the SHA-256 over it.
+    const networkKey = networkCacheKey(server);
+    const cachedHash = getCachedHash(networkKey, contractId);
+
+    if (cachedHash) {
+      return {
+        reportedWasmHash,
+        fetchedSha256: cachedHash,
+        bytes: getCachedByteLength(networkKey, contractId) ?? 0,
+        match: reportedWasmHash === cachedHash,
+      };
+    }
+
+    const wasm = await server.getContractWasmByContractId(contractId);
+    const bytes = toBytes(wasm);
+    const fetchedSha256 = await sha256Hex(bytes);
+    setCachedHash(networkKey, contractId, fetchedSha256, bytes.length);
+
+    return {
+      reportedWasmHash,
+      fetchedSha256,
+      bytes: bytes.length,
+      match: reportedWasmHash === fetchedSha256,
+    };
+  });
 }
 
 /** The exact bytecode of a deployed contract, fetched from the chain. */
@@ -173,7 +279,9 @@ export async function fetchContractWasm(
   server: rpc.Server,
   contractId: string,
 ): Promise<Uint8Array> {
-  return toBytes(await server.getContractWasmByContractId(contractId));
+  return await withTimeout(async () => {
+    return toBytes(await server.getContractWasmByContractId(contractId));
+  });
 }
 
 function toBytes(value: unknown): Uint8Array {
@@ -216,18 +324,20 @@ export async function predictContractId(params: {
 
 /** Does the contract's own storage say `initialize` has already run? */
 export async function isInitialized(server: rpc.Server, guard: string): Promise<boolean> {
-  const instance = await server.getContractInstance(guard);
-  const decoded = JSON.parse(JSON.stringify(instance)) as {
-    storage?: Array<{ key?: { vec?: Array<{ symbol?: string; sym?: string }> }; val?: unknown }>;
-  };
-  for (const item of decoded.storage ?? []) {
-    const first = item.key?.vec?.[0];
-    if ((first?.symbol ?? first?.sym) !== "Initialized") continue;
-    const value = item.val as { bool?: boolean } | string | undefined;
-    if (typeof value === "string") return value.includes("true");
-    return value?.bool === true;
-  }
-  return false;
+  return await withTimeout(async () => {
+    const instance = await server.getContractInstance(guard);
+    const decoded = JSON.parse(JSON.stringify(instance)) as {
+      storage?: Array<{ key?: { vec?: Array<{ symbol?: string; sym?: string }> }; val?: unknown }>;
+    };
+    for (const item of decoded.storage ?? []) {
+      const first = item.key?.vec?.[0];
+      if ((first?.symbol ?? first?.sym) !== "Initialized") continue;
+      const value = item.val as { bool?: boolean } | string | undefined;
+      if (typeof value === "string") return value.includes("true");
+      return value?.bool === true;
+    }
+    return false;
+  });
 }
 
 /** True when a contract call failed because `initialize` had already run (#2). */
@@ -248,7 +358,6 @@ export function pinnedArtifact() {
   return { ...PHASE1_ARTIFACT };
 }
 
-export { bytesToHex };
 export { stringifyError };
 
 function stringifyError(error: unknown): string {

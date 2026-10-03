@@ -118,7 +118,9 @@ describe("demo fixtures", () => {
       assert.equal(event.contractId, DEMO_GUARD);
     }
     // Ledger-bearing rows descend with age, so the top row is the most recent.
-    const ledgers = events.map((event) => event.ledger).filter((ledger): ledger is number => ledger !== null);
+    const ledgers = events
+      .map((event) => event.ledger)
+      .filter((ledger): ledger is number => ledger !== null);
     for (let index = 1; index < ledgers.length; index += 1) {
       assert.ok(ledgers[index - 1]! > ledgers[index]!, "feed must be newest first");
     }

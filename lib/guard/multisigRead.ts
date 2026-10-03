@@ -149,7 +149,5 @@ export function unmatchedSignatures(
       .filter((hint): hint is string => hint !== null)
       .map((hint) => `hint:${hint}`),
   );
-  return signatures
-    .map((signature) => signature.signer)
-    .filter((signer) => !known.has(signer));
+  return signatures.map((signature) => signature.signer).filter((signer) => !known.has(signer));
 }

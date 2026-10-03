@@ -101,7 +101,13 @@ test("non-numeric input is reported, not thrown", () => {
 
 test("every failing rule is reported together so the operator fixes them in one pass", () => {
   const result = validateInitParameters(
-    params({ adminAddress: ADMIN, agentAddress: ADMIN, dmsDurationSecs: "10", perTxCap: "5000", windowCap: "0" }),
+    params({
+      adminAddress: ADMIN,
+      agentAddress: ADMIN,
+      dmsDurationSecs: "10",
+      perTxCap: "5000",
+      windowCap: "0",
+    }),
   );
   // Separation, DMS, window-covers and positive-caps all fail.
   assert.equal(result.blockers.length, 4);

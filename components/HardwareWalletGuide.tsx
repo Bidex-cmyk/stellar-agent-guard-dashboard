@@ -77,7 +77,12 @@ export function HardwareWalletGuide() {
           <span className="lbl">Transaction hash</span>
           <p
             className="mono"
-            style={{ fontSize: 20, wordBreak: "break-all", lineHeight: 1.5, letterSpacing: "0.06em" }}
+            style={{
+              fontSize: 20,
+              wordBreak: "break-all",
+              lineHeight: 1.5,
+              letterSpacing: "0.06em",
+            }}
             aria-live="polite"
           >
             {txHash === null ? "Preparing transaction…" : formatted || "—"}

@@ -11,7 +11,7 @@ export interface VelocityMetrics {
 export function calculateVelocity(
   entries: Array<{ ts: bigint; amount: bigint }>,
   now: bigint,
-  remainingCap: bigint | null
+  remainingCap: bigint | null,
 ): VelocityMetrics {
   let spend1m = 0n;
   let spend15m = 0n;
@@ -38,7 +38,7 @@ export function calculateVelocity(
     // Determine the current spend rate per minute.
     // We use the 15-minute moving average as the baseline, falling back to 1m if needed.
     let ratePerMinute = 0;
-    
+
     if (spend15m > 0n) {
       ratePerMinute = Number(spend15m) / 15.0;
     } else if (spend1m > 0n) {

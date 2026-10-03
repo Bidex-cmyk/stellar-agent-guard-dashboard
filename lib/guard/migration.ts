@@ -166,7 +166,14 @@ export function validateSourcePolicy(source: unknown): CompatibilityReport {
 }
 
 function checkType(name: string, value: unknown): string | null {
-  const capFields = new Set(["per_tx_cap", "window_secs", "window_cap", "active_from", "active_until", "dms_grace_secs"]);
+  const capFields = new Set([
+    "per_tx_cap",
+    "window_secs",
+    "window_cap",
+    "active_from",
+    "active_until",
+    "dms_grace_secs",
+  ]);
   const listFields = new Set(["assets", "recipients"]);
   if (capFields.has(name)) {
     if (typeof value === "bigint" || typeof value === "number") return null;
@@ -241,7 +248,9 @@ function normaliseProtocols(value: unknown): ProtocolRule[] {
     .filter((rule): rule is ProtocolRule => isProtocolRule(rule))
     .map((rule) => ({
       contract: rule.contract,
-      fns: Array.isArray(rule.fns) ? rule.fns.filter((fn): fn is string => typeof fn === "string") : null,
+      fns: Array.isArray(rule.fns)
+        ? rule.fns.filter((fn): fn is string => typeof fn === "string")
+        : null,
     }));
 }
 
@@ -274,7 +283,11 @@ export function planMigration(source: unknown): MigrationPlan {
     const parts: string[] = [];
     if (report.missing.length > 0) parts.push(`missing ${report.missing.join(", ")}`);
     if (report.typeIssues.length > 0) parts.push(report.typeIssues.join("; "));
-    return { ok: false, report, message: `The source policy is not directly portable: ${parts.join("; ")}.` };
+    return {
+      ok: false,
+      report,
+      message: `The source policy is not directly portable: ${parts.join("; ")}.`,
+    };
   }
 
   const config = toPolicyConfig(source as Record<string, unknown>);
@@ -290,7 +303,8 @@ export function planMigration(source: unknown): MigrationPlan {
 
   const carried: string[] = [];
   if (config.per_tx_cap > 0n) carried.push(`per-transaction cap ${config.per_tx_cap}`);
-  if (config.window_cap > 0n) carried.push(`rolling cap ${config.window_cap} per ${config.window_secs}s`);
+  if (config.window_cap > 0n)
+    carried.push(`rolling cap ${config.window_cap} per ${config.window_secs}s`);
   if (config.assets.length > 0) carried.push(`${config.assets.length} asset(s)`);
   if (config.recipients.length > 0) carried.push(`${config.recipients.length} recipient(s)`);
   if (config.protocols.length > 0) carried.push(`${config.protocols.length} protocol rule(s)`);
@@ -316,9 +330,7 @@ function describeMigrationSummary(config: PolicyConfig, dropped: readonly string
     config.per_tx_cap > 0n ? `per-tx ${config.per_tx_cap}` : "no per-tx cap",
     config.window_cap > 0n ? `window ${config.window_cap}/${config.window_secs}s` : "no window cap",
     `${config.assets.length} asset(s)`,
-    config.allow_any_recipient
-      ? "any recipient"
-      : `${config.recipients.length} recipient(s)`,
+    config.allow_any_recipient ? "any recipient" : `${config.recipients.length} recipient(s)`,
     `${config.protocols.length} protocol rule(s)`,
     config.dms_grace_secs > 0n ? `dead-man ${config.dms_grace_secs}s` : "dead-man off",
     config.paused ? "PAUSED on install" : "active on install",
@@ -331,13 +343,25 @@ function describeMigrationSummary(config: PolicyConfig, dropped: readonly string
 export function sourceRows(source: PolicyConfig): Array<{ label: string; value: string }> {
   return [
     { label: "Per-transaction cap", value: configText(source.per_tx_cap) },
-    { label: "Rolling window", value: `${configText(source.window_cap)} every ${configText(source.window_secs)}s` },
+    {
+      label: "Rolling window",
+      value: `${configText(source.window_cap)} every ${configText(source.window_secs)}s`,
+    },
     { label: "Assets", value: listOr(source.assets, "none — every asset is denied") },
-    { label: "Recipients", value: source.allow_any_recipient ? "any recipient" : listOr(source.recipients, "none — every recipient is denied") },
+    {
+      label: "Recipients",
+      value: source.allow_any_recipient
+        ? "any recipient"
+        : listOr(source.recipients, "none — every recipient is denied"),
+    },
     {
       label: "Protocols",
       value: listOr(
-        source.protocols.map((rule) => (rule.fns && rule.fns.length > 0 ? `${rule.contract}:${rule.fns.join(",")}` : rule.contract)),
+        source.protocols.map((rule) =>
+          rule.fns && rule.fns.length > 0
+            ? `${rule.contract}:${rule.fns.join(",")}`
+            : rule.contract,
+        ),
         "none",
       ),
     },
@@ -349,7 +373,10 @@ export function sourceRows(source: PolicyConfig): Array<{ label: string; value: 
           : `${configText(source.active_from)} → ${configText(source.active_until)}`,
     },
     { label: "Paused", value: source.paused ? "yes" : "no" },
-    { label: "Dead-man grace", value: source.dms_grace_secs > 0n ? `${configText(source.dms_grace_secs)}s` : "off" },
+    {
+      label: "Dead-man grace",
+      value: source.dms_grace_secs > 0n ? `${configText(source.dms_grace_secs)}s` : "off",
+    },
   ];
 }
 

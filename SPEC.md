@@ -51,7 +51,7 @@ enforcement to arbitrary calls is tracked as a v2 item, not implied as already c
 "enforce this arbitrary call" control, because the platform cannot yet enforce one. Offering the
 control and documenting the caveat would be the overclaim in a different costume.
 
-**Canonical policy, not a second copy.** The normative statement of *what the contract enforces* lives
+**Canonical policy, not a second copy.** The normative statement of _what the contract enforces_ lives
 in the contracts repository's [`SPEC.md`](https://github.com/Stellar-Agent-Guard/stellar-agent-guard-contracts/blob/main/SPEC.md).
 This document and the README reproduce the shared wording above as the interface's own drift-guard, but
 the contracts `SPEC.md` remains the single source of truth for the enforcement policy. If that document
@@ -63,12 +63,12 @@ the copies honest.
 
 ## 3. Trust model
 
-| Asset | Where it lives | Who can use it |
-| --- | --- | --- |
-| Admin secret key | The operator's Freighter wallet | Nobody else. Never in this repo, never in a server, never in a build |
-| Agent secret key | The agent runtime, via the SDK | Not this console. The console cannot act as the agent |
-| Policy, freeze state, rolling window | Guard contract storage on Stellar | Read by anyone; written by the admin |
-| Pinned Phase 1 bytecode | Fetched from the chain at deploy time | Hashed and compared before any signature is requested |
+| Asset                                | Where it lives                        | Who can use it                                                       |
+| ------------------------------------ | ------------------------------------- | -------------------------------------------------------------------- |
+| Admin secret key                     | The operator's Freighter wallet       | Nobody else. Never in this repo, never in a server, never in a build |
+| Agent secret key                     | The agent runtime, via the SDK        | Not this console. The console cannot act as the agent                |
+| Policy, freeze state, rolling window | Guard contract storage on Stellar     | Read by anyone; written by the admin                                 |
+| Pinned Phase 1 bytecode              | Fetched from the chain at deploy time | Hashed and compared before any signature is requested                |
 
 There is **no server component**, and that is an architectural decision rather than an omission:
 
@@ -102,14 +102,14 @@ the RPC. Re-confirming those two greps still return nothing is part of reviewing
 
 Every number the console displays comes from one of these, on every refresh:
 
-| Value | Source | Failure behaviour |
-| --- | --- | --- |
-| `status()` | `simulateTransaction`, read-only | renders an error block |
-| `policy()` | `simulateTransaction`, read-only | renders an error block |
-| Rolling window | `getLedgerEntries` on `DataKey::Window` | renders an error block |
-| Artifact identity | `getContractInstance` + `getContractWasmByContractId` + local hash | renders an error block |
-| Events | `getEvents`, cursor-polled | surfaces the poll error, keeps the cursor |
-| `check()` | `simulateTransaction`, read-only replica of the decision path | shows the contract's own verdict |
+| Value             | Source                                                             | Failure behaviour                         |
+| ----------------- | ------------------------------------------------------------------ | ----------------------------------------- |
+| `status()`        | `simulateTransaction`, read-only                                   | renders an error block                    |
+| `policy()`        | `simulateTransaction`, read-only                                   | renders an error block                    |
+| Rolling window    | `getLedgerEntries` on `DataKey::Window`                            | renders an error block                    |
+| Artifact identity | `getContractInstance` + `getContractWasmByContractId` + local hash | renders an error block                    |
+| Events            | `getEvents`, cursor-polled                                         | surfaces the poll error, keeps the cursor |
+| `check()`         | `simulateTransaction`, read-only replica of the decision path      | shows the contract's own verdict          |
 
 **No default-on-failure.** `GuardSnapshot` carries a `ReadResult<T>` per field, and `Read<T>` renders
 either the value or an error. There is deliberately no third branch. A dashboard that shows `0` when
@@ -144,7 +144,7 @@ build probe ──► simulate (recording) ──► N authorizations reported
 
 Details that are load-bearing rather than incidental:
 
-- **One sequence number per transaction.** `TransactionBuilder` *increments* the source `Account`
+- **One sequence number per transaction.** `TransactionBuilder` _increments_ the source `Account`
   object on `build()`. The probe and the assembled transaction are therefore each built from a fresh
   `Account` pinned to the same sequence. Sharing one object submits `N+1` while the simulation priced
   `N`, and the network rejects it as `tx_bad_seq` — a bug that presents as a wallet problem and is not
@@ -154,7 +154,7 @@ Details that are load-bearing rather than incidental:
   submission. For contract calls, `invokeWithWallet` attaches exactly the entries the host asked for.
 - **`create_contract` needs its recorded authorization.** The narrow `submitOperation` path (deploy,
   upload) goes through the RPC's own prepare step, which attaches the recorded entry. Without it the
-  transaction is *included and then rejected* by the host as `Error(Auth, InvalidAction)` — which
+  transaction is _included and then rejected_ by the host as `Error(Auth, InvalidAction)` — which
   reads like a permissions surprise and is really a missing entry. Rejections are decoded
   (`describeRejectedResult`) so the host's own reason is shown instead of a bare "trapped".
 - **Refusals have no hash by construction.** A refused call was never broadcast, so the console says
@@ -162,13 +162,13 @@ Details that are load-bearing rather than incidental:
 
 ### What the console can and cannot do as admin
 
-| Operation | Allowed | Note |
-| --- | --- | --- |
-| `set_policy`, `revoke_policy` | yes | resets the rolling window and restarts the DMS clock |
-| `freeze`, `unfreeze` | yes | the panic button and its reversal |
-| `rotate_agent_key` | not wired | holds a key-management decision this console has no UI to make safely |
-| `heartbeat` | **no** | requires the *guard's own* auth (`current_contract_address().require_auth()`), i.e. the agent's key. It belongs to the SDK's runtime |
-| deploy / initialize | yes | deploy targets only the pinned artifact |
+| Operation                     | Allowed   | Note                                                                                                                                 |
+| ----------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `set_policy`, `revoke_policy` | yes       | resets the rolling window and restarts the DMS clock                                                                                 |
+| `freeze`, `unfreeze`          | yes       | the panic button and its reversal                                                                                                    |
+| `rotate_agent_key`            | not wired | holds a key-management decision this console has no UI to make safely                                                                |
+| `heartbeat`                   | **no**    | requires the _guard's own_ auth (`current_contract_address().require_auth()`), i.e. the agent's key. It belongs to the SDK's runtime |
+| deploy / initialize           | yes       | deploy targets only the pinned artifact                                                                                              |
 
 `heartbeat` being unavailable here is not an omission to fix: the admin key deliberately has no
 fund-moving or liveness-forging power. The admin can replace the key the account authenticates
@@ -185,7 +185,7 @@ A deploy from this console is only permitted to produce an instance of the artif
    **and** the pinned byte length. Any mismatch aborts before a wallet is prompted.
 3. Confirm the pinned code is still a live `ContractCode` entry, so an expired entry surfaces as a
    clear message rather than a host error mid-signing.
-4. Predict the contract address from `(deployer, salt)` and show it to the operator *before* signing.
+4. Predict the contract address from `(deployer, salt)` and show it to the operator _before_ signing.
 5. Create the contract referencing the pinned hash.
 6. Read the new instance back and re-verify it runs the pinned hash, then adopt it.
 
@@ -205,7 +205,7 @@ Two facts shape the feed, and both are stated in the UI rather than hidden:
    close interval (~5s), not the poll interval.
 2. **A refused decision never reaches the ledger.** The guard returns `Err`, which rolls the event
    back, so a listener tailing only committed events would see a contract that approves everything.
-   The only refusals this console can show are the ones *it* produced, decoded from the failed
+   The only refusals this console can show are the ones _it_ produced, decoded from the failed
    enforced simulation's diagnostics and labelled `diagnostic`.
 
 An empty feed is therefore **not** evidence that nothing was refused on chain, and the panel says so.
@@ -216,27 +216,27 @@ An empty feed is therefore **not** evidence that nothing was refused on chain, a
 
 The console's core correctness rule is that anything the contract can answer must be read from the
 chain, and only genuinely local data (drafts, preferences, the instance registry) is persisted. A
-value *derived* from the chain may be stale for at most one poll; a value *stored* locally must never
+value _derived_ from the chain may be stale for at most one poll; a value _stored_ locally must never
 be presented as though it were chain state. Every state item the console holds is classified here,
 with its source, its refresh trigger, and whether it is allowed to be wrong.
 
-| State | Source | Refresh trigger | May it lie (stale)? |
-| --- | --- | --- | --- |
-| `status()` — freeze flags, heartbeat, dead-man state | chain (read-only `simulateTransaction`) | mount + poll; re-read after every freeze/unfreeze | no — a failed read renders an error, never a stale value |
-| `policy()` | chain (`simulateTransaction`) | mount + poll; re-read after `set_policy`/`revoke_policy` | no |
-| Rolling spend window | chain (`getLedgerEntries` on `DataKey::Window`) | mount + poll | no |
-| Balance | chain (SAC `balance` via simulation) | mount + poll | no |
-| Artifact identity / verification | chain (`getContractInstance` + `getContractWasmByContractId`) + local hash | on demand, before deploy and in the integrity inspector | no — a mismatch aborts the deploy |
-| Telemetry events | chain (`getEvents`, cursor-based) | continuous polling; cursor carried forward, never re-derived | no — an empty or gapped page is labelled, not smoothed over |
-| Registered guard instances (the fleet) | **`localStorage`** (`stellar-agent-guard-dashboard.instances.v1`) | user action (add/remove/select) | yes, by design — it is an address list, not chain state; every row's live numbers are re-read from the chain |
-| Policy form draft | component-local until submit | user input | yes, while editing — never treated as installed until the chain re-read confirms it |
-| Address book | **`localStorage`** (`…addressBook.v1`) | user action | yes — convenience data, carries no fund authority |
-| Transaction history | **`localStorage`** (`…txHistory.v1`) | after each submission | yes — it records what this browser submitted; the chain is authoritative |
-| Layout / theme / alert / idle preferences | **`localStorage`** (`…layout.v1`, `theme`, `…idleTimeout.v1`, `…alerts.v1`) | user action | yes — presentation only |
-| Wallet-provider preference | **`localStorage`** (`…walletProvider.v1`) | user action (connector pick) | yes — convenience, carries no authority |
-| Multisig approval evaluation | pasted envelope is component-local; signer weights/thresholds are read live from Horizon | on paste / on demand | n/a for the pasted envelope; the account's signers are re-read, not cached |
-| Tab-sync envelope | **`localStorage`** (`…tab-sync.v1`) when `BroadcastChannel` is unavailable | transient | n/a — a transport, not state; receiving tabs re-read the chain (§7) |
-| Active tab / route / modal-open flags | component-local | user action | n/a |
+| State                                                | Source                                                                                   | Refresh trigger                                              | May it lie (stale)?                                                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `status()` — freeze flags, heartbeat, dead-man state | chain (read-only `simulateTransaction`)                                                  | mount + poll; re-read after every freeze/unfreeze            | no — a failed read renders an error, never a stale value                                                     |
+| `policy()`                                           | chain (`simulateTransaction`)                                                            | mount + poll; re-read after `set_policy`/`revoke_policy`     | no                                                                                                           |
+| Rolling spend window                                 | chain (`getLedgerEntries` on `DataKey::Window`)                                          | mount + poll                                                 | no                                                                                                           |
+| Balance                                              | chain (SAC `balance` via simulation)                                                     | mount + poll                                                 | no                                                                                                           |
+| Artifact identity / verification                     | chain (`getContractInstance` + `getContractWasmByContractId`) + local hash               | on demand, before deploy and in the integrity inspector      | no — a mismatch aborts the deploy                                                                            |
+| Telemetry events                                     | chain (`getEvents`, cursor-based)                                                        | continuous polling; cursor carried forward, never re-derived | no — an empty or gapped page is labelled, not smoothed over                                                  |
+| Registered guard instances (the fleet)               | **`localStorage`** (`stellar-agent-guard-dashboard.instances.v1`)                        | user action (add/remove/select)                              | yes, by design — it is an address list, not chain state; every row's live numbers are re-read from the chain |
+| Policy form draft                                    | component-local until submit                                                             | user input                                                   | yes, while editing — never treated as installed until the chain re-read confirms it                          |
+| Address book                                         | **`localStorage`** (`…addressBook.v1`)                                                   | user action                                                  | yes — convenience data, carries no fund authority                                                            |
+| Transaction history                                  | **`localStorage`** (`…txHistory.v1`)                                                     | after each submission                                        | yes — it records what this browser submitted; the chain is authoritative                                     |
+| Layout / theme / alert / idle preferences            | **`localStorage`** (`…layout.v1`, `theme`, `…idleTimeout.v1`, `…alerts.v1`)              | user action                                                  | yes — presentation only                                                                                      |
+| Wallet-provider preference                           | **`localStorage`** (`…walletProvider.v1`)                                                | user action (connector pick)                                 | yes — convenience, carries no authority                                                                      |
+| Multisig approval evaluation                         | pasted envelope is component-local; signer weights/thresholds are read live from Horizon | on paste / on demand                                         | n/a for the pasted envelope; the account's signers are re-read, not cached                                   |
+| Tab-sync envelope                                    | **`localStorage`** (`…tab-sync.v1`) when `BroadcastChannel` is unavailable               | transient                                                    | n/a — a transport, not state; receiving tabs re-read the chain (§7)                                          |
+| Active tab / route / modal-open flags                | component-local                                                                          | user action                                                  | n/a                                                                                                          |
 
 The rule that makes the table enforceable: **a `localStorage` value may only be an input to a chain
 read, never a substitute for one.** The instance registry and the address book supply addresses; the
@@ -249,12 +249,12 @@ persisted helpers lives beside them (`tests/unit/tabSync.test.ts`, `tests/unit/t
 Every path that mutates chain state, and what it does after the write. No write path trusts its own
 submission response where the outcome matters.
 
-| Write | Trigger | Auth path | Re-read after? |
-| --- | --- | --- | --- |
-| `set_policy` / `revoke_policy` | `/configure` form, migration wizard | operator wallet signs auth entries + envelope; enforced simulation before broadcast | **yes** — policy re-read |
-| `freeze` / `unfreeze` | `PanicPanel` | operator wallet, same enforced-simulation path | **yes, mandatory** — `status()` must report the new flag or the UI reports failure |
-| deploy (`create_contract`) + `initialize` | `DeployPanel` | operator wallet; `create_contract` uses its recorded authorization | **yes** — the new instance is re-read and re-verified against the pinned hash |
-| agent SAC transfers | not this console | agent key, via the SDK | n/a — the console is admin, never the agent |
+| Write                                     | Trigger                             | Auth path                                                                           | Re-read after?                                                                     |
+| ----------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `set_policy` / `revoke_policy`            | `/configure` form, migration wizard | operator wallet signs auth entries + envelope; enforced simulation before broadcast | **yes** — policy re-read                                                           |
+| `freeze` / `unfreeze`                     | `PanicPanel`                        | operator wallet, same enforced-simulation path                                      | **yes, mandatory** — `status()` must report the new flag or the UI reports failure |
+| deploy (`create_contract`) + `initialize` | `DeployPanel`                       | operator wallet; `create_contract` uses its recorded authorization                  | **yes** — the new instance is re-read and re-verified against the pinned hash      |
+| agent SAC transfers                       | not this console                    | agent key, via the SDK                                                              | n/a — the console is admin, never the agent                                        |
 
 No other write exists. In particular the console never calls `heartbeat` (it needs the guard's own
 auth — see §5) and never holds a key that could authorize one.

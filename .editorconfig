@@ -1,0 +1,33 @@
+# EditorConfig configuration (dashboard issue #52; mirrors stellar-agent-guard-sdk#152)
+#
+# Hierarchy: formatter is authoritative; this file assists editors only.
+#
+# Sets baseline editor-layer defaults (indentation, line endings, trailing
+# whitespace) to prevent cross-editor churn (LF vs CRLF, tabs vs spaces) across
+# OS environments. Every value below mirrors what `.prettierrc` actually
+# enforces — editorconfig is the *hint*, `npm run format` is the *law*:
+#
+#   setting                 | source config
+#   ------------------------|------------------------------------------------
+#   indent_style = space     | prettier useTabs: false (default)
+#   indent_size = 2          | prettier tabWidth: 2 (default)
+#   end_of_line = lf         | prettier endOfLine: "lf" (default)
+#   insert_final_newline     | prettier writes a trailing newline
+#   trim_trailing_whitespace | prettier strips trailing whitespace
+#
+# `max_line_length` is deliberately unset: prettier's `printWidth: 100` is a
+# reflow target, not a hard cap (it never breaks long strings or URLs), so an
+# editor hard-wrapping at 100 would fight the formatter instead of mirroring it.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false

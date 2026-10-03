@@ -66,13 +66,21 @@ export function friendbotTarget(signals: NetworkSignals = {}): FriendbotTarget {
   const horizonUrl = (signals.horizonUrl ?? "").toLowerCase();
   const passphrase = signals.passphrase ?? NETWORK.passphrase;
 
-  if (rpcUrl.includes("mainnet") || horizonUrl.includes("mainnet") || passphrase === MAINNET_PASSPHRASE) {
+  if (
+    rpcUrl.includes("mainnet") ||
+    horizonUrl.includes("mainnet") ||
+    passphrase === MAINNET_PASSPHRASE
+  ) {
     return {
       supported: false,
       reason: "Mainnet has no Friendbot: fund the account from an exchange instead.",
     };
   }
-  if (rpcUrl.includes("futurenet") || horizonUrl.includes("futurenet") || passphrase.toLowerCase().includes("future")) {
+  if (
+    rpcUrl.includes("futurenet") ||
+    horizonUrl.includes("futurenet") ||
+    passphrase.toLowerCase().includes("future")
+  ) {
     return { supported: true, ...FUTURENET };
   }
   if (
@@ -163,7 +171,11 @@ export function parseAccountPayload(
     (entry) => (entry as { asset_type?: unknown })?.asset_type === "native",
   ) as { balance?: unknown } | undefined;
   if (!native || typeof native.balance !== "string") {
-    return { state: "unreachable", balanceXlm: null, detail: "account has no native balance entry" };
+    return {
+      state: "unreachable",
+      balanceXlm: null,
+      detail: "account has no native balance entry",
+    };
   }
   const balanceXlm = native.balance;
   if (!/^\d+(\.\d+)?$/.test(balanceXlm)) {
@@ -214,12 +226,24 @@ export function interpretFundResponse(status: number, body: string): FundOutcome
   }
   const detail = extractErrorDetail(body);
   if (status === 429) {
-    return { ok: false, message: `Faucet rate limit reached${detail ? `: ${detail}` : ""}; try again in a minute.`, hash: null };
+    return {
+      ok: false,
+      message: `Faucet rate limit reached${detail ? `: ${detail}` : ""}; try again in a minute.`,
+      hash: null,
+    };
   }
   if (status === 400) {
-    return { ok: false, message: `Friendbot refused this address${detail ? `: ${detail}` : ""}.`, hash: null };
+    return {
+      ok: false,
+      message: `Friendbot refused this address${detail ? `: ${detail}` : ""}.`,
+      hash: null,
+    };
   }
-  return { ok: false, message: `Friendbot failed (HTTP ${status})${detail ? `: ${detail}` : ""}.`, hash: null };
+  return {
+    ok: false,
+    message: `Friendbot failed (HTTP ${status})${detail ? `: ${detail}` : ""}.`,
+    hash: null,
+  };
 }
 
 function extractHash(body: string): string | null {
@@ -262,7 +286,10 @@ export async function probeBalances(
   const readings: BalanceReading[] = [];
   for (const address of addresses) {
     if (!address.trim()) continue;
-    readings.push({ address: address.trim(), state: await probeBalance(address, target, fetchImpl) });
+    readings.push({
+      address: address.trim(),
+      state: await probeBalance(address, target, fetchImpl),
+    });
   }
   return readings;
 }
@@ -350,5 +377,7 @@ export function describeBalances(readings: readonly BalanceReading[]): string {
 
 /** True when anything in the set needs funding. */
 export function needsFunding(readings: readonly BalanceReading[]): boolean {
-  return readings.some((reading) => reading.state.state === "unfunded" || reading.state.state === "absent");
+  return readings.some(
+    (reading) => reading.state.state === "unfunded" || reading.state.state === "absent",
+  );
 }

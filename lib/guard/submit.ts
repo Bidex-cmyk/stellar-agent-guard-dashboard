@@ -1,3 +1,4 @@
+import { withBackoff, RetryableError } from "./retry.ts";
 /**
  * The write path: a contract call authorized by the operator's own wallet.
  *
@@ -24,13 +25,16 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import { NETWORK } from "./network.ts";
-import { bytesToHex, guardStorageLedgerKeys, ledgerKeyId } from "./scval.ts";
+import { POLLING } from "./polling.ts";
+import { guardStorageLedgerKeys, ledgerKeyId } from "./scval.ts";
 import { stringifyError } from "./chain.ts";
 import { announce } from "./useAnnounce.ts";
 import { recordTx } from "./txHistory.ts";
 import { hardwareGuide } from "./hardwareGuide.ts";
 
 /** Inclusion fee floor, in stroops, for a single-operation transaction. */
+import { calculateFeeHeadroom, FeePreset } from "./feeEstimator.ts";
+
 export const INCLUSION_FEE = "100";
 
 /**
@@ -104,6 +108,10 @@ export interface InvokeRequest {
   guardForFootprint?: string | null;
   pollAttempts?: number;
   pollIntervalMs?: number;
+  feePreset?: FeePreset;
+  maxFeeCap?: bigint;
+  minTimeOffset?: number;
+  maxTimeOffset?: number;
 }
 
 /**
@@ -131,7 +139,10 @@ export function buildInitialEnvelope(params: {
       : {}),
   })
     .addOperation(params.operation)
-    .setTimeout(0)
+    .setTimebounds(
+      createTransactionEnvelope(Math.floor(Date.now() / 1000)).minTime,
+      createTransactionEnvelope(Math.floor(Date.now() / 1000)).maxTime,
+    )
     .build();
 }
 
@@ -156,6 +167,10 @@ export function assembleFromSimulation(params: {
   operation: xdr.Operation;
   passphrase: string;
   guard: string | null;
+  feePreset?: FeePreset;
+  maxFeeCap?: bigint;
+  minTimeOffset?: number;
+  maxTimeOffset?: number;
 }): AssembleResult {
   const { simulation, source, operation, passphrase, guard } = params;
   const data =
@@ -185,7 +200,19 @@ export function assembleFromSimulation(params: {
   }
 
   const minResourceFee = BigInt(simulation.minResourceFee);
-  data.setResourceFee(minResourceFee);
+  const builtData = data.build();
+  const cpuInstrs = builtData.resources.instructions;
+  const diskReadBytes = builtData.resources.diskReadBytes;
+  const writeBytes = builtData.resources.writeBytes;
+  // Apply fee headroom (15% CPU buffer + configurable fee preset)
+  const { cpu: paddedCpu, fee: paddedFee } = calculateFeeHeadroom(
+    cpuInstrs,
+    minResourceFee,
+    params.feePreset ?? "Standard",
+    params.maxFeeCap,
+  );
+  data.setResources(paddedCpu, diskReadBytes, writeBytes);
+  data.setResourceFee(paddedFee);
 
   const transaction = new TransactionBuilder(source, {
     fee: INCLUSION_FEE,
@@ -193,7 +220,18 @@ export function assembleFromSimulation(params: {
     sorobanData: data.build(),
   })
     .addOperation(operation)
-    .setTimeout(0)
+    .setTimebounds(
+      createTransactionEnvelope(
+        Math.floor(Date.now() / 1000),
+        params.minTimeOffset,
+        params.maxTimeOffset,
+      ).minTime,
+      createTransactionEnvelope(
+        Math.floor(Date.now() / 1000),
+        params.minTimeOffset,
+        params.maxTimeOffset,
+      ).maxTime,
+    )
     .build();
 
   return { transaction, resourceFee: minResourceFee, footprintKeys };
@@ -271,11 +309,15 @@ function hostErrorFromDiagnostics(events: readonly unknown[]): string | null {
     const text = safeJson(event);
     if (!text.includes('"error"')) continue;
 
-    const messages = [...text.matchAll(/"string":"([^"]{3,200})"/g)].map((match) => match[1]);
+    const messages = [...text.matchAll(/"string":"([^"]{3,200})"/g)]
+      .map((match) => match[1])
+      .filter((m): m is string => m !== undefined);
     const kinds: string[] = [];
     for (const block of text.matchAll(/"error":\{([^}]{1,200})\}/g)) {
       for (const pair of (block[1] ?? "").matchAll(/"([a-z_]+)":"([a-z_]+)"/g)) {
-        kinds.push(`${pair[1]}/${pair[2]}`);
+        if (pair[1] && pair[2]) {
+          kinds.push(`${pair[1]}/${pair[2]}`);
+        }
       }
     }
 
@@ -306,7 +348,7 @@ function safeJson(value: unknown): string {
  * them. The RPC puts them either beside the error or inside it, and the host's
  * own `fn_call`/`error`/`log` entries are what make a trap diagnosable.
  */
-function diagnosticEventsOf(response: unknown): unknown[] {
+export function diagnosticEventsOf(response: unknown): unknown[] {
   const candidate = response as {
     diagnosticEventsXdr?: unknown;
     events?: unknown;
@@ -337,36 +379,41 @@ async function pollForInclusion(
   | { ok: true; status: string; ledger: number | null; events: unknown }
   | { ok: false; detail: string; diagnosticEvents: unknown[] }
 > {
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    const result = (await server.getTransaction(hash).catch(() => null)) as
-      | (rpc.Api.GetTransactionResponse & { diagnosticEventsXdr?: unknown[] })
-      | null;
-    if (!result) continue;
-    if (result.status === rpc.Api.GetTransactionStatus.SUCCESS) {
-      return {
-        ok: true,
-        status: result.status,
-        ledger: (result as { ledger?: number }).ledger ?? null,
-        events: (result as { events?: unknown }).events ?? null,
-      };
-    }
-    if (result.status === rpc.Api.GetTransactionStatus.FAILED) {
-      const diagnostics = result.diagnosticEventsXdr ?? [];
-      return {
-        ok: false,
-        detail: `transaction ${hash} was included and rejected by the network (${describeRejectedResult(
-          result,
-        )})`,
-        diagnosticEvents: diagnostics,
-      };
-    }
+  try {
+    return await withBackoff(
+      async () => {
+        const result = (await server.getTransaction(hash).catch(() => null)) as
+          (rpc.Api.GetTransactionResponse & { diagnosticEventsXdr?: unknown[] }) | null;
+        if (!result || result.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+          throw new RetryableError("NOT_FOUND");
+        }
+        if (result.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+          return {
+            ok: true,
+            status: result.status,
+            ledger: (result as { ledger?: number }).ledger ?? null,
+            events: (result as { events?: unknown }).events ?? null,
+          };
+        }
+        if (result.status === rpc.Api.GetTransactionStatus.FAILED) {
+          const diagnostics = result.diagnosticEventsXdr ?? [];
+          return {
+            ok: false,
+            detail: `transaction ${hash} was included and rejected by the network`,
+            diagnosticEvents: diagnostics,
+          };
+        }
+        throw new RetryableError("TRY_AGAIN_LATER");
+      },
+      { baseDelayMs: intervalMs, maxRetries: attempts },
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      detail: `transaction timed out after ${attempts} attempts`,
+      diagnosticEvents: [],
+    };
   }
-  return {
-    ok: false,
-    detail: `timed out after ${attempts} polls waiting for ${hash} to be included`,
-    diagnosticEvents: [],
-  };
 }
 
 /**
@@ -500,7 +547,22 @@ async function runInvocation(request: InvokeRequest): Promise<InvokeResult> {
     passphrase,
     guard: request.guardForFootprint ?? null,
   });
-  const enforced = await server.simulateTransaction(enforcing);
+  const enforced = await withBackoff(
+    async () => {
+      const sim = await server.simulateTransaction(enforcing);
+      if ((sim && (sim as any).status === "ERROR") || (sim as any).error) {
+        const errStr =
+          typeof (sim as any).error === "string"
+            ? (sim as any).error
+            : JSON.stringify((sim as any).error);
+        if (errStr && (errStr.includes("TRY_AGAIN_LATER") || errStr.includes("TIMEOUT"))) {
+          throw new RetryableError(errStr);
+        }
+      }
+      return sim;
+    },
+    { baseDelayMs: 500, maxRetries: 3 },
+  );
   if (rpc.Api.isSimulationError(enforced)) {
     return {
       kind: "refused",
@@ -517,17 +579,41 @@ async function runInvocation(request: InvokeRequest): Promise<InvokeResult> {
     operation: authorizedOperation,
     passphrase,
     guard: request.guardForFootprint ?? null,
+    ...(request.feePreset !== undefined && { feePreset: request.feePreset }),
+    ...(request.maxFeeCap !== undefined && { maxFeeCap: request.maxFeeCap }),
+    ...(request.minTimeOffset !== undefined && { minTimeOffset: request.minTimeOffset }),
+    ...(request.maxTimeOffset !== undefined && { maxTimeOffset: request.maxTimeOffset }),
   });
 
   if (request.exportOnly) {
     return {
       kind: "exported",
-      xdr: assembled.transaction.toXDR()
+      xdr: assembled.transaction.toXDR(),
+    };
+  }
+
+  const maxTimeStr = assembled.transaction.timeBounds?.maxTime;
+  const maxTime = maxTimeStr ? Number(maxTimeStr) : 0;
+  if (maxTime > 0 && detectExpiration(Math.floor(Date.now() / 1000), maxTime)) {
+    return {
+      kind: "failed",
+      hash: Buffer.from(assembled.transaction.hash()).toString("hex"),
+      detail: "Transaction expired during wallet signature delay. Please retry.",
+      diagnosticEvents: [],
     };
   }
 
   promptWallet();
   const signedEnvelope = await signer.signTransaction(assembled.transaction.toXDR());
+
+  if (maxTime > 0 && detectExpiration(Math.floor(Date.now() / 1000), maxTime)) {
+    return {
+      kind: "failed",
+      hash: Buffer.from(assembled.transaction.hash()).toString("hex"),
+      detail: "Transaction expired after wallet signature delay. Please retry.",
+      diagnosticEvents: [],
+    };
+  }
   const transaction = TransactionBuilder.fromXDR(signedEnvelope, passphrase) as Transaction;
   // The envelope's fee field carries inclusion fee + resource fee — exactly
   // what the network will charge for this transaction.
@@ -572,8 +658,8 @@ async function runInvocation(request: InvokeRequest): Promise<InvokeResult> {
   const included = await pollForInclusion(
     server,
     sent.hash,
-    request.pollAttempts ?? 30,
-    request.pollIntervalMs ?? 2_000,
+    request.pollAttempts ?? POLLING.txInclusionAttempts,
+    request.pollIntervalMs ?? POLLING.txInclusionMs,
   );
   if (!included.ok) {
     return {
@@ -666,4 +752,18 @@ function addressOfCredentials(credentials: xdr.SorobanCredentials): string | nul
   } catch {
     return null;
   }
+}
+
+export function createTransactionEnvelope(
+  currentTime: number,
+  minOffset: number = 60,
+  maxOffset: number = 300,
+) {
+  const minTime = currentTime - minOffset;
+  const maxTime = currentTime + maxOffset;
+  return { minTime, maxTime };
+}
+
+export function detectExpiration(currentTime: number, maxTime: number) {
+  return currentTime >= maxTime;
 }

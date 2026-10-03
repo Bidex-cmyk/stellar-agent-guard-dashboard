@@ -121,7 +121,10 @@ export function DashboardGrid({ panels }: { panels: GridPanel[] }) {
             onDragOver={(event) => event.preventDefault()}
             onDrop={() => dropOn(placement.id)}
           >
-            <div className="row" style={{ justifyContent: "space-between", marginBottom: placement.collapsed ? 0 : 8 }}>
+            <div
+              className="row"
+              style={{ justifyContent: "space-between", marginBottom: placement.collapsed ? 0 : 8 }}
+            >
               <div className="row" style={{ gap: 6 }}>
                 <button
                   type="button"
@@ -174,7 +177,9 @@ export function DashboardGrid({ panels }: { panels: GridPanel[] }) {
                 </button>
               </div>
             </div>
-            {placement.collapsed ? null : <div id={`panel-body-${placement.id}`}>{panel.content}</div>}
+            {placement.collapsed ? null : (
+              <div id={`panel-body-${placement.id}`}>{panel.content}</div>
+            )}
           </section>
         );
       })}

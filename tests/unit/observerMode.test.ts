@@ -89,7 +89,11 @@ describe("the write controls an observer sees", () => {
   it("explains an in-flight write differently from a missing wallet", () => {
     const busy = writeControlState(OPERATOR, { busy: true, label: "deploy" });
     assert.equal(busy.disabled, true);
-    assert.notEqual(busy.title, WRITE_DISABLED_HINT, "telling an operator to reconnect mid-submit is a lie");
+    assert.notEqual(
+      busy.title,
+      WRITE_DISABLED_HINT,
+      "telling an operator to reconnect mid-submit is a lie",
+    );
     assert.match(busy.title, /already in progress/);
     assert.equal(busy.reason, null);
   });

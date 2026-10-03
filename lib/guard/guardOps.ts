@@ -8,6 +8,7 @@
  */
 
 import { Account, Address, Operation, TransactionBuilder, rpc, xdr } from "@stellar/stellar-sdk";
+import { sha256Hex } from "./scval.ts";
 import type { GuardStatus, PolicyConfig } from "stellar-agent-guard-sdk";
 import { NETWORK, PHASE1_ARTIFACT } from "./network.ts";
 import { buildPolicyConfig, type PolicyDraft } from "./policyForm.ts";
@@ -17,18 +18,23 @@ import {
   readPolicy,
   readStatus,
   readWindow,
+  stringifyError,
   verifyWasmIdentity,
   type ReadResult,
   type WasmIdentity,
   type WindowState,
 } from "./chain.ts";
 import {
+  INCLUSION_FEE,
+  assembleFromSimulation,
+  buildInitialEnvelope,
   describeRejectedResult,
+  diagnosticEventsOf,
   invokeWithWallet,
   type InvokeResult,
   type WalletSigner,
 } from "./submit.ts";
-import { addressToScVal, hexToBytes, sha256Hex } from "./scval.ts";
+import { addressToScVal, hexToBytes } from "./scval.ts";
 import { announce } from "./useAnnounce.ts";
 import { recordTx } from "./txHistory.ts";
 
@@ -220,8 +226,7 @@ export async function submitOperation(params: {
           result,
         )})`,
         feeStroops,
-        diagnosticEvents:
-          (result as { diagnosticEventsXdr?: unknown[] }).diagnosticEventsXdr ?? [],
+        diagnosticEvents: (result as { diagnosticEventsXdr?: unknown[] }).diagnosticEventsXdr ?? [],
       };
     }
   }
@@ -317,7 +322,7 @@ export async function deployGuard(params: {
   const predicted = await predictContractId({
     deployerPublicKey: signer.address,
     salt,
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
 
   // ── Ensure the exact bytecode is a live code entry ─────────────────────
@@ -336,7 +341,7 @@ export async function deployGuard(params: {
       signer,
       operation: Operation.uploadContractWasm({ wasm }),
       label: "upload_contract_wasm",
-      passphrase: params.passphrase,
+      ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
     });
     record(`upload_contract_wasm (${PHASE1_ARTIFACT.wasmBytes} bytes)`, upload);
     if (upload.kind !== "submitted") {
@@ -354,7 +359,7 @@ export async function deployGuard(params: {
       constructorArgs: [],
     }),
     label: "create_custom_contract",
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
   record(
     `create_custom_contract (wasm ${PHASE1_ARTIFACT.wasmHash.slice(0, 12)}…) → ${predicted}`,
@@ -400,7 +405,7 @@ export async function initializeGuard(params: {
     fn: "initialize",
     args: [addressToScVal(params.signer.address), xdr.ScVal.scvBytes(pubkey)],
     signer: params.signer,
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
 }
 
@@ -412,19 +417,18 @@ export async function installPolicy(params: {
   draft: PolicyDraft;
   passphrase?: string;
   exportOnly?: boolean;
-}): Promise<
-  { kind: "invalid"; issues: string[] } | { kind: "invoked"; result: InvokeResult }
-> {
+}): Promise<{ kind: "invalid"; issues: string[] } | { kind: "invoked"; result: InvokeResult }> {
   const built = buildPolicyConfig(params.draft);
-  if (!built.ok) return { kind: "invalid", issues: built.issues.map((i) => `${i.field}: ${i.message}`) };
+  if (!built.ok)
+    return { kind: "invalid", issues: built.issues.map((i) => `${i.field}: ${i.message}`) };
   const result = await invokeWithWallet({
     server: params.server,
     contract: params.guard,
     fn: "set_policy",
     args: [built.scval],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
   return { kind: "invoked", result };
 }
@@ -443,9 +447,175 @@ export function freezeGuard(params: {
     fn: "freeze",
     args: [],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
+}
+
+// ── Freeze dry run ─────────────────────────────────────────────────────────
+
+/** One authorization the host recorded for a simulated call. */
+export interface SimulatedAuthorization {
+  /**
+   * `source_account` rides on the transaction envelope's signature; `address`
+   * needs its own `signAuthEntry` signature. `unsupported` is a credential kind
+   * this dashboard cannot satisfy.
+   */
+  kind: "source_account" | "address" | "unsupported";
+  /** The `G…`/`C…` that must authorize, when the host names one. */
+  address: string | null;
+}
+
+export interface FreezeSimulation {
+  kind: "simulated";
+  /** Always true: this came from a read-only simulation, never a broadcast. */
+  dryRun: true;
+  fn: "freeze";
+  /** Authorizations the host requires before the call could be submitted. */
+  authorizations: SimulatedAuthorization[];
+  /** How many of those need a separate auth-entry signature. */
+  separateSignaturesRequired: number;
+  /** Resource fee (CPU, ledger I/O, events) the call would cost, in stroops. */
+  resourceFeeStroops: string;
+  /** Inclusion fee floor applied to the envelope, in stroops. */
+  inclusionFeeStroops: string;
+  /** Total fee the network would charge, in stroops. */
+  totalFeeStroops: string;
+  /** Ledger keys in the simulated footprint. */
+  footprintEntries: number;
+  /** Ledger the simulation ran against, when the RPC reports one. */
+  latestLedger: number | null;
+}
+
+export interface FreezeSimulationRefused {
+  kind: "refused";
+  dryRun: true;
+  detail: string;
+  diagnosticEvents: unknown[];
+}
+
+export type FreezeSimulationResult = FreezeSimulation | FreezeSimulationRefused;
+
+/** The `G…`/`C…` inside an address credential, or `null` when unreadable. */
+function addressOfCredential(credentials: xdr.SorobanAddressCredentials): string | null {
+  try {
+    return Address.fromScAddress(credentials.address).toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Classify one recorded authorization into the operator's terms. */
+export function describeAuthorization(
+  entry: xdr.SorobanAuthorizationEntry,
+): SimulatedAuthorization {
+  const credentials = entry.credentials;
+  if (credentials.type === "sorobanCredentialsSourceAccount") {
+    return { kind: "source_account", address: null };
+  }
+  if (credentials.type === "sorobanCredentialsAddress") {
+    return { kind: "address", address: addressOfCredential(credentials.address) };
+  }
+  if (credentials.type === "sorobanCredentialsAddressV2") {
+    return { kind: "address", address: addressOfCredential(credentials.addressV2) };
+  }
+  return { kind: "unsupported", address: null };
+}
+
+/**
+ * Dry-run the emergency freeze: simulate `freeze()` and report what it would
+ * take, without signing or broadcasting anything.
+ *
+ * This runs exactly one recording-mode `simulateTransaction` and then assembles
+ * the priced envelope to read its fees. Recording mode does not enforce auth, so
+ * the call is *not* executed — but it does report which authorizations the host
+ * wants, what the footprint touches, and what the resources cost, which is what
+ * an operator wants to check before committing to a real freeze.
+ *
+ * The crucial property is what this function does *not* call: no
+ * `signAuthEntry`, no `signTransaction`, no `sendTransaction`. A dry run that
+ * prompted a wallet would be worse than no dry run at all, so that guarantee is
+ * structural here and pinned by `tests/unit/panicSimulation.test.ts`.
+ */
+export async function simulateFreeze(params: {
+  server: rpc.Server;
+  signer: WalletSigner;
+  guard: string;
+  passphrase?: string;
+}): Promise<FreezeSimulationResult> {
+  const passphrase = params.passphrase ?? NETWORK.passphrase;
+  const { server, signer } = params;
+
+  let account: Account;
+  try {
+    account = await server.getAccount(signer.address);
+  } catch (error) {
+    return {
+      kind: "refused",
+      dryRun: true,
+      detail: `could not load account ${signer.address} from the network (is the wallet on the right network, and is the account funded?): ${stringifyError(error)}`,
+      diagnosticEvents: [],
+    };
+  }
+
+  const operation = Operation.invokeContractFunction({
+    contract: params.guard,
+    function: "freeze",
+    args: [],
+  });
+  // The admin is a plain account, not the guard's own `__check_auth` caller, so
+  // no guard storage keys are merged into the footprint — RPC preflight prices
+  // exactly what `freeze()` touches.
+  const envelope = buildInitialEnvelope({
+    source: new Account(signer.address, account.sequenceNumber()),
+    operation,
+    passphrase,
+    guard: null,
+  });
+
+  let simulation: rpc.Api.SimulateTransactionResponse;
+  try {
+    simulation = await server.simulateTransaction(envelope);
+  } catch (error) {
+    return {
+      kind: "refused",
+      dryRun: true,
+      detail: `the dry-run simulation could not be completed: ${stringifyError(error)}`,
+      diagnosticEvents: [],
+    };
+  }
+
+  if (rpc.Api.isSimulationError(simulation)) {
+    return {
+      kind: "refused",
+      dryRun: true,
+      detail: stringifyError(simulation.error),
+      diagnosticEvents: diagnosticEventsOf(simulation),
+    };
+  }
+
+  const success = simulation as rpc.Api.SimulateTransactionSuccessResponse;
+  const authorizations = (success.result?.auth ?? []).map(describeAuthorization);
+  const assembled = assembleFromSimulation({
+    simulation: success,
+    source: new Account(signer.address, account.sequenceNumber()),
+    operation,
+    passphrase,
+    guard: null,
+  });
+
+  return {
+    kind: "simulated",
+    dryRun: true,
+    fn: "freeze",
+    authorizations,
+    separateSignaturesRequired: authorizations.filter((entry) => entry.kind === "address").length,
+    resourceFeeStroops: assembled.resourceFee.toString(),
+    inclusionFeeStroops: INCLUSION_FEE,
+    totalFeeStroops: assembled.transaction.fee,
+    footprintEntries: assembled.footprintKeys,
+    latestLedger: success.latestLedger ?? null,
+  };
 }
 
 /**
@@ -470,8 +640,8 @@ export function unfreezeGuard(params: {
     fn: "unfreeze",
     args: [],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
 }
 
@@ -489,8 +659,8 @@ export function revokePolicy(params: {
     fn: "revoke_policy",
     args: [],
     signer: params.signer,
-    passphrase: params.passphrase,
-    exportOnly: params.exportOnly,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
+    ...(params.exportOnly !== undefined ? { exportOnly: params.exportOnly } : {}),
   });
 }
 
@@ -517,7 +687,7 @@ export async function rotateAgentKey(params: {
     fn: "rotate_agent_key",
     args: [xdr.ScVal.scvBytes(pubkey)],
     signer: params.signer,
-    passphrase: params.passphrase,
+    ...(params.passphrase !== undefined ? { passphrase: params.passphrase } : {}),
   });
 }
 
