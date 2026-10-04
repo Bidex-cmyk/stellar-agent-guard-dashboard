@@ -17,6 +17,8 @@ import {
 } from "./bits.tsx";
 import { INITIAL_GRID_LABELS, skeletonSpecFor } from "../lib/guard/statusReadState.ts";
 import { CopyButton } from "./CopyButton.tsx";
+import { WebhookAlertBridge } from "./WebhookAlertBridge.tsx";
+import { WebhookSettingsButton } from "./WebhookSettings.tsx";
 import { PHASE1_ARTIFACT, NETWORK } from "../lib/guard/network.ts";
 import { configureHref } from "../lib/guard/deeplink.ts";
 import { NO_POLICY_CONSEQUENCE, policyStateFrom } from "../lib/guard/policyState.ts";
@@ -141,6 +143,8 @@ export function StatusPanel() {
                 read <TimeAgo iso={snapshot.fetchedAt} />
               </span>
             )}
+            <WebhookSettingsButton />
+            <WebhookAlertBridge />
             <button className="secondary no-print" onClick={() => window.print()}>
               Print Compliance Report
             </button>
