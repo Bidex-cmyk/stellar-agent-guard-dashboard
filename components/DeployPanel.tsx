@@ -18,6 +18,7 @@ import { NETWORK, PHASE1_ARTIFACT } from "../lib/guard/network.ts";
 import { fetchContractWasm, verifyWasmIdentity } from "../lib/guard/chain.ts";
 import { toHex } from "../lib/guard/scval.ts";
 import { validateInitParameters, type InitValidation } from "../lib/guard/initValidator.ts";
+import { sanitizeAddressInput } from "../lib/guard/inputSanitizer.ts";
 import {
   contractAlreadyDeployed,
   createSaltAddressPredictor,
@@ -759,7 +760,7 @@ export function DeployPanel() {
         <span className="lbl">Agent public key (32 raw Ed25519 bytes, hex)</span>
         <input
           value={agentPubkey}
-          onChange={(event) => setAgentPubkey(event.target.value)}
+          onChange={(event) => setAgentPubkey(sanitizeAddressInput(event.target.value))}
           placeholder="53b093e0281a2d8f4276b77fd21e3380b3329f09097ace3d9e60cf0f2f9039e2"
         />
         <span className="hint">
@@ -778,7 +779,7 @@ export function DeployPanel() {
         <span className="lbl">Agent account address (G…)</span>
         <input
           value={agentAddress}
-          onChange={(event) => setAgentAddress(event.target.value)}
+          onChange={(event) => setAgentAddress(sanitizeAddressInput(event.target.value))}
           placeholder="GBUQ… (must differ from the connected admin)"
           aria-label="Agent account address"
         />
