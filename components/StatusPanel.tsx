@@ -17,6 +17,7 @@ import {
 } from "./bits.tsx";
 import { INITIAL_GRID_LABELS, skeletonSpecFor } from "../lib/guard/statusReadState.ts";
 import { CopyButton } from "./CopyButton.tsx";
+import { StorageExplorerButton } from "./StorageExplorer.tsx";
 import { WebhookAlertBridge } from "./WebhookAlertBridge.tsx";
 import { WebhookSettingsButton } from "./WebhookSettings.tsx";
 import { PHASE1_ARTIFACT, NETWORK } from "../lib/guard/network.ts";
@@ -143,6 +144,7 @@ export function StatusPanel() {
                 read <TimeAgo iso={snapshot.fetchedAt} />
               </span>
             )}
+            <StorageExplorerButton />
             <WebhookSettingsButton />
             <WebhookAlertBridge />
             <button className="secondary no-print" onClick={() => window.print()}>

@@ -694,6 +694,79 @@ code {
   margin-top: 12px;
 }
 
+/*
+ * Contract storage explorer (issue #150) — a wider dialog than the confirmation
+ * cards, because the entries are a list rather than a single question.
+ */
+.modal.storage-drawer {
+  max-width: 820px;
+}
+
+.storage-entries {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.storage-entry {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 11px;
+  background: var(--panel-2);
+}
+
+/* An uninitialized key is a fact, not an error: dimmed, never danger-tinted. */
+.storage-entry[data-present="false"] {
+  opacity: 0.72;
+}
+
+.storage-entry-toggle {
+  font-size: 12.5px;
+}
+
+/*
+ * The decoded value. JSON tokens are coloured by *kind* rather than by
+ * meaning, and every token still reads as its own literal text, so the colour
+ * is a reading aid and never the only way to tell a string from a number.
+ */
+.json-tree {
+  margin: 0;
+  padding: 9px 11px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.json-tree .json-key {
+  color: var(--accent);
+}
+
+.json-tree .json-string {
+  color: var(--ok);
+}
+
+.json-tree .json-number {
+  color: var(--warn);
+}
+
+.json-tree .json-boolean,
+.json-tree .json-null {
+  color: var(--muted);
+}
+
+.json-tree .json-bytes {
+  color: var(--danger);
+  word-break: break-all;
+}
+
 /* Toast notification queue (issue #105) — fixed corner viewport. */
 .toast-viewport {
   position: fixed;
