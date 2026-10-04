@@ -163,7 +163,7 @@ npm run inspect      # read-only dump of an instance's state
 
 ## Operator Runbooks
 
-Two step-by-step procedures cover the console's high-stakes operations. They are written to be followed under pressure, and both include CLI fallback commands for when the browser UI is unavailable.
+Three step-by-step procedures cover the console's high-stakes operations. They are written to be followed under pressure, and each includes CLI fallback commands for when the browser UI is unavailable.
 
 | Runbook                                                                                  | Use it when                                                                                                                                                                                                                                                                                                                                                                           |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
