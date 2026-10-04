@@ -23,6 +23,7 @@ import {
 } from "@stellar/stellar-sdk";
 import { NETWORK, PHASE1_ARTIFACT, READ_SOURCE_FALLBACK } from "./network.ts";
 import { guardStorageLedgerKeys, hashToHex, sha256, sha256Hex } from "./scval.ts";
+import { parseContractSpec, type ContractSpecResult } from "./contractSpecParser.ts";
 import { type GuardStatus, type PolicyConfig, decodePolicy } from "stellar-agent-guard-sdk";
 import { withTimeout, DashboardReadError } from "./timeout.ts";
 
@@ -282,6 +283,40 @@ export async function fetchContractWasm(
   return await withTimeout(async () => {
     return toBytes(await server.getContractWasmByContractId(contractId));
   });
+}
+
+/**
+ * The deployed contract's bytes, or why they could not be read.
+ *
+ * Fetching a protocol contract's code can fail for reasons that are not the
+ * contract's fault — a Wrong-Chain contract id, an RPC outage — so the caller
+ * gets a typed failure it can show, rather than a throw it must catch.
+ */
+export type ContractWasmResult = { ok: true; wasm: Uint8Array } | { ok: false; error: string };
+
+/**
+ * Fetch a contract's WASM and extract its exported functions from the embedded
+ * spec, for the policy form's per-function allowlist picker.
+ *
+ * A read failure and a missing spec are reported through the same envelope so
+ * the form can fall back to manual entry in both cases; `reason` distinguishes
+ * a contract that genuinely has no spec (see `SpecMissingReason`) from a chain
+ * error.
+ */
+export async function readContractSpec(
+  server: rpc.Server,
+  contractId: string,
+): Promise<ContractSpecResult | { ok: false; reason: "fetch"; error: string }> {
+  try {
+    const wasm = await fetchContractWasm(server, contractId);
+    return parseContractSpec(wasm);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "fetch",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function toBytes(value: unknown): Uint8Array {

@@ -33,6 +33,7 @@ import {
 } from "../lib/guard/assetCapsCsv.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { ErrorBlock, ScopeNotice, WarningBanner, starLink } from "./bits.tsx";
+import { ProtocolFunctionSelector } from "./ProtocolFunctionSelector.tsx";
 import { CsvImportExport } from "./CsvImportExport.tsx";
 import { PolicySimulationView } from "./PolicySimulationView.tsx";
 import { fetchTokenMetadata } from "../lib/guard/tokenMetadata.ts";
@@ -726,6 +727,12 @@ export function PolicyForm() {
               to these calls; per-call amount and recipient limits do not.
             </span>
           </label>
+
+          {/* The picker reads each contract's spec from chain, so a typo'd
+              symbol is caught before the policy is installed rather than as a
+              runtime authorization refusal. The textarea stays authoritative:
+              the picker only edits the lines it is given. */}
+          <ProtocolFunctionSelector draft={effective} set={set} />
 
           <div className="checkline">
             <input

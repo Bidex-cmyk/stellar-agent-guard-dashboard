@@ -821,6 +821,88 @@ code {
 }
 
 /*
+ * Function picker (contract-spec-driven allowlist selection).
+ *
+ * Shaped to the same visual language as the rest of the console: panel-2
+ * surfaces, the standard line colour, and mono names. The option list is a
+ * scrollable region with a fixed max height so a large contract spec cannot
+ * push the form's layout around.
+ */
+.fn-picker {
+  position: relative;
+}
+
+.fn-input-wrap {
+  flex: 1;
+  display: flex;
+}
+
+.fn-input-wrap input {
+  width: 100%;
+}
+
+.fn-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 30;
+}
+
+.fn-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "check name"
+    "check sig";
+  gap: 0 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fn-option input[type="checkbox"] {
+  grid-area: check;
+  width: auto;
+  margin: 0;
+  align-self: center;
+}
+
+.fn-option .fn-name {
+  grid-area: name;
+}
+
+.fn-option .fn-sig {
+  grid-area: sig;
+  overflow-wrap: anywhere;
+}
+
+.fn-option .fn-doc {
+  display: none;
+}
+
+.fn-option.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.fn-option.selected .fn-name {
+  color: var(--accent);
+}
+
+.fn-chips {
+  flex-wrap: wrap;
+}
+
+.fn-chip {
+  cursor: pointer;
+}
+
+/*
  * Dead-man-switch expiration alert banners — shown at the top of the console
  * while the DMS deadline approaches, escalating in three tiers:
  * warning (yellow) below 25% of grace, critical (red, pulsing) below 10%, and
