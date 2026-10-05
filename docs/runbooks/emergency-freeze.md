@@ -10,7 +10,7 @@ dashboard reads and writes.
 
 > **Read this before an incident, not during one.** Everything here is designed to
 > be followed under stress. If you are in the middle of an incident, jump straight
-> to [Immediate action](#immediate-action-the-first-five-minutes).
+> to [the response timeline](#3-response-timeline).
 
 ---
 

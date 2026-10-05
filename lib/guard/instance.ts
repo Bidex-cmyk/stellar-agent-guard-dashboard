@@ -34,8 +34,33 @@ export interface GuardInstance {
  */
 export const KNOWN_INSTANCE_ADDED_AT = "1970-01-01T00:00:00.000Z";
 
+/**
+ * The guard a local standalone sandbox deployed, when this build was pointed at
+ * one through `NEXT_PUBLIC_GUARD_CONTRACT_ID`.
+ *
+ * Without it a sandbox build would open on Phase 1's testnet address, which does
+ * not exist on a local network, and the console would report every read as a
+ * failure — technically honest, but useless for offline development. The address
+ * is still only a *seed*: nothing about it is cached, and every number shown for
+ * it is read from the local chain.
+ */
+function sandboxInstance(): GuardInstance | null {
+  const guard = process.env.NEXT_PUBLIC_GUARD_CONTRACT_ID?.trim();
+  if (!guard || !looksLikeContractAddress(guard)) return null;
+  return {
+    guard,
+    label: "Local sandbox guard",
+    network: NETWORK.name,
+    addedAt: KNOWN_INSTANCE_ADDED_AT,
+    provenance: "Deployed by scripts/start-local-sandbox.sh on the local standalone network.",
+  };
+}
+
+const SANDBOX_INSTANCE = sandboxInstance();
+
 /** The two addresses the earlier phases proved, offered as starting points. */
 export const KNOWN_INSTANCES: readonly GuardInstance[] = [
+  ...(SANDBOX_INSTANCE ? [SANDBOX_INSTANCE] : []),
   {
     guard: PHASE1_ARTIFACT.guard,
     label: "Phase 1 guard",

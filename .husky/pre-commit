@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Pre-commit gate, installed by husky (see `prepare` in package.json).
+#
+# The rules live in .lintstagedrc.json and the Prettier settings in
+# .prettierrc.json. Only *staged* files are checked, so a commit is never
+# blocked by formatting debt in a file this commit does not touch.
+#
+#   npx lint-staged                      # run the gate on demand
+#   npm run format                       # fix formatting across the repo
+#
+# `HUSKY=0 git commit …` skips the hook for a one-off emergency commit; CI does
+# not run it at all, because CI never commits.
+npx lint-staged

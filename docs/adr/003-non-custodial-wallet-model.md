@@ -222,7 +222,7 @@ incidents are precisely when one wants the stronger confirmation channel.
 
 - [ADR 001 — Zero-Server Client-Only Architecture](./001-zero-server-architecture.md)
 - [ADR 002 — Diagnostic Simulation for Rejected Transaction Visibility](./002-diagnostic-simulation-for-rejections.md)
-- [SPEC.md §5 — Write path](../../../SPEC.md)
+- [SPEC.md §5 — Write path](../../SPEC.md)
 - [Client-side Freighter architecture](../concepts/client-side-freighter-architecture.md)
 - [Operator runbook — Emergency Freeze](../runbooks/emergency-freeze.md)
 - [Operator runbook — Agent key rotation](../runbooks/agent-key-rotation.md)

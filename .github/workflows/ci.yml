@@ -51,6 +51,13 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Every relative path and section anchor in the README, SPEC.md, CONTRIBUTING.md
+      # and docs/ is a promise that the docs still line up. This checks it, offline:
+      # it never fetches an external URL, so a broken link to another host cannot
+      # fail a build for reasons that have nothing to do with this commit.
+      - name: Documentation links
+        run: npm run test:docs
+
       - name: Build
         run: npm run build
 
