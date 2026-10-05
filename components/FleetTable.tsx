@@ -14,6 +14,8 @@ import {
 } from "../lib/guard/fleet.ts";
 import { loadInstances } from "../lib/guard/instance.ts";
 import { freezeGuard } from "../lib/guard/guardOps.ts";
+import { freezeFailed, freezeSubmitted, writeFailureReason } from "../lib/guard/announceCopy.ts";
+import { announce } from "../lib/guard/useAnnounce.ts";
 import { NETWORK } from "../lib/guard/network.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { fleetTableState, fleetEmptyCopy } from "../lib/guard/fleetTableState.ts";
@@ -80,12 +82,25 @@ export function FleetTable() {
       return;
     }
     try {
-      await freezeGuard({
+      const result = await freezeGuard({
         server,
         signer: freighterSigner(wallet.address, NETWORK.passphrase),
         guard,
       });
+      // The fleet table has no snapshot to re-read, so it announces what it does
+      // have: the submission receipt, and the reason when there wasn't one. This
+      // is the only freeze path left without a chain re-read behind its claim —
+      // the panic panel announces its verified outcome instead (issue #30), so a
+      // freeze is spoken exactly once no matter which page ran it.
+      const spoken =
+        result.kind === "submitted"
+          ? freezeSubmitted()
+          : freezeFailed("freeze", writeFailureReason(result, "the write did not complete"));
+      announce(spoken.message, spoken.priority);
     } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const spoken = freezeFailed("freeze", detail);
+      announce(spoken.message, spoken.priority);
       console.error(err);
     }
   };

@@ -21,6 +21,14 @@ import { historyShortcut, useHistoryState } from "../lib/guard/useHistoryState.t
 import { computePolicyDiff, type PolicyDiff } from "../lib/guard/policyDiff.ts";
 import { PolicyDiffModal } from "./PolicyDiffModal.tsx";
 import type { InvokeResult } from "../lib/guard/submit.ts";
+import {
+  policyConfirmed,
+  policyFailed,
+  writeFailureReason,
+  type PolicyOperation,
+} from "../lib/guard/announceCopy.ts";
+import { announce } from "../lib/guard/useAnnounce.ts";
+import { noteVerifiedOutcome } from "../lib/guard/statusTransitions.ts";
 import { refusedEventsFromDiagnostics } from "../lib/guard/telemetry.ts";
 import { NO_POLICY_CONSEQUENCE, policyStateFrom } from "../lib/guard/policyState.ts";
 import {
@@ -49,6 +57,57 @@ import { exportPolicyDraft, importPolicyFromJson } from "../lib/guard/policySche
  * the host converts the map into a typed struct by walking entries in a required
  * order, so a second encoder would be a second place to get the field order wrong.
  */
+type PolicyOutcome =
+  { kind: "invalid"; issues: string[] } | { kind: "invoked"; result: InvokeResult };
+
+/** Speak a policy write's outcome, with the reason when it did not land. */
+function speakPolicy(operation: PolicyOperation, reason: string): void {
+  const spoken = policyFailed(operation, reason);
+  announce(spoken.message, spoken.priority);
+}
+
+/**
+ * The announcement for a finished policy write.
+ *
+ * A draft that never passed local validation is not a failed write — nothing was
+ * signed and nothing can have changed — so it is announced as what it is, the
+ * issues, instead of as a chain error the operator would read as a failed
+ * transaction. `exportOnly` is likewise not a failure but not a change either:
+ * the XDR is in the operator's hands and the account's policy is exactly as it
+ * was, so that is what is said.
+ */
+function speakPolicyOutcome(
+  operation: PolicyOperation,
+  outcome: PolicyOutcome,
+  exportOnly: boolean,
+): void {
+  if (outcome.kind === "invalid") {
+    speakPolicy(
+      operation,
+      `the policy was not valid, so nothing was sent: ${outcome.issues.join("; ")}`,
+    );
+    return;
+  }
+  if (outcome.result.kind === "submitted") {
+    const spoken = policyConfirmed(operation);
+    announce(spoken.message, spoken.priority);
+    // The write landed, so the next poll should not repeat it. Recorded here
+    // because this is the only place that knows what the operator just did;
+    // a policy that appears or vanishes from anywhere else is still announced.
+    noteVerifiedOutcome({ hasPolicy: operation === "set_policy" });
+    return;
+  }
+  speakPolicy(
+    operation,
+    writeFailureReason(
+      outcome.result,
+      exportOnly
+        ? "the transaction was only exported, so nothing was submitted"
+        : "the write did not complete",
+    ),
+  );
+}
+
 export function PolicyForm() {
   const { signer, guard, server, refresh, snapshot, pushEvents, wallet, notifyTabs } = useGuard();
   // `null` means "not edited yet", which is what lets the form seed itself from
@@ -64,9 +123,7 @@ export function PolicyForm() {
     canRedo,
   } = useHistoryState<PolicyDraft | null>(null);
   const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<
-    { kind: "invalid"; issues: string[] } | { kind: "invoked"; result: InvokeResult } | null
-  >(null);
+  const [outcome, setOutcome] = useState<PolicyOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDiff, setPendingDiff] = useState<PolicyDiff | null>(null);
   const [assetCapChanges, setAssetCapChanges] = useState<Record<string, AssetCapChange>>({});
@@ -293,11 +350,14 @@ export function PolicyForm() {
       if (result.kind === "invoked" && result.result.kind === "submitted") {
         notifyTabs("POLICY_UPDATED", { payload: { operation: "set_policy" } });
       }
+      speakPolicyOutcome("set_policy", result, exportOnly);
       if (!exportOnly) {
         await refresh();
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      const detail = caught instanceof Error ? caught.message : String(caught);
+      setError(detail);
+      speakPolicy("set_policy", detail);
     } finally {
       setBusy(false);
     }
@@ -313,11 +373,14 @@ export function PolicyForm() {
       if (result.kind === "submitted") {
         notifyTabs("POLICY_UPDATED", { payload: { operation: "revoke_policy" } });
       }
+      speakPolicyOutcome("revoke_policy", { kind: "invoked", result }, exportOnly);
       if (!exportOnly) {
         await refresh();
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      const detail = caught instanceof Error ? caught.message : String(caught);
+      setError(detail);
+      speakPolicy("revoke_policy", detail);
     } finally {
       setBusy(false);
     }

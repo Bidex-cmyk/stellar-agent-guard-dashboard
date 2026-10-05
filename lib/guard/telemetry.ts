@@ -450,6 +450,27 @@ export interface StreamBuffer {
 /** How many rows the feed keeps. The feed is a live view, not an archive. */
 export const STREAM_BUFFER_LIMIT = 250;
 
+/**
+ * A stable identity for an event, so re-polling the same page cannot duplicate
+ * rows. Decoded event data can hold bigints (a heartbeat's `at`), which plain
+ * `JSON.stringify` rejects, so they are written as decimal strings.
+ */
+export function eventKey(event: GuardEvent): string {
+  return [
+    event.source,
+    event.transactionHash ?? "-",
+    event.ledger ?? "-",
+    event.topic,
+    event.decision?.result ?? "-",
+    event.decision?.reason ?? "-",
+    typeof event.data === "object" && event.data !== null
+      ? JSON.stringify(event.data, (_key, value: unknown) =>
+          typeof value === "bigint" ? `${value}n` : value,
+        )
+      : String(event.data),
+  ].join("|");
+}
+
 export function emptyStreamBuffer(): StreamBuffer {
   return { rows: [], pending: [], paused: false, seen: new Set(), dropped: 0 };
 }
