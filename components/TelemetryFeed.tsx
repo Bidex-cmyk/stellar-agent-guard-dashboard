@@ -34,6 +34,12 @@ import {
 } from "../lib/guard/telemetryExport.ts";
 import { severityFor } from "../lib/guard/feedSeverity.ts";
 import { decodeUrlState, writeUrlState } from "../lib/guard/urlState.ts";
+import {
+  FEED_GUARD_CAP,
+  attributionLabel,
+  matchesGuardFilter,
+  toggleGuardFilter,
+} from "../lib/guard/feedSubscriptions.ts";
 
 /** The scoped-state base under which each guard's feed filter is remembered. */
 const SCOPED_FILTER_BASE = "feedFilter";
@@ -82,6 +88,10 @@ function downloadText(filename: string, content: string, mime: string): void {
  *   - Rows are tiered by severity so a block is findable by looking, not by
  *     reading: the tier is a class and a `data-severity`, and every tier's wording
  *     is already in the row, so nothing here depends on colour.
+ *   - Since issue #23 the feed tails *several* guards at once, merging their
+ *     streams into one table with a guard-attribution chip per row. Each tailed
+ *     guard is one more poll loop, so only the first `FEED_GUARD_CAP` are watched
+ *     and the rest are named as not tailed rather than silently dropped.
  *
  * There is deliberately no sound. An operator console runs unattended and muted;
  * a noise that can only be silenced in the tab that made it is not an alert.
@@ -101,6 +111,7 @@ export function TelemetryFeed() {
     guard,
     queryRange,
     rangeLabel,
+    instances,
   } = useGuard();
   // Restore a shared verdict filter from the URL, while retaining the other
   // filter dimensions independently for each guard in local storage.
@@ -173,11 +184,33 @@ export function TelemetryFeed() {
     );
   }
 
+  // The guard-chip filter (issue #23) is one more feed criterion, composed ahead
+  // of the verdict/topic/contract filter rather than instead of it: an empty
+  // selection means "every guard", which is the state the panel opens in.
+  const [selectedGuards, setSelectedGuards] = useState<Set<string>>(() => new Set());
+  const guardVisible = useMemo(
+    () => events.filter((event) => matchesGuardFilter(event.contractId, selectedGuards)),
+    [events, selectedGuards],
+  );
   // The three controls and the exports all act on the same projection, so a
   // CSV/NDJSON download is provably the filtered view on screen — one row in,
-  // one line out, never a hidden superset.
-  const rows = filterGuardEvents(events, filter);
-  const filterActive = isFilterActive(filter);
+  // one line out, never a hidden superset. The guard chip feeds that same
+  // projection, so an export is the filtered multi-guard view and nothing more.
+  const rows = filterGuardEvents(guardVisible, filter);
+  const filterActive = isFilterActive(filter) || selectedGuards.size > 0;
+
+  /**
+   * Chips describe what is actually tailed: the live tail's (capped) set while
+   * watching, and the full registry otherwise, so the controls never offer a
+   * guard the feed is not reading.
+   */
+  const chipSources = useMemo(
+    () =>
+      feed.guards.length > 0
+        ? feed.guards
+        : instances.map((instance) => ({ guard: instance.guard, label: instance.label })),
+    [feed.guards, instances],
+  );
 
   /**
    * Download the structured audit log: a header line naming the guard, network
@@ -413,11 +446,50 @@ export function TelemetryFeed() {
           Export audit log
         </button>
         {filterActive && (
-          <button className="secondary" onClick={() => applyFilter(() => EMPTY_TELEMETRY_FILTER)}>
+          <button
+            className="secondary"
+            onClick={() => {
+              applyFilter(() => EMPTY_TELEMETRY_FILTER);
+              // "Clear filters" clears every criterion, the chip filter included.
+              setSelectedGuards(new Set());
+            }}
+          >
             Clear filters
           </button>
         )}
       </div>
+
+      {chipSources.length > 1 && (
+        <div
+          className="row"
+          style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}
+          role="group"
+          aria-label="Filter events by guard"
+        >
+          <span className="tiny muted">Filter by guard:</span>
+          {chipSources.map((source) => {
+            const active = selectedGuards.has(source.guard);
+            return (
+              <button
+                key={source.guard}
+                className={active ? "pill ok" : "pill"}
+                aria-pressed={active}
+                title={source.guard}
+                onClick={() =>
+                  setSelectedGuards((current) => toggleGuardFilter(current, source.guard))
+                }
+              >
+                {source.label}
+              </button>
+            );
+          })}
+          {selectedGuards.size > 0 && (
+            <button className="secondary" onClick={() => setSelectedGuards(new Set())}>
+              All guards
+            </button>
+          )}
+        </div>
+      )}
 
       <p className="tiny muted" style={{ marginTop: 8 }}>
         Tailed from Soroban RPC&apos;s <code>getEvents</code> with a cursor, so no event is
@@ -430,6 +502,28 @@ export function TelemetryFeed() {
           </>
         )}
       </p>
+
+      {feed.guards.length > 0 && (
+        <p className="tiny muted" style={{ marginTop: 8 }}>
+          Tailing {feed.guards.length} guard{feed.guards.length === 1 ? "" : "s"} simultaneously, up
+          to the {FEED_GUARD_CAP}-guard cap. Each tailed guard is its own poll loop, so RPC load
+          scales with the number watched.
+        </p>
+      )}
+
+      {feed.capped > 0 && (
+        <div className="notice" role="status">
+          <strong>
+            {feed.capped} guard{feed.capped === 1 ? "" : "s"} beyond the {FEED_GUARD_CAP}-guard cap{" "}
+            {feed.capped === 1 ? "is" : "are"} not being tailed
+          </strong>
+          <span className="tiny">
+            {feed.cappedLabels.join(", ")}. Their events will not appear in this feed. Remove a
+            guard from the registry, or stop watching, to tail a different set — the cap keeps poll
+            load bounded rather than silently multiplying RPC traffic.
+          </span>
+        </div>
+      )}
 
       <div className="notice info">
         <strong>Refused decisions cannot reach this feed from the ledger</strong>
@@ -476,6 +570,9 @@ export function TelemetryFeed() {
                     <td>
                       <Skeleton lines={1} />
                     </td>
+                    <td>
+                      <Skeleton lines={1} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -484,14 +581,19 @@ export function TelemetryFeed() {
         ) : (
           <p className="tiny muted">
             {feed.watching
-              ? "No events from this guard yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
-              : "Start watching to tail this guard's events."}
+              ? feed.guards.length > 1
+                ? "No events from these guards yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
+                : "No events from this guard yet. Lifecycle events (policy set, frozen, heartbeat) and allowed decisions appear here as they settle."
+              : feed.guards.length > 1
+                ? "Start watching to tail these guards' events."
+                : "Start watching to tail this guard's events."}
           </p>
         )
       ) : rows.length === 0 ? (
         <p className="tiny muted">
-          No events match the current filter. The feed still holds {events.length} event(s); widen
-          the verdict, topic or contract filter to see them.
+          No events match the current filter. The feed still holds {guardVisible.length} event(s);
+          widen the verdict, topic, contract{selectedGuards.size > 0 ? " or guard" : ""} filter to
+          see them.
         </p>
       ) : (
         <div className="scrolly">
@@ -499,7 +601,11 @@ export function TelemetryFeed() {
             {feedHead}
             <tbody>
               {rows.map((event) => (
-                <TelemetryRow key={event.id} event={event} />
+                <TelemetryRow
+                  key={event.id}
+                  event={event}
+                  guardLabel={attributionLabel(event.contractId, chipSources)}
+                />
               ))}
             </tbody>
           </table>
@@ -508,8 +614,12 @@ export function TelemetryFeed() {
 
       <p className="tiny muted" style={{ marginTop: 8 }}>
         Feed holds the most recent {events.length} event(s) from{" "}
-        <span className="mono">{short(guard, 8, 6)}</span>.
-        {filterActive && <> Showing {rows.length} matching the current filter.</>} The audit log
+        {feed.guards.length > 1 ? (
+          `${feed.guards.length} tailed guards`
+        ) : (
+          <span className="mono">{short(guard, 8, 6)}</span>
+        )}
+        .{filterActive && <> Showing {rows.length} matching the current filter.</>} The audit log
         keeps 64-bit values (ledgers, stroop amounts, timestamps) as strings so no precision is
         lost.
       </p>
@@ -536,7 +646,14 @@ export function TelemetryFeed() {
  * element and the cells stay exactly as they were — O(1) from fields the decoder
  * already produced, with no topic or reason string parsed (see `severityFor`).
  */
-const TelemetryRow = memo(function TelemetryRow({ event }: { event: TelemetryEvent }) {
+const TelemetryRow = memo(function TelemetryRow({
+  event,
+  guardLabel,
+}: {
+  event: TelemetryEvent;
+  /** The registry label for this row's guard, resolved by the caller. */
+  guardLabel: string | null;
+}) {
   const severity = severityFor(event);
   const iso = event.ledgerClosedAt ?? event.observedAt ?? null;
   return (
@@ -557,6 +674,15 @@ const TelemetryRow = memo(function TelemetryRow({ event }: { event: TelemetryEve
         )}
         {event.decision?.result === "blocked" && event.decision.reason && (
           <div className="tiny muted">{explainReason(event.decision.reason)}</div>
+        )}
+      </td>
+      <td>
+        {guardLabel !== null ? (
+          <span className="pill" title={event.contractId ?? "unknown contract"}>
+            {guardLabel}
+          </span>
+        ) : (
+          <span className="tiny muted">—</span>
         )}
       </td>
       <td>
@@ -588,6 +714,7 @@ const feedHead = (
     <tr>
       <th>Event</th>
       <th>Decision</th>
+      <th>Guard</th>
       <th>Source</th>
       <th>Time</th>
       <th>Transaction</th>

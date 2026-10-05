@@ -44,6 +44,7 @@ import {
   type StreamBuffer,
   type TelemetryEvent,
 } from "../lib/guard/telemetry.ts";
+import { FEED_GUARD_CAP, MultiGuardFeed, type FeedSource } from "../lib/guard/feedSubscriptions.ts";
 import { createTabSync, type TabSyncEventType } from "../lib/guard/tabSync.ts";
 import { resolveGuardFromSearch } from "../lib/guard/deeplink.ts";
 import {
@@ -172,6 +173,12 @@ export interface GuardContextValue {
     latestLedger: number | null;
     error: string | null;
     lastPolledAt: string | null;
+    /** The guards currently tailed (up to `FEED_GUARD_CAP`), with their labels. */
+    guards: FeedSource[];
+    /** How many registry entries the cap is excluding right now. */
+    capped: number;
+    /** Labels of the excluded guards, so the cap can be named, not just counted. */
+    cappedLabels: string[];
   };
   startWatching: () => void;
   stopWatching: () => void;
@@ -292,6 +299,9 @@ export function GuardProvider({
     latestLedger: null,
     error: null,
     lastPolledAt: null,
+    guards: [],
+    capped: 0,
+    cappedLabels: [],
   });
 
   /**
@@ -321,10 +331,46 @@ export function GuardProvider({
   if (!feedRef.current) {
     feedRef.current = new GuardFeedCoordinator((guardId: string) => new GuardFeed(server, guardId));
   }
+  // The multi-guard supervisor fans the tail out across the registry (#23): one
+  // listener per tailed guard, capped, reconciled whenever the registry changes.
+  // It is layered *over* the coordinator rather than replacing it, so each guard
+  // still gets an identity-keyed, cursor-preserving feed from the coordinator
+  // while the supervisor owns the set. Both live in refs so a re-render can never
+  // reset a cursor and silently re-deliver events.
+  const multiFeedRef = useRef<MultiGuardFeed | null>(null);
   // The freshest ledger head this tab has observed from any feed's polls.
   // Ledgers are chain-global, so a head learned while watching guard A is the
   // valid priming point for guard B's history window (FEED_SWITCH_HISTORY_LEDGERS).
   const knownLedgerRef = useRef<number | null>(null);
+
+  /**
+   * Drop every guard-scoped feed cursor at once.
+   *
+   * Both layers must go together: the supervisor holds references to feeds the
+   * coordinator created, so clearing only the coordinator would leave it polling
+   * orphans whose cursors are no longer the ones this tab is allowed to resume.
+   */
+  const dropFeedState = useCallback(() => {
+    multiFeedRef.current?.stopAll();
+    multiFeedRef.current = null;
+    feedRef.current = null;
+  }, []);
+
+  /**
+   * The guards to tail, active guard first.
+   *
+   * The active guard leads so the cap can never exclude the account on screen —
+   * a full registry must not starve the one the operator is looking at.
+   */
+  const feedSources = useMemo<FeedSource[]>(() => {
+    const sources: FeedSource[] = [
+      { guard, label: instances.find((i) => i.guard === guard)?.label ?? "Active account" },
+    ];
+    for (const instance of instances) {
+      if (instance.guard !== guard) sources.push({ guard: instance.guard, label: instance.label });
+    }
+    return sources;
+  }, [guard, instances]);
   // The active guard, readable from the (long-lived) sync listener without
   // re-subscribing on every guard change.
   const guardRef = useRef(guard);
@@ -715,7 +761,7 @@ export function GuardProvider({
           setBuffer(emptyStreamBuffer());
           // The feed cursor is guard-scoped: never carry the previous guard's
           // cursor into the new stream.
-          feedRef.current = null;
+          dropFeedState();
           return;
         }
         case "FREEZE_STATE_CHANGED":
@@ -732,7 +778,7 @@ export function GuardProvider({
           return;
       }
     });
-  }, [tabSync]);
+  }, [tabSync, dropFeedState]);
 
   useEffect(() => {
     void refresh();
@@ -756,12 +802,12 @@ export function GuardProvider({
       setRangeLabel(null);
       // Drop the (guard-scoped) feed cursor so a switch can never bleed guard A's
       // events into guard B; the poll effect rebuilds it for the new guard.
-      feedRef.current = null;
+      dropFeedState();
       // Every other tab follows the operator's selection instead of continuing to
       // poll a guard they are no longer looking at.
       tabSync.broadcast("GUARD_CHANGED", { guard: next });
     },
-    [tabSync],
+    [tabSync, dropFeedState],
   );
 
   const addInstance = useCallback(
@@ -779,11 +825,11 @@ export function GuardProvider({
       setGuard(result.instance.guard);
       setSnapshot(null);
       setSnapshotError(null);
-      feedRef.current = null;
+      dropFeedState();
       tabSync.broadcast("GUARD_CHANGED", { guard: result.instance.guard });
       return { ok: true };
     },
-    [server, demo, tabSync],
+    [server, demo, tabSync, dropFeedState],
   );
 
   const removeInstance = useCallback(
@@ -803,11 +849,11 @@ export function GuardProvider({
         setSnapshotError(null);
         setBuffer(emptyStreamBuffer());
         setRangeLabel(null);
-        feedRef.current = null;
+        dropFeedState();
         tabSync.broadcast("GUARD_CHANGED", { guard: fallback });
       }
     },
-    [instances, guard, tabSync],
+    [instances, guard, tabSync, dropFeedState],
   );
 
   const renameInstance = useCallback((target: string, label: string) => {
@@ -847,13 +893,81 @@ export function GuardProvider({
   }, [pushEvents]);
 
   const startWatching = useCallback(() => {
-    if (!demo) feedRef.current?.ensure(guard);
+    if (!demo) {
+      // One supervisor for the tab's whole tail. `createFeed` defers to the
+      // coordinator so every guard still gets an identity-keyed feed, and
+      // primes a genuinely fresh one so a newly added guard arrives with recent
+      // context instead of a blank page.
+      const coordinator = feedRef.current;
+      if (!multiFeedRef.current && coordinator) {
+        multiFeedRef.current = new MultiGuardFeed({
+          cap: FEED_GUARD_CAP,
+          createFeed: (target: string) => {
+            const runner = coordinator.ensure(target);
+            const position = runner.position();
+            if (
+              position.cursor === null &&
+              position.latestLedger === null &&
+              knownLedgerRef.current !== null
+            ) {
+              runner.resetFrom(knownLedgerRef.current - FEED_SWITCH_HISTORY_LEDGERS);
+            }
+            return runner;
+          },
+        });
+      }
+      const supervisor = multiFeedRef.current;
+      supervisor?.sync(feedSources);
+      const capped = supervisor?.dropped() ?? [];
+      setFeed((current) => ({
+        ...current,
+        watching: true,
+        error: null,
+        guards: supervisor?.guards() ?? [],
+        capped: capped.length,
+        cappedLabels: capped.map((source) => source.label),
+      }));
+      return;
+    }
     setFeed((current) => ({ ...current, watching: true, error: null }));
-  }, [guard, demo]);
+  }, [feedSources, demo]);
 
   const stopWatching = useCallback(() => {
-    setFeed((current) => ({ ...current, watching: false }));
+    // Release every listener rather than just hiding the table: a stopped
+    // supervisor refuses further polls, so a reconciled-away guard's stream
+    // cannot keep running behind a "not watching" header.
+    multiFeedRef.current?.stopAll();
+    multiFeedRef.current = null;
+    setFeed((current) => ({
+      ...current,
+      watching: false,
+      guards: [],
+      capped: 0,
+      cappedLabels: [],
+    }));
   }, []);
+
+  // Keep the running listeners aligned with the registry while watching (#23).
+  // This is what starts a listener for a newly added guard and stops one whose
+  // guard was deleted or renamed, without ever exceeding the cap.
+  useEffect(() => {
+    if (demo || !feed.watching) return;
+    const supervisor = multiFeedRef.current;
+    if (!supervisor) return;
+    supervisor.sync(feedSources);
+    const capped = supervisor.dropped();
+    setFeed((current) => ({
+      ...current,
+      guards: supervisor.guards(),
+      capped: capped.length,
+      cappedLabels: capped.map((source) => source.label),
+    }));
+  }, [feedSources, feed.watching, demo]);
+
+  // The supervisor is deliberately never torn down by an effect cleanup: React's
+  // development StrictMode mount/unmount/mount cycle would stop the listeners on
+  // the simulated unmount and leave the tab unable to tail. The provider lives as
+  // long as the document, and the polling effect below clears its own interval.
 
   // ── Historical range queries (#148) ──────────────────────────────────
   // The demo feed never touches RPC, so a demo-mode range query is answered
@@ -956,32 +1070,30 @@ export function GuardProvider({
 
     let cancelled = false;
     const tick = async () => {
-      // Identity-check on every tick: if the operator switched guards, the
-      // coordinator has already swapped the feed; this poll belongs to the
-      // guard on screen, never the one the loop was born with. A feed swapped
-      // in mid-watch is primed for recent history so the operator arrives with
-      // context rather than a blank page (see FEED_SWITCH_HISTORY_LEDGERS).
-      const coordinator = feedRef.current;
-      if (!coordinator) return;
-      const feedRunner = coordinator.ensure(guard);
-      const position = feedRunner.position();
-      if (
-        position.cursor === null &&
-        position.latestLedger === null &&
-        knownLedgerRef.current !== null
-      ) {
-        feedRunner.resetFrom(knownLedgerRef.current - FEED_SWITCH_HISTORY_LEDGERS);
-      }
+      // Identity-check on every tick: the supervisor holds one listener per tailed
+      // guard, and it is reconciled against the registry rather than pinned to
+      // whichever guard the loop was born with. A feed added mid-watch is primed
+      // for recent history so the operator arrives with context rather than a
+      // blank page (see FEED_SWITCH_HISTORY_LEDGERS).
+      const supervisor = multiFeedRef.current;
+      if (!supervisor) return;
       try {
-        const page = await feedRunner.pollOnce();
+        const page = await supervisor.pollAll();
         if (cancelled) return;
-        knownLedgerRef.current = Math.max(knownLedgerRef.current ?? 0, page.latestLedger);
-        pushEvents(page.events);
+        if (page.latestLedger !== null) {
+          knownLedgerRef.current = Math.max(knownLedgerRef.current ?? 0, page.latestLedger);
+        }
+        pushEvents(page.events as TelemetryEvent[]);
+        // One guard failing to poll is reported on its own line and does not
+        // blank the guards that answered. `error` carries the first failure so
+        // the panel still has a headline to show.
+        const failed = page.watch.find((entry) => !entry.ok);
         setFeed((current) => ({
           ...current,
-          latestLedger: page.latestLedger,
+          latestLedger: page.latestLedger ?? current.latestLedger,
           lastPolledAt: new Date().toISOString(),
-          error: null,
+          guards: supervisor.guards(),
+          error: failed ? `${failed.label}: ${failed.error}` : null,
         }));
       } catch (error) {
         if (cancelled) return;
@@ -1003,7 +1115,7 @@ export function GuardProvider({
       clearInterval(timer);
       unregister();
     };
-  }, [feed.watching, pushEvents, demo, guard, server]);
+  }, [feed.watching, pushEvents, demo]);
 
   // Built from primitives so a live batch — which replaces `buffer` but leaves
   // these unchanged — does not change the context value's identity.

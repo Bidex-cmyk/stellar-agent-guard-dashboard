@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkArtifact, deployGuard, initializeGuard, planDeploy } from "../lib/guard/guardOps.ts";
+import { rememberDeployment } from "../lib/guard/setupChecklist.ts";
 import type { ArtifactCheck, DeployOutcome, DeployPlan } from "../lib/guard/guardOps.ts";
 import { deployCostBreakdown } from "../lib/guard/deployCostCalculator.ts";
 import type { InvokeResult } from "../lib/guard/submit.ts";
@@ -368,7 +369,12 @@ export function DeployPanel() {
         onStep: (step) => setLiveSteps((current) => [...current, step.label]),
       });
       setOutcome(result);
-      if (result.verified) addInstance(result.guard, "Deployed from this console");
+      if (result.verified) {
+        addInstance(result.guard, "Deployed from this console");
+        // Record the predicted address as the wizard's deploy marker — the one
+        // post-deploy fact the chain cannot re-derive for this browser.
+        rememberDeployment(result.guard);
+      }
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -395,7 +401,7 @@ export function DeployPanel() {
   }
 
   return (
-    <div className="panel">
+    <div className="panel" id="deploy">
       <h2>Deploy a guard</h2>
 
       <p className="tiny muted">

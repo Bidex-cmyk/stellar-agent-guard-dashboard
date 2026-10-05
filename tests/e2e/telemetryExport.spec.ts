@@ -11,6 +11,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import { installSorobanRpcMock } from "./sorobanRpcMock.ts";
@@ -108,7 +109,19 @@ test.describe("telemetry feed: filtering and export", () => {
     await expect(feed(page)).toContainText(
       `Feed holds the most recent ${MIXED_FEED_TOTAL} event(s)`,
     );
-    expect(chain.deliveredEvents).toBe(MIXED_FEED_TOTAL);
+
+    // Since issue #23 the feed tails *every* registered guard (up to the cap),
+    // so the stream is drained once per tailed guard rather than once per tab.
+    // The tailed count is read from the panel's own announcement, so the RPC
+    // assertion and what the operator is told cannot drift apart: the mock
+    // serves each guard the same page, and every row still de-duplicates to one.
+    const announcement = feed(page).getByText(/Tailing \d+ guards? simultaneously/);
+    await expect(announcement).toBeVisible();
+    const tailedCount = Number(
+      /Tailing (\d+) guards?/.exec((await announcement.textContent()) ?? "")?.[1],
+    );
+    assert.ok(tailedCount >= 1, "the panel must announce how many guards it is tailing");
+    expect(chain.deliveredEvents).toBe(MIXED_FEED_TOTAL * tailedCount);
 
     // ── Topic filter ───────────────────────────────────────────────────────
     await feed(page).getByLabel("Topic filter").selectOption(GUARD_EVENT_TOPICS.heartbeat);

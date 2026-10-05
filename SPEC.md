@@ -197,7 +197,7 @@ which is a different and much weaker statement. If step 6 fails, the console say
 
 ## 7. Telemetry semantics
 
-Two facts shape the feed, and both are stated in the UI rather than hidden:
+Three facts shape the feed, and each is stated in the UI rather than hidden:
 
 1. **Soroban has no push stream.** "Real time" here means cursor-based `getEvents` polling. The cursor
    is carried forward rather than re-derived from a ledger number, because re-scanning from a ledger
@@ -208,7 +208,9 @@ Two facts shape the feed, and both are stated in the UI rather than hidden:
    The only refusals this console can show are the ones _it_ produced, decoded from the failed
    enforced simulation's diagnostics and labelled `diagnostic`.
 
-An empty feed is therefore **not** evidence that nothing was refused on chain, and the panel says so.
+3. **Tailing N guards costs N poll loops.** The SDK's telemetry listener is single-guard (`getEvents` is filtered per contract), so a simultaneous tail is a fan-out of listener instances. The feed therefore supervises at most `FEED_GUARD_CAP` (5) guards at a time; registry entries beyond the cap are named as **not tailed** rather than dropped silently, and the poll load is documented as scaling with the number watched. Listener instances are reconciled (added/removed/stopped) on every registry change, so churn leaves exactly one listener per watched guard and no leak.
+
+An empty feed is therefore **not** evidence that nothing was refused on chain, and the panel says so. Nor is it evidence that _every_ registered guard was watched — when the cap is in force, the panel says which guards are outside it.
 
 ---
 

@@ -1329,3 +1329,40 @@ code {
     display: none;
   }
 }
+
+/* Post-deploy checklist (issue #24). An ordered list, because the steps are a
+   sequence; status is carried by text and an icon as well as colour, so it does
+   not depend on colour perception (WCAG 1.4.1). */
+.setup-steps {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+}
+
+.setup-step {
+  padding-left: 4px;
+}
+
+.setup-status {
+  font-weight: 600;
+}
+
+.setup-status.done {
+  color: var(--ok);
+}
+.setup-status.pending {
+  color: var(--warn);
+}
+.setup-status.error {
+  color: var(--danger);
+}
+
+.setup-label {
+  font-weight: 600;
+}
+
+.setup-detail {
+  display: block;
+  margin-top: 2px;
+}

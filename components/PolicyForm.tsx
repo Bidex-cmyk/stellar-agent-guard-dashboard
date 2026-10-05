@@ -409,7 +409,7 @@ export function PolicyForm() {
   }
 
   return (
-    <div className="panel" onKeyDown={onKeyDown}>
+    <div className="panel" id="policy" onKeyDown={onKeyDown}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>Guardrail policy</h2>
         <div className="row">

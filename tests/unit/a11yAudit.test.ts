@@ -7,6 +7,7 @@ import { installDom, loadReact, sleep, type Act } from "./domHarness.ts";
 import { PolicyForm } from "../../components/PolicyForm.tsx";
 import { PanicPanel } from "../../components/PanicPanel.tsx";
 import { DeployPanel } from "../../components/DeployPanel.tsx";
+import { SetupWizard } from "../../components/SetupWizard.tsx";
 import { StatusPanel } from "../../components/StatusPanel.tsx";
 import { TxHistoryTable } from "../../components/TxHistoryTable.tsx";
 import { TelemetryFeed } from "../../components/TelemetryFeed.tsx";
@@ -64,7 +65,15 @@ const TEST_GUARD = {
   snapshotError: null,
   refreshing: false,
   refresh: async () => {},
-  feed: { watching: false, latestLedger: null, error: null, lastPolledAt: null },
+  feed: {
+    watching: false,
+    latestLedger: null,
+    error: null,
+    lastPolledAt: null,
+    guards: [],
+    capped: 0,
+    cappedLabels: [],
+  },
   startWatching: () => {},
   stopWatching: () => {},
   stream: { paused: false, pendingCount: 0, dropped: 0 },
@@ -180,6 +189,15 @@ test("the freeze confirmation dialog passes axe-core while open", async () => {
     assert.deepEqual(violations, [], "the open dialog must pass axe-core");
   } finally {
     await rendered.unmount();
+  }
+});
+
+test("SetupWizard passes automated axe-core WCAG 2.1 AA checks", async () => {
+  window.localStorage.removeItem("stellar-agent-guard-dashboard.setup-wizard.v1");
+  try {
+    await assertCleanScan(renderGuarded(react.createElement(SetupWizard)), "SetupWizard");
+  } finally {
+    window.localStorage.removeItem("stellar-agent-guard-dashboard.setup-wizard.v1");
   }
 });
 
