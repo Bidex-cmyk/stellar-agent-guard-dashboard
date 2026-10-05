@@ -33,7 +33,10 @@ import { recordTx } from "./txHistory.ts";
 import { hardwareGuide } from "./hardwareGuide.ts";
 
 /** Inclusion fee floor, in stroops, for a single-operation transaction. */
-import { calculateFeeHeadroom, FeePreset } from "./feeEstimator.ts";
+// `FeePreset` is imported as a type on purpose: `scripts/prove-phase3.ts` runs
+// this module under Node's native type stripping, which rejects a value import
+// of something that only exists in the type space.
+import { calculateFeeHeadroom, type FeePreset } from "./feeEstimator.ts";
 
 export const INCLUSION_FEE = "100";
 

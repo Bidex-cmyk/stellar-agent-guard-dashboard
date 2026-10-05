@@ -24,10 +24,15 @@ npm run test:e2e    # Playwright browser suites (npx playwright install chromium
 npm run build       # Next.js production build
 ```
 
-Three extra scripts are not part of the CI gate:
+These extra scripts are not part of the CI gate:
 
 - `npm run prove:phase3` — re-runs the live testnet proof against the real deployed
   contract; needs funded testnet keypairs.
+- `npm run prove:phase3:emit` / `npm run prove:phase3:diff` — the same run, plus the
+  narrow diffable run record and the two-tier diff against its committed copy.
+  The shape, the rule and the diff tool are unit-tested; the run itself still
+  needs funded testnet keys. See
+  [`tests/fixtures/README.md`](./tests/fixtures/README.md#re-running-and-diffing-a-re-run-against-this-record).
 - `npm run inspect` — read-only dump of a deployed instance's on-chain state.
 - `npm run test:perf` — the telemetry throughput benchmark (`tests/perf`, 10k
   events in 30s with FPS/heap assertions); frame-rate numbers depend on the

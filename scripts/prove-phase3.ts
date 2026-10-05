@@ -21,7 +21,15 @@
  *   6. `unfreeze` restores it, and the same transfer passes again;
  *   7. the telemetry feed reads the lifecycle events those writes emitted.
  *
- * Usage: node scripts/prove-phase3.ts
+ * Usage: node scripts/prove-phase3.ts [--emit] [--out <path>]
+ *   --emit   also write a run record — the narrow, diffable projection
+ *            (runDate, gitSha, contractIds, txHashes, assertions) that
+ *            `npm run prove:phase3:diff` compares against the committed copy
+ *            under the two-tier rule. Written on failure too, so a regression
+ *            produces a failing assertion instead of no record at all.
+ *   --out    where --emit writes. Defaults to tests/fixtures/phase3-proof.run.json.
+ *            Point it at a scratch path to diff without touching the committed one.
+ *
  * Writes tests/fixtures/phase3-proof.json (public) and .env.phase3 (gitignored).
  */
 
@@ -56,6 +64,12 @@ import {
 import { readStatus, createServer } from "../lib/guard/chain.ts";
 import { GuardFeed } from "../lib/guard/telemetry.ts";
 import { NETWORK, PHASE1_ARTIFACT, ENFORCEMENT_SCOPE_STATEMENT } from "../lib/guard/network.ts";
+import {
+  RUN_RECORD_PATH,
+  buildRunRecord,
+  currentGitSha,
+  serializeRunRecord,
+} from "../lib/guard/proofRun.ts";
 import type { WalletSigner } from "../lib/guard/submit.ts";
 import type { PolicyDraft } from "../lib/guard/policyForm.ts";
 
@@ -65,6 +79,36 @@ const ASSET_CODE = "P3GUARD";
 const MINT_AMOUNT = 100_000n;
 const TRUSTLINE_LIMIT = 1_000_000n;
 const SALT_SEED = "stellar-agent-guard:dashboard:phase3:guard:1";
+
+/**
+ * `--emit` state, hoisted to module scope so the top-level handler can write a
+ * run record for a run that threw. The `record` object is the proof record
+ * itself, which means a failed run emits whatever was established before the
+ * throw — a truncated assertion list, correctly showing where the run stopped.
+ */
+const emit = {
+  enabled: false,
+  path: RUN_RECORD_PATH,
+  runDate: new Date().toISOString(),
+  gitSha: null as string | null,
+  record: {} as Record<string, unknown>,
+  note: "",
+};
+
+async function writeRunRecord(outcome: "passed" | "failed", error: string | null): Promise<void> {
+  if (!emit.enabled) return;
+  const record = buildRunRecord({
+    runDate: emit.runDate,
+    gitSha: emit.gitSha,
+    outcome,
+    error,
+    facts: emit.record,
+    note: emit.note,
+  });
+  await mkdir(dirname(emit.path), { recursive: true });
+  await writeFile(emit.path, `${serializeRunRecord(record)}\n`);
+  step(`  run record      ${emit.path} (${record.assertions.length} assertion(s))`);
+}
 
 const server = createServer(NETWORK.rpcUrl);
 
@@ -207,7 +251,29 @@ async function readView<T = unknown>(
 // ── main ───────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   const existing = await readEnv();
-  const record: Record<string, unknown> = {
+  const argv = process.argv.slice(2);
+  const outIndex = argv.indexOf("--out");
+  const outPath = outIndex === -1 ? undefined : argv[outIndex + 1];
+  // Validated before `emit.enabled` is set, so a usage mistake cannot overwrite
+  // a committed run record with an all-failing one.
+  if (outIndex !== -1 && (outPath === undefined || outPath.startsWith("--"))) {
+    throw new Error("--out requires a path");
+  }
+  if (outPath !== undefined && !argv.includes("--emit")) {
+    throw new Error("--out only applies to --emit");
+  }
+  const record: Record<string, unknown> = emit.record;
+  if (argv.includes("--emit")) {
+    emit.enabled = true;
+    if (outPath !== undefined) emit.path = outPath;
+    emit.gitSha = currentGitSha();
+    emit.note =
+      "Emit-mode run record from scripts/prove-phase3.ts. Compare against the committed copy " +
+      "with `npm run prove:phase3:diff`: the invariant tier (assertion names, assertion outcomes, " +
+      "scenario count, contract presence, outcome) must match; the volatile tier (runDate, gitSha, " +
+      "transaction hashes, ledger numbers, contract ids of a fresh deployment) is expected to churn.";
+  }
+  Object.assign(record, {
     network: NETWORK.name,
     rpcUrl: NETWORK.rpcUrl,
     networkPassphrase: NETWORK.passphrase,
@@ -217,7 +283,7 @@ async function main(): Promise<void> {
       "Produced by scripts/prove-phase3.ts, which drives the same lib/guard modules the console " +
       "calls, with the wallet substituted for a keypair. Every transaction hash below is a real " +
       "testnet transaction, re-readable from the RPC.",
-  };
+  });
 
   // ── 0. artifact identity ───────────────────────────────────────────────
   step("[0] pinned Phase 1 artifact, re-derived from the chain");
@@ -638,9 +704,19 @@ async function main(): Promise<void> {
   step(`  unfreeze        ${(record.unfreeze as { hash: string }).hash}`);
   step(`  frozen refusal  ${(record.transferWhileFrozen as { reason?: string }).reason}`);
   step(`  evidence        ${FIXTURE_PATH}`);
+
+  await writeRunRecord("passed", null);
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+main().catch(async (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  // Emit before reporting, and never let an emit failure mask the run failure:
+  // the reason the run stopped is the fact the operator needs.
+  await writeRunRecord("failed", message).catch((emitError: unknown) => {
+    console.error(
+      `could not write the run record: ${emitError instanceof Error ? emitError.message : emitError}`,
+    );
+  });
+  console.error(message);
   process.exitCode = 1;
 });

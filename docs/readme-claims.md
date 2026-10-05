@@ -107,22 +107,25 @@ and are not re-verified on every sweep. The README now frames the on-chain table
 Every component, route, and script name the README mentions must exist at the path it says. This is
 the mechanical half of the sweep: a name that does not resolve is a stale claim by definition.
 
-| Entity                             | Kind      | Resolves to                        | Grep basis                               |
-| ---------------------------------- | --------- | ---------------------------------- | ---------------------------------------- |
-| `/`                                | route     | `app/page.tsx`                     | `app/page.tsx` exists                    |
-| `/configure`                       | route     | `app/configure/page.tsx`           | `app/configure/page.tsx` exists          |
-| `/fleet`                           | route     | `app/fleet/page.tsx`               | `app/fleet/page.tsx` exists              |
-| `DeployPanel`                      | component | `components/DeployPanel.tsx`       | file exists                              |
-| `PolicyForm`                       | component | `components/PolicyForm.tsx`        | file exists                              |
-| `PanicPanel`                       | component | `components/PanicPanel.tsx`        | file exists                              |
-| `TelemetryFeed`                    | component | `components/TelemetryFeed.tsx`     | file exists                              |
-| `WalletBar`                        | component | `components/WalletBar.tsx`         | file exists                              |
-| `ScopeNotice`                      | component | `components/bits.tsx`              | exported and rendered in `app/page.tsx`  |
-| `lib/guard/demoFixtures.ts`        | module    | `lib/guard/demoFixtures.ts`        | file exists                              |
-| `npm run prove:phase3`             | script    | `scripts/prove-phase3.ts`          | `package.json` `scripts["prove:phase3"]` |
-| `npm run inspect`                  | script    | `scripts/inspect-instance.ts`      | `package.json` `scripts.inspect`         |
-| `tests/fixtures/phase3-proof.json` | fixture   | `tests/fixtures/phase3-proof.json` | file exists                              |
-| `tests/fixtures/README.md`         | doc       | `tests/fixtures/README.md`         | file exists                              |
+| Entity                                 | Kind      | Resolves to                            | Grep basis                                    |
+| -------------------------------------- | --------- | -------------------------------------- | --------------------------------------------- |
+| `/`                                    | route     | `app/page.tsx`                         | `app/page.tsx` exists                         |
+| `/configure`                           | route     | `app/configure/page.tsx`               | `app/configure/page.tsx` exists               |
+| `/fleet`                               | route     | `app/fleet/page.tsx`                   | `app/fleet/page.tsx` exists                   |
+| `DeployPanel`                          | component | `components/DeployPanel.tsx`           | file exists                                   |
+| `PolicyForm`                           | component | `components/PolicyForm.tsx`            | file exists                                   |
+| `PanicPanel`                           | component | `components/PanicPanel.tsx`            | file exists                                   |
+| `TelemetryFeed`                        | component | `components/TelemetryFeed.tsx`         | file exists                                   |
+| `WalletBar`                            | component | `components/WalletBar.tsx`             | file exists                                   |
+| `ScopeNotice`                          | component | `components/bits.tsx`                  | exported and rendered in `app/page.tsx`       |
+| `lib/guard/demoFixtures.ts`            | module    | `lib/guard/demoFixtures.ts`            | file exists                                   |
+| `npm run prove:phase3`                 | script    | `scripts/prove-phase3.ts`              | `package.json` `scripts["prove:phase3"]`      |
+| `npm run prove:phase3:emit`            | script    | `scripts/prove-phase3.ts`              | `package.json` `scripts["prove:phase3:emit"]` |
+| `npm run prove:phase3:diff`            | script    | `scripts/compare-proof-run.ts`         | `package.json` `scripts["prove:phase3:diff"]` |
+| `npm run inspect`                      | script    | `scripts/inspect-instance.ts`          | `package.json` `scripts.inspect`              |
+| `tests/fixtures/phase3-proof.json`     | fixture   | `tests/fixtures/phase3-proof.json`     | file exists                                   |
+| `tests/fixtures/phase3-proof.run.json` | fixture   | `tests/fixtures/phase3-proof.run.json` | file exists                                   |
+| `tests/fixtures/README.md`             | doc       | `tests/fixtures/README.md`             | file exists                                   |
 
 ## Repository metadata (outside-repo checklist — maintainer-applied)
 

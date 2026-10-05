@@ -27,6 +27,8 @@
     "test:e2e": "playwright test tests/e2e",
     "test:perf": "playwright test tests/perf",
     "prove:phase3": "node scripts/prove-phase3.ts",
+    "prove:phase3:emit": "node scripts/prove-phase3.ts --emit",
+    "prove:phase3:diff": "node scripts/compare-proof-run.ts",
     "inspect": "node scripts/inspect-instance.ts"
   },
   "dependencies": {
