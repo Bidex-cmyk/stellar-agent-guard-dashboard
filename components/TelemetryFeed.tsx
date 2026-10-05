@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { describeGuardEvent, explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
 import { STREAM_BUFFER_LIMIT, type TelemetryEvent } from "../lib/guard/telemetry.ts";
@@ -10,6 +10,7 @@ import { TelemetryChart } from "./TelemetryChart.tsx";
 import { ErrorBlock, Skeleton, TimeAgo, short, starLink, TxHashCell } from "./bits.tsx";
 import { DateRangePicker } from "./DateRangePicker.tsx";
 import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
+import { density, initDensityStore } from "../lib/guard/densityStore.ts";
 import {
   NDJSON_MIME,
   auditLogFilename,
@@ -128,6 +129,22 @@ export function TelemetryFeed() {
       tab: next.verdict === "all" ? "console" : "telemetry",
     });
   }
+
+  const [densityState, setDensityState] = useState<"comfortable" | "compact">("comfortable");
+
+  useEffect(() => {
+    const unsubscribe = initDensityStore();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDensityState(density.get());
+    const densityUnsubscribe = density.subscribe((value) => {
+      setDensityState(value);
+    });
+    return () => {
+      unsubscribe();
+      densityUnsubscribe();
+    };
+  }, []);
+
   const announce = useAnnounce();
   const demo = useDemoMode();
 
@@ -270,6 +287,15 @@ export function TelemetryFeed() {
             title="Empty the list. The poll cursor is kept, so nothing is re-fetched and nothing is skipped."
           >
             Clear buffer
+          </button>
+          {/* Density toggle */}
+          <button
+            className="secondary"
+            onClick={() => {
+              density.set(densityState === "comfortable" ? "compact" : "comfortable");
+            }}
+          >
+            {densityState === "comfortable" ? "Compact" : "Comfortable"}
           </button>
         </div>
       </div>
@@ -430,7 +456,7 @@ export function TelemetryFeed() {
              shape the events will land in — not as an empty-looking message
              and not as zeros. */
           <div className="scrolly" aria-busy="true">
-            <table className="events">
+            <table className={`events ${densityState === "compact" ? "compact" : ""}`}>
               {feedHead}
               <tbody aria-hidden="true">
                 {[0, 1, 2].map((row) => (
@@ -469,7 +495,7 @@ export function TelemetryFeed() {
         </p>
       ) : (
         <div className="scrolly">
-          <table className="events">
+          <table className={`events ${densityState === "compact" ? "compact" : ""}`}>
             {feedHead}
             <tbody>
               {rows.map((event) => (

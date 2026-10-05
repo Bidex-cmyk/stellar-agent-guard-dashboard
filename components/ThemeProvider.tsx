@@ -21,7 +21,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setThemeState(saved);
       document.documentElement.setAttribute("data-theme", saved);
     } else {
-      const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
+      const prefersLight =
+        typeof window !== "undefined" && typeof window.matchMedia === "function"
+          ? window.matchMedia("(prefers-color-scheme: light)").matches
+          : false;
       const initial = prefersLight ? "light" : "dark";
       setThemeState(initial);
       document.documentElement.setAttribute("data-theme", initial);
@@ -35,6 +38,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
     const listener = (e: MediaQueryListEvent) => {
       if (!localStorage.getItem("theme")) {
