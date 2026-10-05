@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkArtifact, deployGuard, initializeGuard, planDeploy } from "../lib/guard/guardOps.ts";
 import type { ArtifactCheck, DeployOutcome, DeployPlan } from "../lib/guard/guardOps.ts";
+import { deployCostBreakdown } from "../lib/guard/deployCostCalculator.ts";
 import type { InvokeResult } from "../lib/guard/submit.ts";
 import { NETWORK, PHASE1_ARTIFACT } from "../lib/guard/network.ts";
 import { fetchContractWasm, verifyWasmIdentity } from "../lib/guard/chain.ts";
@@ -131,6 +132,26 @@ export function DeployPanel() {
     windowCap,
   });
 
+  const [balance, setBalance] = useState<string | null>(null);
+  useEffect(() => {
+    if (!wallet) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const account = (await server.getAccount(wallet.address)) as unknown as {
+          balances?: Array<{ asset_type?: string; balance?: string }>;
+        };
+        const native = account.balances?.find((entry) => entry.asset_type === "native");
+        if (!cancelled) setBalance(native?.balance ?? "0");
+      } catch {
+        if (!cancelled) setBalance("0");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [server, wallet]);
+
   // Fetching and applying are separate: `fetchArtifact` touches no state, so the
   // effect below has nothing synchronous to write, and the panel is never blanked
   // for a frame while a re-check is in flight. Both states are applied together,
@@ -166,6 +187,15 @@ export function DeployPanel() {
 
   const planKey = wallet ? `${wallet.address}:${toHex(salt)}` : "";
   const plan = planFor?.key === planKey ? planFor.plan : null;
+  const deployCost =
+    wallet && balance !== null
+      ? deployCostBreakdown({
+          uploadWasm: plan ? !plan.codePresent : false,
+          wasmBytes: PHASE1_ARTIFACT.wasmBytes,
+          contractInstanceBytes: 64,
+          accountBalanceXlm: balance,
+        })
+      : null;
 
   useEffect(() => {
     if (!wallet) return;
@@ -588,6 +618,60 @@ export function DeployPanel() {
         <p className="tiny" style={{ color: "var(--danger)" }} role="status">
           {vanityError}
         </p>
+      )}
+
+      {wallet && plan && deployCost && (
+        <div className={deployCost.warning ? "error" : "notice info"} style={{ marginTop: 12 }}>
+          <strong>Deployment reserve check</strong>
+          <div
+            className="tiny"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 10,
+              marginTop: 8,
+            }}
+          >
+            <div>
+              <div className="tiny muted">Base tx fee</div>
+              <div className="mono">{deployCost.baseFeeXlm} XLM</div>
+            </div>
+            <div>
+              <div className="tiny muted">WASM upload</div>
+              <div className="mono">{deployCost.wasmUploadFeeXlm} XLM</div>
+            </div>
+            <div>
+              <div className="tiny muted">Contract instance</div>
+              <div className="mono">{deployCost.contractInstanceFeeXlm} XLM</div>
+            </div>
+            <div>
+              <div className="tiny muted">Initial rent</div>
+              <div className="mono">{deployCost.initialRentDepositXlm} XLM</div>
+            </div>
+            <div>
+              <div className="tiny muted">Required total</div>
+              <div className="mono">{deployCost.totalRequiredXlm} XLM</div>
+            </div>
+            <div>
+              <div className="tiny muted">Wallet balance</div>
+              <div className="mono">{deployCost.balanceXlm} XLM</div>
+            </div>
+          </div>
+          <div className="tiny muted" style={{ marginTop: 8 }}>
+            Remaining after required spend:{" "}
+            <span className="mono">{deployCost.balanceAfterRequiredXlm} XLM</span>
+          </div>
+          {deployCost.warning && (
+            <div className="tiny" style={{ marginTop: 8 }}>
+              Balance is below the reserve safety threshold ({deployCost.safetyBufferXlm} XLM
+              cushion): fund at least{" "}
+              {(Number(deployCost.totalRequiredXlm) + Number(deployCost.safetyBufferXlm)).toFixed(
+                7,
+              )}{" "}
+              XLM before signing.
+            </div>
+          )}
+        </div>
       )}
 
       <div className="row" style={{ marginTop: 14 }}>
