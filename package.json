@@ -19,11 +19,16 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/fuzz/*.test.ts",
+    "test:docs": "node scripts/check-doc-links.mjs",
+    "changelog": "node scripts/generate-changelog.mjs",
+    "sandbox": "bash scripts/start-local-sandbox.sh",
     "test:visual": "playwright test --config=playwright.visual.config.ts",
     "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots",
     "test:e2e": "playwright test tests/e2e",
     "test:perf": "playwright test tests/perf",
     "prove:phase3": "node scripts/prove-phase3.ts",
+    "prove:phase3:emit": "node scripts/prove-phase3.ts --emit",
+    "prove:phase3:diff": "node scripts/compare-proof-run.ts",
     "inspect": "node scripts/inspect-instance.ts"
   },
   "dependencies": {

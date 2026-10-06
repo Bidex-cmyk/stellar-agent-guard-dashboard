@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-09-16T11:52:10.153Z",
+  "gitSha": null,
+  "outcome": "passed",
+  "error": null,
+  "contractIds": {
+    "guard": "CDMBPI64FS3RZW6G23NCDPLBY5GTKX7TSVZZSHE6ZQX4XAIV3HCPXUDJ",
+    "token": "CB2M5YFEI74KVKZVES4UQNY3FLHMYE5R24EY2OSHB5LJH5FI2IJMSP5I"
+  },
+  "txHashes": {
+    "deploy": "6bbe24479a5a696e4671555da1573222b43fbeb231ba6c34384f1402b6d57c80",
+    "tokenCreate": "1a78cf3255153ea5e76c8e370b3d89f754c6d0e07ea2f9663930e823bf428704",
+    "initialize": "caa76dcb5e60270ad922a893f3e1f92d109a1fcd65e1a60369ebebe9e6a18175",
+    "setPolicy": "b44d67a3597aa435900b79c92e11ce62d1e015b7799645d64e9d24f471f52c02",
+    "trustline": "d64923c014ecae9635f32d4cd90665cbe1428408a75acb753bebd99ce7ebbf1d",
+    "mint": "f15367c7f70c61741848d5eb0902e452396d95b2c8e5499c7aee166d6a7cb5c7",
+    "transferWhileUnfrozen": "21eb2949b343aafa2eff7504c32e9b5f07f0024b55bf2f762a317b8abe059db1",
+    "freeze": "334d860c33c483311121c14a52d3a93d5ebf5b956f0696dd3e071be5b61e2ead",
+    "unfreeze": "0df6d32e74c9d7a4befa24bc96a6b0a3d46dc11d5701b2b9367e3191a80cf634",
+    "transferAfterUnfreeze": "67bb18f7b7ebe127381f13c1f4a3ce3048a4d5e89e1f0e8c854aebb005f603af"
+  },
+  "assertions": [
+    {
+      "name": "artifact.pin-matches-chain",
+      "pass": true,
+      "actual": {
+        "pinnedHash": "f47919f92e78fdd034836aa61955fc338dd56a218c448c37df1867a8c3da0f63",
+        "fetchedSha256": "f47919f92e78fdd034836aa61955fc338dd56a218c448c37df1867a8c3da0f63",
+        "bytes": 39673
+      }
+    },
+    {
+      "name": "contract-presence.guard-and-token",
+      "pass": true,
+      "actual": {
+        "guard": "CDMBPI64FS3RZW6G23NCDPLBY5GTKX7TSVZZSHE6ZQX4XAIV3HCPXUDJ",
+        "token": "CB2M5YFEI74KVKZVES4UQNY3FLHMYE5R24EY2OSHB5LJH5FI2IJMSP5I"
+      }
+    },
+    {
+      "name": "deploy.runs-pinned-artifact",
+      "pass": true,
+      "actual": {
+        "guard": "CDMBPI64FS3RZW6G23NCDPLBY5GTKX7TSVZZSHE6ZQX4XAIV3HCPXUDJ",
+        "verifiedAgainstPin": true,
+        "reused": false
+      }
+    },
+    {
+      "name": "initialize.landed",
+      "pass": true,
+      "actual": {
+        "hash": "caa76dcb5e60270ad922a893f3e1f92d109a1fcd65e1a60369ebebe9e6a18175",
+        "reused": false
+      }
+    },
+    {
+      "name": "policy.installed-via-console-form-path",
+      "pass": true,
+      "actual": {
+        "hash": "b44d67a3597aa435900b79c92e11ce62d1e015b7799645d64e9d24f471f52c02",
+        "reused": false
+      }
+    },
+    {
+      "name": "token.guard-funded",
+      "pass": true,
+      "actual": {
+        "hash": "f15367c7f70c61741848d5eb0902e452396d95b2c8e5499c7aee166d6a7cb5c7",
+        "amount": "100000"
+      }
+    },
+    {
+      "name": "transfer.allowed-while-unfrozen",
+      "pass": true,
+      "actual": {
+        "kind": "allowed",
+        "hash": "21eb2949b343aafa2eff7504c32e9b5f07f0024b55bf2f762a317b8abe059db1"
+      }
+    },
+    {
+      "name": "freeze.landed",
+      "pass": true,
+      "actual": {
+        "hash": "334d860c33c483311121c14a52d3a93d5ebf5b956f0696dd3e071be5b61e2ead",
+        "reused": false
+      }
+    },
+    {
+      "name": "freeze.status-reread-reports-admin-frozen",
+      "pass": true,
+      "actual": {
+        "admin_frozen": true,
+        "last_heartbeat": "1789559582",
+        "now": "1789559612"
+      }
+    },
+    {
+      "name": "freeze.check-view-blocked",
+      "pass": true,
+      "actual": [
+        "Blocked",
+        "admin_frozen"
+      ]
+    },
+    {
+      "name": "transfer.blocked-while-frozen",
+      "pass": true,
+      "actual": {
+        "kind": "blocked",
+        "reason": "admin_frozen"
+      }
+    },
+    {
+      "name": "transfer.blocked-with-reason-admin-frozen",
+      "pass": true,
+      "actual": "admin_frozen"
+    },
+    {
+      "name": "unfreeze.landed",
+      "pass": true,
+      "actual": {
+        "hash": "0df6d32e74c9d7a4befa24bc96a6b0a3d46dc11d5701b2b9367e3191a80cf634",
+        "reused": false
+      }
+    },
+    {
+      "name": "unfreeze.status-reread-reports-admin-unfrozen",
+      "pass": true,
+      "actual": {
+        "admin_frozen": false,
+        "last_heartbeat": "1789559622",
+        "now": "1789559622"
+      }
+    },
+    {
+      "name": "transfer.allowed-after-unfreeze",
+      "pass": true,
+      "actual": {
+        "kind": "allowed",
+        "hash": "67bb18f7b7ebe127381f13c1f4a3ce3048a4d5e89e1f0e8c854aebb005f603af"
+      }
+    },
+    {
+      "name": "telemetry.decoded-lifecycle-events",
+      "pass": true,
+      "actual": {
+        "eventCount": 6,
+        "kinds": [
+          "initialized",
+          "policy_set",
+          "auth_checked",
+          "frozen",
+          "unfrozen"
+        ]
+      }
+    },
+    {
+      "name": "telemetry.lifecycle-complete-in-scan-window",
+      "pass": true,
+      "actual": []
+    }
+  ],
+  "note": "PROJECTED from tests/fixtures/phase3-proof.json, not emitted by a live `--emit` run. This file is the committed proof passed through the same `buildRunRecord` projection a live `npm run prove:phase3:emit` uses, so that the two-tier diff has a committed side to compare against from the day it lands. `gitSha` is null because no live run produced it. The first real `npm run prove:phase3:emit` overwrites this file; expect the volatile tier to churn and the invariant tier to match."
+}

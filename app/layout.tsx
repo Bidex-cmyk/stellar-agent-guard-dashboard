@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DemoBadge } from "../components/DemoBadge.tsx";
+import { SecretKeyGuard } from "../components/SecretKeyGuard.tsx";
 import { Tabs } from "../components/bits.tsx";
 import { AriaAnnouncer } from "../components/AriaAnnouncer.tsx";
 import { PwaRegistrar } from "../components/PwaRegistrar.tsx";
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PwaRegistrar />
           <AriaAnnouncer />
           <ToastContainer />
+          <SecretKeyGuard />
           <div className="shell">
             <DemoBadge />
             <header className="top">

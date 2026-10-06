@@ -26,11 +26,12 @@
 
 import type { GuardEvent, GuardStatus, PolicyConfig, ProtocolRule } from "stellar-agent-guard-sdk";
 import { GUARD_EVENT_TOPICS, guardEventId } from "stellar-agent-guard-sdk";
+import { xdr } from "@stellar/stellar-sdk";
 import type { TelemetryEvent } from "./telemetry.ts";
 import type { GuardSnapshot } from "./guardOps.ts";
 import type { WindowState, WasmIdentity } from "./chain.ts";
-import type { GuardInstance } from "./instance.ts";
-import { PHASE1_ARTIFACT } from "./network.ts";
+import { KNOWN_INSTANCE_ADDED_AT, type GuardInstance } from "./instance.ts";
+import { NETWORK, PHASE1_ARTIFACT } from "./network.ts";
 
 /** The exact badge copy the interface shows whenever demo data is on screen. */
 export const DEMO_BADGE_TEXT = "DEMO MODE — Static Fixture Data";
@@ -58,7 +59,7 @@ const DEMO_RECIPIENT_A = "GD5S5O2MZ6FSMFH6QILG37KSQNRVR3RPSWBTTV4JOUJ7J6TWLLL5LA
 const DEMO_RECIPIENT_B = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
 
 /** An allowlisted non-asset protocol, with a per-function allowlist. */
-const DEMO_PROTOCOL = "CAPADGEK457RHKN4RYVUMDJTFHDSG7R5HREQONKLYK7MFKC5WFENPP44";
+export const DEMO_PROTOCOL = "CAPADGEK457RHKN4RYVUMDJTFHDSG7R5HREQONKLYK7MFKC5WFENPP44";
 
 /** A realistic-looking ledger sequence for the synthetic feed to advance from. */
 export const DEMO_BASE_LEDGER = 2_148_000;
@@ -67,6 +68,8 @@ export const DEMO_BASE_LEDGER = 2_148_000;
 export const DEMO_INSTANCE: GuardInstance = {
   guard: DEMO_GUARD,
   label: "Demo guard (static fixture)",
+  network: NETWORK.name,
+  addedAt: KNOWN_INSTANCE_ADDED_AT,
   provenance:
     "Static fixture data for local evaluation — no chain reads, no wallet, no contracts. " +
     "Enabled by NEXT_PUBLIC_DEMO_MODE=true or ?demo=true.",
@@ -301,4 +304,104 @@ export function demoEvents(now: number = Date.now(), count = 6): TelemetryEvent[
     events.push(syntheticDemoEvent(count - index, now - index * 6_000));
   }
   return events;
+}
+
+// ── Demo contract spec ─────────────────────────────────────────────────────
+
+/**
+ * A DEX-like contract spec, as a real WASM module would embed it.
+ *
+ * Demo mode has no chain behind it, so the policy form's function picker needs
+ * bytes to parse: this assembles a minimal-but-valid WASM module (header plus
+ * one `contractspecv0` custom section) whose spec stream describes the DEX
+ * surface the demo policy allowlists. The demo protocol's picker therefore
+ * works with no chain behind it, exactly as every other demo read does.
+ */
+export const DEMO_PROTOCOL_SPEC: Uint8Array = buildDemoProtocolWasm();
+
+function buildDemoProtocolWasm(): Uint8Array {
+  const address = xdr.ScSpecTypeDef.scSpecTypeAddress();
+  const i128 = xdr.ScSpecTypeDef.scSpecTypeI128();
+  const u64 = xdr.ScSpecTypeDef.scSpecTypeU64();
+  const voidType = xdr.ScSpecTypeDef.scSpecTypeVoid();
+  const fn = (
+    name: string,
+    inputs: Array<[string, xdr.ScSpecTypeDef]>,
+    output: xdr.ScSpecTypeDef,
+  ) =>
+    xdr.ScSpecEntry.scSpecEntryFunctionV0(
+      new xdr.ScSpecFunctionV0({
+        name,
+        doc: `Demo ${name} entry point.`,
+        inputs: inputs.map(
+          ([inputName, type]) => new xdr.ScSpecFunctionInputV0({ name: inputName, type, doc: "" }),
+        ),
+        outputs: [output],
+      }),
+    );
+
+  const entries = [
+    fn(
+      "swap",
+      [
+        ["trader", address],
+        ["amount_in", i128],
+        ["min_out", i128],
+      ],
+      i128,
+    ),
+    fn(
+      "deposit",
+      [
+        ["provider", address],
+        ["amount", i128],
+      ],
+      voidType,
+    ),
+    fn(
+      "withdraw",
+      [
+        ["provider", address],
+        ["amount", i128],
+      ],
+      voidType,
+    ),
+    fn("heartbeat", [["clock", u64]], voidType),
+  ];
+  const specStream = new Uint8Array(entries.flatMap((entry) => Array.from(entry.toXdr())));
+  return buildWasmModule("contractspecv0", specStream);
+} /**
+ * Wrap a payload as a WASM custom section, inside a minimal valid module.
+ *
+ * Used by the demo fixture builder only; the tests build their own fixtures
+ * through the SDK's XDR layer rather than reusing this. The header must be
+ * real — the spec parser refuses bytes that are not a version-1 module.
+ */
+function buildWasmModule(sectionName: string, payload: Uint8Array): Uint8Array {
+  const nameBytes = new TextEncoder().encode(sectionName);
+  // Custom section: id 0, LEB128 content length, LEB128 name length, name,
+  // payload. The demo name is 14 bytes, so its length prefix is one byte.
+  const contentLength = 1 + nameBytes.length + payload.length;
+  const out = new Uint8Array(8 + 2 + 5 + contentLength);
+  let offset = 0;
+  const writeVarUint32 = (value: number) => {
+    let remaining = value;
+    do {
+      let byte = remaining & 0x7f;
+      remaining >>>= 7;
+      if (remaining !== 0) byte |= 0x80;
+      out[offset++] = byte;
+    } while (remaining !== 0);
+  };
+  // Module header: `\0asm` and version 1, little-endian.
+  out.set([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00], offset);
+  offset += 8;
+  out[offset++] = 0; // custom section id
+  writeVarUint32(contentLength);
+  writeVarUint32(nameBytes.length);
+  out.set(nameBytes, offset);
+  offset += nameBytes.length;
+  out.set(payload, offset);
+  offset += payload.length;
+  return out.subarray(0, offset);
 }

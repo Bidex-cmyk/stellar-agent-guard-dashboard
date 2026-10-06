@@ -17,6 +17,7 @@
   - [Emergency Freeze & Incident Response](runbooks/emergency-freeze.md)
   - [Routine Policy Updates & Audit](runbooks/policy-updates.md)
 - [Architecture](architecture.md)
+- [Glossary](glossary.md)
 - [Testnet Verification](verification.md)
 - [Enforcement Scope](enforcement-scope.md)
 - [Contributing](contributing.md)

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { ReadResult } from "../lib/guard/chain.ts";
+import { SKELETON_CLASS } from "../lib/guard/statusReadState.ts";
 import { ENFORCEMENT_SCOPE_STATEMENT } from "../lib/guard/network.ts";
 import { lookupLabel, subscribeAddressBook } from "../lib/guard/addressBook.ts";
 import { CopyButton } from "./CopyButton.tsx";
@@ -45,7 +46,9 @@ export function Tabs() {
 export function ScopeNotice({ compact = false }: { compact?: boolean }) {
   return (
     <div className="notice">
-      <strong>What the policy engine enforces</strong>
+      <strong title="Terminology defined in docs/glossary.md: SAC (Stellar Asset Contract), Soroban Auth Context, __check_auth, Rolling Window">
+        What the policy engine enforces
+      </strong>
       <span className="tiny">{ENFORCEMENT_SCOPE_STATEMENT}</span>
       {!compact && (
         <div className="tiny muted" style={{ marginTop: 6 }}>
@@ -170,20 +173,59 @@ export function ReadSkeleton({ label }: { label: string }) {
 /**
  * Render a read's value, or its failure.
  *
- * There is no third branch on purpose: a read that did not succeed has no value
- * to show, and substituting a zero would make an outage indistinguishable from a
- * genuinely empty policy.
+ * Sized in `em` so it inherits the exact font metrics of the slot it sits in
+ * (`.stat .v`, `.stat .n`, …) and occupies the same height the resolved value
+ * will — no jump, no shift. `aria-hidden="true"` keeps screen readers out:
+ * the surrounding container's `aria-busy` already announces "this region is
+ * loading", and a bar with no meaning would only be noise.
+ */
+export function Skeleton({ lines = 1, className = "" }: { lines?: number; className?: string }) {
+  return (
+    <>
+      {Array.from({ length: lines }, (_, index) => (
+        <span
+          key={index}
+          className={`${SKELETON_CLASS}${index > 0 ? " slim" : ""}${className ? ` ${className}` : ""}`}
+          aria-hidden="true"
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Render a read through all three of its states: pending → skeleton, failed →
+ * the error, resolved → the value.
+ *
+ * The failure branch is the same explicit error block it has always been —
+ * there is no default-on-failure path, because a substituted zero would make
+ * an outage indistinguishable from a genuinely empty policy (README, no mock
+ * state). What is new is the first branch: while the read is in flight the slot
+ * shows a skeleton instead of nothing, so the panel's height does not collapse
+ * and jump when the value lands.
  */
 export function Read<T>({
   result,
   label,
   render,
+  pendingLines = 1,
 }: {
-  result: ReadResult<T>;
+  result: ReadResult<T> | null | undefined;
   label: string;
   render: (value: T) => ReactNode;
+  /** Skeleton lines to reserve while the read is pending (value + note slots). */
+  pendingLines?: number;
 }) {
-  if (!result.ok) return <ErrorBlock title={`${label}: read failed`} detail={result.error} />;
+  if (result === null || result === undefined) {
+    return (
+      <span aria-busy="true" className="read-pending">
+        <Skeleton lines={pendingLines} />
+      </span>
+    );
+  }
+  if (!result.ok) {
+    return <ErrorBlock title={`${label}: read failed`} detail={result.error} />;
+  }
   return <>{render(result.value)}</>;
 }
 
@@ -374,7 +416,11 @@ export function AmountDisplay({ stroops, symbol, decimals }: AmountDisplayProps)
       aria-label={
         showRaw ? `Raw amount: ${raw}` : `Amount: ${human}. Activate to show raw stroops.`
       }
-      title={showRaw ? "Show human-readable amount" : "Show raw stroops"}
+      title={
+        showRaw
+          ? "Show human-readable amount"
+          : "Show raw stroops — the smallest unit of an asset (docs/glossary.md — Stroop)"
+      }
     >
       {showRaw ? raw : human}
     </button>

@@ -188,6 +188,9 @@ export class GuardFeed {
   /** The raw `getEvents` page behind the most recent poll, captured for `raw`. */
   private lastRawEvents: readonly rpc.Api.EventResponse[] = [];
 
+  /** Set by `stop()`. A stopped feed never polls again, even if referenced. */
+  private stopped = false;
+
   constructor(server: rpc.Server, guard: string, rpcUrl: string = NETWORK.rpcUrl) {
     this.guard = guard;
     // The listener decodes and discards the XDR. Hand it a view of the server
@@ -202,8 +205,26 @@ export class GuardFeed {
     this.listener = new GuardTelemetryListener({ server: recording, guard, rpcUrl });
   }
 
+  /**
+   * Release this feed. The multi-guard supervisor calls this the moment a guard
+   * is removed from the registry, so a reconciled-away listener cannot keep
+   * emitting events through a stale reference.
+   */
+  stop(): void {
+    this.stopped = true;
+  }
+
+  /** True once `stop()` has been called. Exposed for lifecycle assertions. */
+  isStopped(): boolean {
+    return this.stopped;
+  }
+
   /** One page of committed ledger events. Advances the cursor. */
   async pollOnce(limit = 50): Promise<TelemetryPage> {
+    if (this.stopped) {
+      const ledger = this.latestLedger ?? 0;
+      return { events: [], cursor: this.cursor ?? "", latestLedger: ledger, oldestLedger: ledger };
+    }
     return await withTimeout(async () => {
       const params: { cursor?: string; limit: number; startLedger?: number } = { limit };
       if (this.cursor) {
@@ -541,6 +562,27 @@ export interface StreamBuffer {
 
 /** How many rows the feed keeps. The feed is a live view, not an archive. */
 export const STREAM_BUFFER_LIMIT = 250;
+
+/**
+ * A stable identity for an event, so re-polling the same page cannot duplicate
+ * rows. Decoded event data can hold bigints (a heartbeat's `at`), which plain
+ * `JSON.stringify` rejects, so they are written as decimal strings.
+ */
+export function eventKey(event: GuardEvent): string {
+  return [
+    event.source,
+    event.transactionHash ?? "-",
+    event.ledger ?? "-",
+    event.topic,
+    event.decision?.result ?? "-",
+    event.decision?.reason ?? "-",
+    typeof event.data === "object" && event.data !== null
+      ? JSON.stringify(event.data, (_key, value: unknown) =>
+          typeof value === "bigint" ? `${value}n` : value,
+        )
+      : String(event.data),
+  ].join("|");
+}
 
 export function emptyStreamBuffer(): StreamBuffer {
   return { rows: [], pending: [], paused: false, seen: new Set(), dropped: 0 };

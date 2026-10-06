@@ -42,11 +42,48 @@ export function installDom(): JSDOM {
   define("window", dom.window);
   define("document", dom.window.document);
   define("navigator", dom.window.navigator);
+  define("localStorage", dom.window.localStorage);
+  if (typeof (dom.window as any).matchMedia !== "function") {
+    (dom.window as any).matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
+  define("matchMedia", (dom.window as any).matchMedia);
   define("IS_REACT_ACT_ENVIRONMENT", true);
 
   installed = dom;
   return dom;
 }
+
+import assert from "node:assert/strict";
+
+(assert as any).dom = (element: Element | null | undefined) => ({
+  containsText(text: string) {
+    const content = element ? element.textContent || "" : "";
+    assert.ok(
+      content.includes(text),
+      `Expected element to contain text "${text}", got: "${content.slice(0, 100)}..."`,
+    );
+  },
+  doesNotContainText(text: string) {
+    const content = element ? element.textContent || "" : "";
+    assert.ok(
+      !content.includes(text),
+      `Expected element to not contain text "${text}", got: "${content.slice(0, 100)}..."`,
+    );
+  },
+});
+
+(assert as any).notOk = (value: unknown, message?: string) => {
+  assert.ok(!value, message || `Expected falsy, got ${value}`);
+};
 
 export type Act = (callback: () => void | Promise<void>) => Promise<void>;
 
