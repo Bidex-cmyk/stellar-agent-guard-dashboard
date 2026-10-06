@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGuard } from "./GuardProvider.tsx";
 import { AddressText, ErrorBlock, short, useAddressLabel } from "./bits.tsx";
 import { AddressBookModal } from "./AddressBookModal.tsx";
-import { looksLikeContractAddress } from "../lib/guard/instance.ts";
+import {
+  isKnownInstance,
+  looksLikeContractAddress,
+  type GuardInstance,
+} from "../lib/guard/instance.ts";
+import { useDemoMode } from "../lib/guard/useDemoMode.ts";
 import { IDLE_TIMEOUT_OPTIONS } from "../lib/guard/useIdleTimer.ts";
 import {
   WALLET_PROVIDERS,
@@ -32,6 +37,8 @@ export function WalletBar() {
     guard,
     selectGuard,
     addInstance,
+    removeInstance,
+    renameInstance,
     session,
     providerId,
     availableProviders,
@@ -39,15 +46,39 @@ export function WalletBar() {
     networkMismatch,
     switchNetwork,
   } = useGuard();
+  const demo = useDemoMode();
   const [newAddress, setNewAddress] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [switchOutcome, setSwitchOutcome] = useState<NetworkSwitchOutcome | null>(null);
+  const [renameTarget, setRenameTarget] = useState<GuardInstance | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GuardInstance | null>(null);
 
   const selected = instances.find((instance) => instance.guard === guard);
   const guardNickname = useAddressLabel(guard);
   const provider = providerId ? walletProviderDescriptor(providerId) : null;
+  const selectedRemovable = selected ? !isKnownInstance(selected.guard) : false;
+
+  async function addByAddress() {
+    const candidate = newAddress.trim();
+    // Fast local feedback before the live check; the provider repeats the check
+    // (and verifies the guard answers `status()`) before anything is saved.
+    if (!looksLikeContractAddress(candidate)) {
+      setAddError("That is not a Soroban contract address (56 characters, starting with C).");
+      return;
+    }
+    setAdding(true);
+    setAddError(null);
+    const result = await addInstance(candidate, `Guard ${short(candidate, 6, 4)}`);
+    setAdding(false);
+    if (!result.ok) {
+      setAddError(result.error ?? "That guard could not be added.");
+      return;
+    }
+    setNewAddress("");
+  }
 
   return (
     <div className="panel">
@@ -55,19 +86,39 @@ export function WalletBar() {
         <div>
           <label className="field">
             <span className="lbl">Guarded account (the smart account being operated)</span>
-            <select value={guard} onChange={(event) => selectGuard(event.target.value)}>
+            {/* Native select on purpose: keyboard navigation, type-ahead and
+                screen-reader semantics come for free, where a custom listbox
+                would have to re-earn all three. */}
+            <select
+              value={guard}
+              onChange={(event) => selectGuard(event.target.value)}
+              aria-label="Active guard"
+            >
               {instances.map((instance) => (
                 <option key={instance.guard} value={instance.guard}>
-                  {instance.label} — {short(instance.guard, 8, 6)}
+                  {instance.label} — {short(instance.guard, 8, 6)} · {instance.network}
                 </option>
               ))}
             </select>
             <span className="hint">
               {selected?.provenance}
+              {selected ? ` · network ${selected.network}` : ""}
               {guardNickname ? ` · in your address book as “${guardNickname}”` : ""}
             </span>
           </label>
-          <div className="row">
+          {selected && !demo && (
+            <div className="row" style={{ marginTop: 6 }}>
+              <button className="secondary" onClick={() => setRenameTarget(selected)}>
+                Rename
+              </button>
+              {selectedRemovable && (
+                <button className="secondary" onClick={() => setDeleteTarget(selected)}>
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+          <div className="row" style={{ marginTop: 8 }}>
             <input
               value={newAddress}
               onChange={(event) => {
@@ -76,6 +127,7 @@ export function WalletBar() {
               }}
               placeholder="Add a guard contract address (C…)"
               aria-label="Guard contract address"
+              disabled={adding || demo}
             />
             <button
               className="secondary"
@@ -91,10 +143,10 @@ export function WalletBar() {
                 setNewAddress("");
               }}
             >
-              Add
+              {adding ? "Checking…" : "Add"}
             </button>
           </div>
-          {addError && <ErrorBlock title="Could not add that instance" detail={addError} />}
+          {addError && <ErrorBlock title="Could not add that guard" detail={addError} />}
           <div className="row" style={{ marginTop: 8 }}>
             <button className="secondary" onClick={() => setBookOpen(true)}>
               Address book
@@ -195,6 +247,26 @@ export function WalletBar() {
       </div>
 
       {bookOpen && <AddressBookModal onClose={() => setBookOpen(false)} />}
+      {renameTarget && (
+        <RenameGuardModal
+          instance={renameTarget}
+          onClose={() => setRenameTarget(null)}
+          onRename={(label) => {
+            renameInstance(renameTarget.guard, label);
+            setRenameTarget(null);
+          }}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteGuardModal
+          instance={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            removeInstance(deleteTarget.guard);
+            setDeleteTarget(null);
+          }}
+        />
+      )}
       {pickerOpen && (
         <WalletPickerModal
           availableProviders={availableProviders}
@@ -207,6 +279,131 @@ export function WalletBar() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Rename a saved guard.
+ *
+ * A small dialog rather than an inline edit so the change is explicit and the
+ * label can be reviewed before it is written; the operator's own label is what
+ * the switcher shows, so a mis-typed rename is a mis-identified guard.
+ */
+export function RenameGuardModal({
+  instance,
+  onClose,
+  onRename,
+}: {
+  instance: GuardInstance;
+  onClose: () => void;
+  onRename: (label: string) => void;
+}) {
+  const [label, setLabel] = useState(instance.label);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rename-guard-title"
+        ref={dialogRef}
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <strong id="rename-guard-title">Rename this guard</strong>
+        <p className="tiny muted mono">{instance.guard}</p>
+        <label className="field">
+          <span className="lbl">Label</span>
+          <input
+            value={label}
+            autoFocus
+            onChange={(event) => setLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && label.trim() !== "") onRename(label.trim());
+            }}
+          />
+        </label>
+        <div className="row">
+          <button disabled={label.trim() === ""} onClick={() => onRename(label.trim())}>
+            Save name
+          </button>
+          <button className="secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Confirm deleting a saved guard.
+ *
+ * This reuses the destructive-dialog pattern the PanicPanel's freeze challenge
+ * established (issue #22): a deletion is not a single click. The confirm is a
+ * separate, danger-styled action, and the copy states plainly what is removed —
+ * the browser's saved entry and the state scoped to it — and what is not (the
+ * contract on chain is untouched).
+ */
+export function DeleteGuardModal({
+  instance,
+  onClose,
+  onConfirm,
+}: {
+  instance: GuardInstance;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-guard-title"
+        ref={dialogRef}
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <strong id="delete-guard-title">Delete this saved guard?</strong>
+        <p className="tiny">
+          Removes <strong>{instance.label}</strong> (
+          <span className="mono">{short(instance.guard, 10, 6)}</span>) from this browser&apos;s
+          list and clears the drafts and filters saved for it. It does not touch the contract on
+          chain.
+        </p>
+        <div className="row">
+          <button className="danger" onClick={onConfirm}>
+            Delete guard
+          </button>
+          <button className="secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

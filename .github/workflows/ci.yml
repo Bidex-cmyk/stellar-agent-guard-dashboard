@@ -51,6 +51,13 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Every relative path and section anchor in the README, SPEC.md, CONTRIBUTING.md
+      # and docs/ is a promise that the docs still line up. This checks it, offline:
+      # it never fetches an external URL, so a broken link to another host cannot
+      # fail a build for reasons that have nothing to do with this commit.
+      - name: Documentation links
+        run: npm run test:docs
+
       - name: Build
         run: npm run build
 
@@ -70,6 +77,34 @@ jobs:
       # The perf benchmark (tests/perf, #114) is deliberately absent:
       # frame-rate assertions depend on the runner's GPU/CPU, so it runs
       # locally via `npm run test:perf` and is not a CI gate.
+      # The Playwright browsers are the only step in this job that downloads
+      # rather than computes, and they are byte-identical on every run: a cold
+      # `playwright install` measured 190.6s locally against 4.7s with the
+      # browsers already present, and the step itself is ~22s of a ~128s job.
+      # Restoring them is the one cache this job can justify with a measurement.
+      #
+      # `.next/cache` is deliberately *not* cached. It is worth 126s locally
+      # (177s cold → 50.6s warm) but 71MB per run, while the Build step here is
+      # 15s on the runner — a transfer that can cost more than the step it
+      # replaces. The E2E suite gains nothing either: it drives `next dev`, not
+      # the production build, so it never reads this cache.
+      #
+      # The key hashes the *installed* `@playwright/test` package, not the whole
+      # lockfile: a cache that misses whenever any dependency moves would be
+      # re-downloaded for reasons that have nothing to do with the browser
+      # build, and a cache hit across a Playwright bump would run a binary the
+      # pinned version does not expect. No `restore-keys` for the same reason —
+      # a browser build from a different Playwright version is not a usable
+      # fallback, it is a wrong binary.
+      - name: Restore Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('node_modules/@playwright/test/package.json') }}
+
+      # Unconditional, cache hit or not: on a hit it is a ~5s no-op that also
+      # proves the restored tree is the one this runner can execute, which is
+      # cheaper than discovering a corrupt cache in the E2E suite.
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -80,7 +115,7 @@ jobs:
       # CI goes red; the config keeps traces only on failure.
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |

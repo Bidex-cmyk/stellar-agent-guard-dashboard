@@ -22,8 +22,21 @@ import {
   type xdr as Xdr,
 } from "@stellar/stellar-sdk";
 import { NETWORK, PHASE1_ARTIFACT, READ_SOURCE_FALLBACK } from "./network.ts";
-import { guardStorageLedgerKeys, hashToHex, sha256, sha256Hex } from "./scval.ts";
-import { type GuardStatus, type PolicyConfig, decodePolicy } from "stellar-agent-guard-sdk";
+import { guardStorageLedgerKeys, hashToHex, ledgerKeyId, sha256, sha256Hex } from "./scval.ts";
+import { parseContractSpec, type ContractSpecResult } from "./contractSpecParser.ts";
+import {
+  absentStorageEntry,
+  decodeStorageEntry,
+  storageKeyLabel,
+  type RawLedgerEntry,
+  type StorageEntryView,
+} from "./storage.ts";
+import {
+  GUARD_STORAGE_KEYS,
+  type GuardStatus,
+  type PolicyConfig,
+  decodePolicy,
+} from "stellar-agent-guard-sdk";
 import { withTimeout, DashboardReadError } from "./timeout.ts";
 
 export function createServer(rpcUrl: string = NETWORK.rpcUrl): rpc.Server {
@@ -156,6 +169,96 @@ export async function readPersistentEntry<T = unknown>(
   }
 }
 
+/**
+ * Every storage entry the guard contract holds, decoded for the storage
+ * explorer (issue #150).
+ *
+ * Soroban RPC has no "list this contract's keys" call: `getLedgerEntries` takes
+ * the keys to look up, so the set queried here is the contract-instance entry
+ * plus the SDK's declared `DataKey` vocabulary in both durabilities. Keys outside
+ * that vocabulary would not be found, which is why the explorer's copy says the
+ * list is the guard's own storage rather than claiming to be exhaustive.
+ *
+ * A key the ledger does not hold still gets a row (from `absentStorageEntry`),
+ * because "there is no policy stored" is a fact the operator needs to read, and
+ * an omitted key would render as a gap in the list rather than as an answer.
+ */
+export async function readContractStorage(
+  server: rpc.Server,
+  guard: string,
+): Promise<ReadResult<StorageEntryView[]>> {
+  try {
+    return await withTimeout(async () => {
+      const scAddress = new Address(guard).toScAddress();
+      // The contract-instance entry is itself a contract-data key whose ScVal is
+      // `LedgerKey::ContractInstance`; the host stores it under `persistent`.
+      const instanceKey = xdr.LedgerKey.contractData(
+        new xdr.LedgerKeyContractData({
+          contract: scAddress,
+          key: xdr.ScVal.scvLedgerKeyContractInstance(),
+          durability: xdr.ContractDataDurability.persistent,
+        }),
+      );
+      const keys = [
+        instanceKey,
+        ...guardStorageLedgerKeys(guard),
+        ...guardedTemporaryLedgerKeys(guard),
+      ];
+
+      const response = await server.getLedgerEntries(...keys);
+      const latestLedger = response.latestLedger ?? null;
+      const byKeyId = new Map<string, StorageEntryView>();
+      for (const entry of response.entries ?? []) {
+        const raw = entry as unknown as RawLedgerEntry;
+        if (!raw?.key) continue;
+        const decoded = decodeStorageEntry(raw, latestLedger);
+        byKeyId.set(decoded.id, decoded);
+      }
+
+      const views: StorageEntryView[] = [];
+      for (const key of keys) {
+        const id = ledgerKeyId(key);
+        const found = byKeyId.get(id);
+        if (found) {
+          views.push(found);
+          continue;
+        }
+        // Every key in `keys` was built as `LedgerKey::ContractData`, so the
+        // arm is known; the SDK's union type cannot see that. This build exposes
+        // the arm's fields as plain properties, which `storage.ts` reads the
+        // same tolerant way.
+        const contractData = (key as unknown as { contractData: xdr.LedgerKeyContractData })
+          .contractData;
+        views.push(absentStorageEntry(id, storageKeyLabel(contractData.key)));
+      }
+      return { ok: true, value: views };
+    });
+  } catch (error) {
+    if (error instanceof DashboardReadError) throw error;
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * The guard's declared keys under the `temporary` durability.
+ *
+ * The guard writes its persistent entries, so these normally come back absent —
+ * they are queried so the explorer can show the storage class as unused rather
+ * than not mentioning it.
+ */
+function guardedTemporaryLedgerKeys(guard: string): xdr.LedgerKey[] {
+  const scAddress = new Address(guard).toScAddress();
+  return GUARD_STORAGE_KEYS.map((name) =>
+    xdr.LedgerKey.contractData(
+      new xdr.LedgerKeyContractData({
+        contract: scAddress,
+        key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(name)]),
+        durability: xdr.ContractDataDurability.temporary,
+      }),
+    ),
+  );
+}
+
 /** The rolling-window spend ledger. No read function exposes it; it is internal accounting. */
 export interface WindowState {
   total: bigint;
@@ -282,6 +385,40 @@ export async function fetchContractWasm(
   return await withTimeout(async () => {
     return toBytes(await server.getContractWasmByContractId(contractId));
   });
+}
+
+/**
+ * The deployed contract's bytes, or why they could not be read.
+ *
+ * Fetching a protocol contract's code can fail for reasons that are not the
+ * contract's fault — a Wrong-Chain contract id, an RPC outage — so the caller
+ * gets a typed failure it can show, rather than a throw it must catch.
+ */
+export type ContractWasmResult = { ok: true; wasm: Uint8Array } | { ok: false; error: string };
+
+/**
+ * Fetch a contract's WASM and extract its exported functions from the embedded
+ * spec, for the policy form's per-function allowlist picker.
+ *
+ * A read failure and a missing spec are reported through the same envelope so
+ * the form can fall back to manual entry in both cases; `reason` distinguishes
+ * a contract that genuinely has no spec (see `SpecMissingReason`) from a chain
+ * error.
+ */
+export async function readContractSpec(
+  server: rpc.Server,
+  contractId: string,
+): Promise<ContractSpecResult | { ok: false; reason: "fetch"; error: string }> {
+  try {
+    const wasm = await fetchContractWasm(server, contractId);
+    return parseContractSpec(wasm);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "fetch",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function toBytes(value: unknown): Uint8Array {

@@ -33,7 +33,10 @@ import { recordTx } from "./txHistory.ts";
 import { hardwareGuide } from "./hardwareGuide.ts";
 
 /** Inclusion fee floor, in stroops, for a single-operation transaction. */
-import { calculateFeeHeadroom, FeePreset } from "./feeEstimator.ts";
+// `FeePreset` is imported as a type on purpose: `scripts/prove-phase3.ts` runs
+// this module under Node's native type stripping, which rejects a value import
+// of something that only exists in the type space.
+import { calculateFeeHeadroom, type FeePreset } from "./feeEstimator.ts";
 
 export const INCLUSION_FEE = "100";
 
@@ -718,10 +721,12 @@ export async function invokeWithWallet(request: InvokeRequest): Promise<InvokeRe
         ? `Transaction confirmed on ledger ${result.ledger}`
         : "Transaction confirmed on the network",
     );
-    if (request.fn === "freeze") {
-      // A freeze is the critical security event the assertive region is for.
-      announce("Admin freeze activated", "assertive");
-    }
+    // Only the transaction is announced here, never what the operator meant by
+    // it. A freeze's *effect* is claimed by whoever can verify it: the panic
+    // panel, which re-reads `status()` and announces "Account frozen" or the
+    // reason it did not take, and the fleet table, which has no re-read and so
+    // announces the submission itself. One announcement per write, from the
+    // place that has the evidence for it.
   }
   return result;
 }

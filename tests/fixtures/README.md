@@ -9,6 +9,8 @@ simulated, and nothing is asserted from the console's own success message.
 - Run: 2026-09-15, ledgers 4691622–4691647
 - Produced by: `npm run prove:phase3` (`scripts/prove-phase3.ts`)
 - Machine-readable record: [`phase3-proof.json`](./phase3-proof.json)
+- Diffable run record: [`phase3-proof.run.json`](./phase3-proof.run.json) — see
+  [Re-running, and diffing a re-run against this record](#re-running-and-diffing-a-re-run-against-this-record)
 
 ## How this was produced, and what that means
 
@@ -150,3 +152,79 @@ The run is idempotent: keys, the token and the deployed guard are reused from `.
 (gitignored) on subsequent runs, so a second run re-verifies the *state* rather than re-proving the
 deploy. Delete `.env.phase3` for a fresh deployment end to end, which is how the record above was
 produced.
+
+### Re-running, and diffing a re-run against this record
+
+A plain `git diff` of `phase3-proof.json` after a re-run tells you nothing: the file is *supposed* to
+change, because a re-run deploys a new instance, mints again, freezes again and lands in later
+ledgers. "The diff was big" is not a finding. So the script can emit a second, narrow artifact whose
+whole job is to be diffable — [`phase3-proof.run.json`](./phase3-proof.run.json):
+
+```bash
+npm run prove:phase3:emit    # re-run the proof, then write the run record
+npm run prove:phase3:diff    # compare it against the committed run record
+```
+
+The run record holds `runDate`, `gitSha`, `contractIds`, `txHashes` and an `assertions` array of
+`{name, pass, actual}` — one row per check the script actually makes, in the order it makes them.
+`--out <path>` sends it somewhere other than the committed file, so you can diff without clobbering.
+
+**The two-tier diff rule.** `npm run prove:phase3:diff` compares the committed run record with the
+fresh one under this rule, implemented in [`lib/guard/proofRun.ts`](../../lib/guard/proofRun.ts) and
+exercised by [`tests/unit/proofRun.test.ts`](../../tests/unit/proofRun.test.ts):
+
+| Tier | Fields | Rule |
+| --- | --- | --- |
+| **invariant** | assertion names, assertion outcomes, scenario count, contract presence (`guard` and `token` non-empty), run `outcome` | **MUST match** on a re-run. A mismatch means this committed record no longer describes what the code does. |
+| **volatile** | `runDate`, `gitSha`, `contractIds` values, `txHashes`, and every `actual` (ledger numbers, hashes, timestamps) | **EXPECTED to churn.** Not a finding. |
+
+Why the hashes churn: each run deploys its own instance, so it mints, freezes and unfreezes in
+ledgers the previous run never touched. Two runs of an identical script against identical code are
+*expected* to produce different transaction hashes — that churn is the evidence the run was live
+rather than a copy. Demanding identical hashes would be demanding fabricated evidence, in the same
+way that demanding a hash for the refused transfer would be (see above). The record's `note` field is
+prose about the record itself and is in neither tier.
+
+A zero-churn volatile tier is itself reported, because a record that does not churn is a record that
+was not re-run.
+
+### What is re-verifiable here, and what is not
+
+Stated plainly, because this section is about reproducibility and a reproducibility claim that
+overstates itself is worthless:
+
+**Verified mechanically by the unit suite, no testnet needed** —
+`tests/unit/proofRun.test.ts` covers the emit shape, the assertion-name list, the invariant/volatile
+split, `compareRunRecords`, the canonicalisation and the git-sha resolution, all against the real
+committed proof rather than invented facts. The committed run record is additionally checked to be the
+faithful projection of that proof, so the two committed artifacts cannot silently disagree.
+`scripts/compare-proof-run.ts` is a thin reporting wrapper over `compareRunRecords` and adds no rule
+of its own.
+
+**Needs a live testnet run** — that the chain still answers, that the artifact hash still matches the
+ledger's, and that a live `npm run prove:phase3:emit` reproduces the assertion names in
+`phase3-proof.run.json`. That run spends real testnet funds, creates a real deployment and writes
+`.env.phase3`, which is exactly why the CI workflow deliberately excludes `prove:phase3` from its
+gate. **No live `--emit` run was performed when this file was written**, and nothing in this section
+should be read as claiming one was.
+
+### Provenance of the committed run record
+
+`phase3-proof.run.json` is currently a **projection** of the committed `phase3-proof.json`, produced
+by the same `buildRunRecord` call a live `--emit` uses, so that the diff has a committed side to
+compare against from the day it lands. It is labelled as such in its own `note` field, and its
+`gitSha` is `null` because no live run produced it. The first real `npm run prove:phase3:emit` will
+overwrite it.
+
+### A drift already present in this directory
+
+The deployment table and the `status()` transcripts above are from the **2026-09-15** run (guard
+`CC6VDBH5…`, ledgers 4691622–4691647). The committed [`phase3-proof.json`](./phase3-proof.json) in
+this directory is from a **later** run on 2026-09-16 (guard `CDMBPI64…`, ledgers 4707194–4707209).
+Both are real; they are two different runs, and the prose here describes the earlier one while the
+JSON records the later one. The same is true of the transaction table in the top-level `README.md`
+and in [`docs/verification.md`](../../docs/verification.md), which are labelled as dated records.
+
+Tracking this mechanically — a fixture-claims table that checks every hash, address and date quoted
+in this README against the JSON — is a separate piece of work; this section records the gap rather
+than leaving it to be discovered by someone who assumed the two files described one run.
