@@ -62,6 +62,13 @@ import { announce } from "../lib/guard/useAnnounce.ts";
 import { usePwaActivity } from "../lib/guard/usePwaActivity.ts";
 import { MigrationWizard } from "./MigrationWizard.tsx";
 import { ErrorBlock, OutcomeList, starLink } from "./bits.tsx";
+import {
+  clearDeployDraft,
+  loadDeployDraft,
+  saveDeployDraft,
+  DRAFT_AUTOSAVE_DEBOUNCE_MS,
+} from "../lib/guard/drafts.ts";
+import { formatTimeAgo } from "../lib/guard/time.ts";
 
 /** Either the chain's answer about the artifact, or why there is not one. */
 type ArtifactFetch = { artifact: ArtifactCheck } | { error: string };
@@ -117,6 +124,18 @@ export function DeployPanel() {
     null,
   );
 
+  // Issue #20: a draft restored from localStorage, with the age the banner
+  // shows. `null` means nothing was restored, so no banner is rendered. The
+  // age label is computed once at restore time rather than per render, so the
+  // render stays free of wall-clock reads (same discipline as the simulator).
+  const [restoredAge, setRestoredAge] = useState<string | null>(null);
+  // Consumed by the autosave effect below: the value the restore effect just
+  // pushed must not be written back (it would refresh `savedAt` on mere page
+  // load, and a draft that renews itself by being opened never expires).
+  const skipNextSave = useRef(false);
+  // Restore runs once per mount, not per re-render.
+  const didRestore = useRef(false);
+
   const [balances, setBalances] = useState<BalanceReading[] | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
   const [fundingAccount, setFundingAccount] = useState(false);
@@ -140,6 +159,93 @@ export function DeployPanel() {
     perTxCap,
     windowCap,
   });
+
+  // Issue #20: restore the last saved draft for this network once on mount.
+  // Client-side effects only — localStorage is never touched during the server
+  // render. The ref guard makes a restore strictly one-shot. setState is
+  // deferred through requestAnimationFrame so it is not called synchronously in
+  // the effect body — the same shape DashboardGrid uses when it loads persisted
+  // layout, because the lint rule forbids synchronous setState in an effect
+  // body.
+  useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+    const restored = loadDeployDraft(NETWORK.name);
+    if (restored === null) return;
+    const d = restored.draft;
+    const parsed = parseSalt(d.saltHex, "hex");
+    // Consumed by the autosave effect below: the value the restore effect just
+    // pushed must not be written back (it would refresh `savedAt` on mere page
+    // load, and a draft that renews itself by being opened never expires).
+    skipNextSave.current = true;
+    const apply = () => {
+      if (parsed.ok) setSalt(parsed.bytes);
+      setSaltEncoding(d.saltEncoding);
+      setSaltText(d.saltText);
+      setAgentPubkey(d.agentPubkeyHex);
+      setAgentAddress(d.agentAddress);
+      setDmsDurationSecs(d.dmsDurationSecs);
+      setPerTxCap(d.perTxCap);
+      setWindowCap(d.windowCap);
+      setRestoredAge(formatTimeAgo(restored.savedAt, Math.floor(Date.now() / 1000)));
+    };
+    const frame = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  // Debounced autosave of whatever the operator is editing, under this
+  // network's pre-deploy slot. A pristine form (empty text, empty pubkey) is
+  // not worth persisting — it would restore a banner onto a blank panel.
+  useEffect(() => {
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    const pristine =
+      saltText.trim() === "" &&
+      agentPubkey.trim() === "" &&
+      agentAddress.trim() === "" &&
+      dmsDurationSecs.trim() === "" &&
+      perTxCap.trim() === "" &&
+      windowCap.trim() === "";
+    if (pristine) return;
+    const timer = setTimeout(() => {
+      saveDeployDraft(NETWORK.name, {
+        saltHex: formatSalt(salt),
+        saltEncoding,
+        saltText,
+        agentPubkeyHex: agentPubkey,
+        agentAddress,
+        dmsDurationSecs,
+        perTxCap,
+        windowCap,
+      });
+    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [
+    salt,
+    saltText,
+    saltEncoding,
+    agentPubkey,
+    agentAddress,
+    dmsDurationSecs,
+    perTxCap,
+    windowCap,
+  ]);
+
+  /** Discard the restored draft: forget storage and reset the form. */
+  function discardRestoredDraft() {
+    clearDeployDraft(NETWORK.name);
+    setSalt(randomSalt());
+    setSaltText("");
+    setSaltEncoding("hex");
+    setAgentPubkey("");
+    setAgentAddress("");
+    setDmsDurationSecs("");
+    setPerTxCap("");
+    setWindowCap("");
+    setRestoredAge(null);
+  }
 
   // A deploy in flight is a pending write, and a typed salt or half-filled
   // init form is an unsaved deployment draft. A service-worker update waits for
@@ -461,6 +567,20 @@ export function DeployPanel() {
         before anything is signed, so this cannot ship a different binary than the one that was
         verified.
       </p>
+
+      {restoredAge !== null && (
+        <div className="notice info" role="status" data-testid="deploy-draft-restored">
+          <strong>Draft restored</strong>
+          <span className="tiny">
+            The deploy form was restored from a draft saved {restoredAge} ago in this browser.
+            Review the salt and parameters before signing — they are what you were editing, not what
+            is deployed on chain.
+          </span>
+          <button className="secondary" type="button" onClick={discardRestoredDraft}>
+            Discard draft
+          </button>
+        </div>
+      )}
 
       <div className="grid" style={{ marginTop: 12 }}>
         <div className="stat">

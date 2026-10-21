@@ -253,6 +253,7 @@ Full proof artifact recorded in [`tests/fixtures/phase3-proof.json`](./tests/fix
 
 - **Freighter wallet dependency**: Operator write actions require an active Freighter browser extension connected to Stellar Testnet; no programmatic secret keys are held or supported.
 - **Client-side static deployment**: Designed as a pure client-side application (compatible with Vercel or any static host); does not maintain a persistent server database.
+- **Deployment drafts in browser storage**: In-progress deploy and configure forms are autosaved to the browser's `localStorage` and restored on the next refresh so a closed tab does not lose entered values. This is client-side only — nothing is sent to a server — and only addresses, public keys and numeric parameters are ever stored; secret keys never enter this console, let alone storage. Drafts older than seven days are purged.
 - **Enforcement boundary for arbitrary calls**: Full amount/recipient limits apply natively to SAC token transfers. Arbitrary Soroban contract calls are gated by protocol/function allowlists, active execution window, pause, and dead-man switches; fine-grained amount controls for non-SAC calls are tracked as v2.
 
 ## Enforcement scope — read this before relying on the caps
