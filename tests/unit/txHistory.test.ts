@@ -1,17 +1,50 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { afterEach, before, test } from "node:test";
+import { installDom, loadReact, type Act } from "./domHarness.ts";
+import { GuardContext, type GuardContextValue } from "../../components/GuardProvider.tsx";
+import { TxHistoryTable } from "../../components/TxHistoryTable.tsx";
 import {
   TX_HISTORY_LIMIT,
+  TX_HISTORY_MAX_AGE_DAYS,
+  TX_HISTORY_MAX_AGE_MS,
   TX_HISTORY_STORAGE_KEY,
+  clearTxHistory,
   filterTxHistory,
   loadTxHistory,
   paginateTxHistory,
+  pruneTxHistory,
   recordTx,
   subscribeTxHistory,
+  txHistorySaveOutcome,
+  txHistoryMatchesNetwork,
   txHistoryToCsv,
+  txVerificationStatus,
   type StorageLike,
   type TxHistoryEntry,
 } from "../../lib/guard/txHistory.ts";
+import { NETWORK } from "../../lib/guard/network.ts";
+
+let React: typeof import("react");
+let createRoot: typeof import("react-dom/client").createRoot;
+let act: Act;
+let root: ReturnType<typeof createRoot> | null = null;
+
+before(async () => {
+  installDom();
+  const loaded = await loadReact();
+  React = loaded.react;
+  createRoot = loaded.createRoot;
+  act = loaded.act;
+});
+
+afterEach(() => {
+  if (root) {
+    act(() => root!.unmount());
+    root = null;
+  }
+  document.body.innerHTML = "";
+  localStorage.removeItem(TX_HISTORY_STORAGE_KEY);
+});
 
 function fakeStorage(): StorageLike {
   const data = new Map<string, string>();
@@ -29,6 +62,8 @@ function entry(overrides: Partial<TxHistoryEntry> = {}): TxHistoryEntry {
     operation: "set_policy",
     status: "confirmed",
     feeStroops: "210",
+    networkName: NETWORK.name,
+    networkPassphrase: NETWORK.passphrase,
     recordedAt: "2026-09-24T10:00:00.000Z",
     ...overrides,
   };
@@ -44,6 +79,8 @@ test("a recorded transaction is persisted and reloaded newest first", () => {
   assert.equal(loaded[0]?.hash, "h2");
   assert.equal(loaded[1]?.hash, "h1");
   assert.equal(loaded[0]?.status, "failed");
+  assert.equal(loaded[0]?.networkName, NETWORK.name);
+  assert.equal(loaded[0]?.networkPassphrase, NETWORK.passphrase);
   // feeStroops null survives the round trip as null, not as a missing field.
   assert.equal(loaded[0]?.feeStroops, null);
 });
@@ -104,6 +141,123 @@ test("a corrupt or non-array storage payload yields an empty history", () => {
     JSON.stringify([entry(), { hash: "broken", status: "weird" }]),
   );
   assert.equal(loadTxHistory(storage).length, 1);
+});
+
+test("a quota failure is reported without interrupting the in-memory history result", () => {
+  const storage: StorageLike = {
+    getItem: () => null,
+    setItem: () => {
+      throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    },
+  };
+  const result = recordTx(
+    { hash: "still-recorded", operation: "freeze", status: "confirmed", feeStroops: null },
+    storage,
+  );
+  assert.equal(result[0]?.hash, "still-recorded");
+  assert.deepEqual(txHistorySaveOutcome(), { ok: false, error: "quota" });
+});
+
+test("legacy history rows load with unknown network provenance", () => {
+  const storage = fakeStorage();
+  storage.setItem(
+    TX_HISTORY_STORAGE_KEY,
+    JSON.stringify([
+      {
+        hash: "legacy",
+        operation: "freeze",
+        status: "confirmed",
+        feeStroops: null,
+        recordedAt: "2026-09-24T10:00:00.000Z",
+      },
+    ]),
+  );
+  const [loaded] = loadTxHistory(storage);
+  assert.equal(loaded?.networkName, null);
+  assert.equal(loaded?.networkPassphrase, null);
+});
+
+test("verification distinguishes pending, missing, failed, and confirmed RPC results", () => {
+  assert.equal(txVerificationStatus("PENDING"), "pending");
+  assert.equal(txVerificationStatus("NOT_FOUND"), "not-found");
+  assert.equal(txVerificationStatus("FAILED"), "failed");
+  assert.equal(txVerificationStatus("SUCCESS"), "confirmed");
+  assert.equal(txVerificationStatus("UNEXPECTED"), null);
+});
+
+test("verification is limited to the row's recorded network passphrase", () => {
+  const local = entry();
+  assert.equal(txHistoryMatchesNetwork(local, NETWORK.passphrase), true);
+  assert.equal(txHistoryMatchesNetwork(local, "another network"), false);
+  assert.equal(
+    txHistoryMatchesNetwork(entry({ networkPassphrase: null }), NETWORK.passphrase),
+    false,
+  );
+});
+
+test("the table verifies against its selected network without rewriting local history", async () => {
+  const original = entry({ hash: "verify-this", status: "failed" });
+  localStorage.setItem(TX_HISTORY_STORAGE_KEY, JSON.stringify([original]));
+  let requestedHash = "";
+  const server = {
+    getTransaction: async (hash: string) => {
+      requestedHash = hash;
+      return { status: "SUCCESS", ledger: 42 };
+    },
+  };
+  const div = document.createElement("div");
+  document.body.appendChild(div);
+  root = createRoot(div);
+  await act(async () => {
+    root!.render(
+      React.createElement(
+        GuardContext.Provider,
+        { value: { server } as unknown as GuardContextValue },
+        React.createElement(TxHistoryTable),
+      ),
+    );
+  });
+
+  const verifyButton = div.querySelector(
+    'button[aria-label^="Verify transaction"]',
+  ) as HTMLButtonElement;
+  assert.ok(verifyButton);
+  await act(async () => verifyButton.click());
+  assert.equal(requestedHash, original.hash);
+  assert.ok(div.textContent?.includes("Chain: Confirmed on chain"));
+  assert.ok(div.textContent?.includes(NETWORK.rpcUrl));
+  assert.ok(div.textContent?.includes("Checked "));
+  assert.equal(loadTxHistory()[0]?.status, "failed", "the submitted outcome remains local truth");
+  assert.equal("verifiedAt" in (loadTxHistory()[0] ?? {}), false);
+});
+
+test("the table disables live verification for a mismatched recorded network", async () => {
+  localStorage.setItem(
+    TX_HISTORY_STORAGE_KEY,
+    JSON.stringify([entry({ hash: "other-network", networkPassphrase: "another network" })]),
+  );
+  let rpcCalls = 0;
+  const server = {
+    getTransaction: async () => {
+      rpcCalls += 1;
+      return { status: "SUCCESS" };
+    },
+  };
+  const div = document.createElement("div");
+  document.body.appendChild(div);
+  root = createRoot(div);
+  await act(async () => {
+    root!.render(
+      React.createElement(
+        GuardContext.Provider,
+        { value: { server } as unknown as GuardContextValue },
+        React.createElement(TxHistoryTable),
+      ),
+    );
+  });
+  assert.ok(div.textContent?.includes("Unavailable"));
+  assert.equal(div.querySelector('button[aria-label^="Verify transaction"]'), null);
+  assert.equal(rpcCalls, 0);
 });
 
 test("search matches operation, hash and status, case-insensitively", () => {
@@ -188,9 +342,105 @@ test("CSV export has a fixed header and one quoted row per entry", () => {
   ];
   const csv = txHistoryToCsv(entries);
   const lines = csv.trimEnd().split("\n");
-  assert.equal(lines[0], "timestamp,operation,status,tx_hash,fee_stroops");
+  assert.equal(
+    lines[0],
+    "timestamp,operation,status,tx_hash,fee_stroops,network_name,network_passphrase",
+  );
   assert.equal(lines.length, 3);
-  assert.equal(lines[1], '"2026-09-24T10:00:00.000Z","set_policy","confirmed","h1","310"');
+  assert.equal(
+    lines[1],
+    `"2026-09-24T10:00:00.000Z","set_policy","confirmed","h1","310","${NETWORK.name}","${NETWORK.passphrase}"`,
+  );
   // Embedded quotes are doubled per RFC 4180, and a null fee exports empty.
-  assert.equal(lines[2], '"2026-09-24T11:00:00.000Z","odd ""operation""","failed","h2",""');
+  assert.equal(
+    lines[2],
+    `"2026-09-24T11:00:00.000Z","odd ""operation""","failed","h2","","${NETWORK.name}","${NETWORK.passphrase}"`,
+  );
+});
+
+test("retention boundary: prunes records older than 30 days deterministically", () => {
+  const now = new Date("2026-10-20T12:00:00.000Z").getTime();
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+  const entries: TxHistoryEntry[] = [
+    entry({ hash: "recent", recordedAt: new Date(now - 1000).toISOString() }),
+    entry({ hash: "boundary-ok", recordedAt: new Date(now - thirtyDaysMs + 5000).toISOString() }),
+    entry({
+      hash: "boundary-expired",
+      recordedAt: new Date(now - thirtyDaysMs - 5000).toISOString(),
+    }),
+    entry({ hash: "old", recordedAt: new Date(now - 40 * 24 * 60 * 60 * 1000).toISOString() }),
+  ];
+
+  const pruned = pruneTxHistory(entries, { now });
+  assert.equal(pruned.length, 2);
+  assert.equal(pruned[0]?.hash, "recent");
+  assert.equal(pruned[1]?.hash, "boundary-ok");
+});
+
+test("clearTxHistory clears local storage and memory and notifies subscribers", () => {
+  const storage = fakeStorage();
+  recordTx({ hash: "h1", operation: "freeze", status: "confirmed", feeStroops: null }, storage);
+  assert.equal(loadTxHistory(storage).length, 1);
+
+  let notified = 0;
+  const unsubscribe = subscribeTxHistory(() => {
+    notified += 1;
+  });
+
+  clearTxHistory(storage);
+  unsubscribe();
+
+  assert.equal(loadTxHistory(storage).length, 0);
+  assert.equal(notified, 1);
+});
+
+test("TxHistoryTable confirmation dialog warns that clearing local data does not change the chain", async () => {
+  localStorage.setItem(
+    TX_HISTORY_STORAGE_KEY,
+    JSON.stringify([entry({ hash: "tx-to-clear", status: "confirmed" })]),
+  );
+
+  const server = {
+    getTransaction: async () => ({ status: "SUCCESS" }),
+  };
+
+  const div = document.createElement("div");
+  document.body.appendChild(div);
+  root = createRoot(div);
+  await act(async () => {
+    root!.render(
+      React.createElement(
+        GuardContext.Provider,
+        { value: { server } as unknown as GuardContextValue },
+        React.createElement(TxHistoryTable),
+      ),
+    );
+  });
+
+  assert.ok(div.textContent?.includes("tx-to-clear"));
+
+  // Click clear button
+  const clearBtn = div.querySelector(
+    'button[data-testid="clear-history-button"]',
+  ) as HTMLButtonElement;
+  assert.ok(clearBtn);
+  await act(async () => clearBtn.click());
+
+  // Confirm dialog should appear stating that on-chain records are unchanged
+  assert.ok(div.textContent?.includes("Clear browser-local transaction history?"));
+  assert.ok(
+    div.textContent?.includes("On-chain transactions and ledger state are completely unchanged"),
+  );
+
+  // Click confirm
+  const confirmBtn = div.querySelector(
+    'button[data-testid="confirm-clear-history-button"]',
+  ) as HTMLButtonElement;
+  assert.ok(confirmBtn);
+  await act(async () => confirmBtn.click());
+
+  // History should now be empty in table and in storage
+  assert.equal(loadTxHistory().length, 0);
+  assert.ok(div.textContent?.includes("No transactions have been submitted from this console yet"));
 });

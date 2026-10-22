@@ -3,7 +3,11 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { describeGuardEvent, explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
-import { STREAM_BUFFER_LIMIT, type TelemetryEvent } from "../lib/guard/telemetry.ts";
+import {
+  STREAM_BUFFER_LIMIT,
+  describeFeedGap,
+  type TelemetryEvent,
+} from "../lib/guard/telemetry.ts";
 import { useGuard, useGuardEvents } from "./GuardProvider.tsx";
 import { TelemetryAlerts } from "./TelemetryAlerts.tsx";
 import { TelemetryChart } from "./TelemetryChart.tsx";
@@ -526,6 +530,34 @@ export function TelemetryFeed() {
         </div>
       )}
 
+      {/* Coverage warnings. An empty list means no discontinuity has been detected,
+          not that the feed is known to be complete. Nothing here fills a hole with
+          invented events: the rows above are only what the RPC returned. */}
+      {feed.gaps.map((notice) => (
+        <div
+          key={notice.guard}
+          className={notice.lost.length > 0 ? "notice danger" : "notice"}
+          role={notice.lost.length > 0 ? "alert" : "status"}
+          data-testid="feed-gap-notice"
+        >
+          <strong>Possible gaps in the feed for {notice.label}</strong>
+          {notice.lost.map((gap) => {
+            const text = describeFeedGap(gap);
+            return (
+              <span className="tiny" key={`${gap.fromLedger}-${gap.toLedger}`}>
+                {text.headline}. {text.range}
+              </span>
+            );
+          })}
+          {notice.unsettled && (
+            <span className="tiny">
+              {describeFeedGap(notice.unsettled).headline}.{" "}
+              {describeFeedGap(notice.unsettled).range} This clears once a later poll is consistent.
+            </span>
+          )}
+        </div>
+      ))}
+
       <div className="notice info">
         <strong>Refused decisions cannot reach this feed from the ledger</strong>
         <span className="tiny">
@@ -550,8 +582,8 @@ export function TelemetryFeed() {
              empty result, so it renders as skeleton rows in the same table
              shape the events will land in — not as an empty-looking message
              and not as zeros. */
-          <div className="scrolly" aria-busy="true">
-            <table className={`events ${densityState === "compact" ? "compact" : ""}`}>
+          <div className="scrolly table-stack" aria-busy="true">
+            <table className={`events stack ${densityState === "compact" ? "compact" : ""}`}>
               {feedHead}
               <tbody aria-hidden="true">
                 {[0, 1, 2].map((row) => (
@@ -597,8 +629,8 @@ export function TelemetryFeed() {
           see them.
         </p>
       ) : (
-        <div className="scrolly">
-          <table className={`events ${densityState === "compact" ? "compact" : ""}`}>
+        <div className="scrolly table-stack">
+          <table className={`events stack ${densityState === "compact" ? "compact" : ""}`}>
             {feedHead}
             <tbody>
               {rows.map((event) => (
@@ -665,11 +697,14 @@ const TelemetryRow = memo(function TelemetryRow({
   const timestamp = formatEventTimestamp(iso);
   return (
     <tr className={`severity-${severity}`} data-severity={severity} data-stream={event.source}>
-      <td>
+      <td data-label="Event">
+        {/* The severity tier is already colour-coded by the row class; this is the
+            same fact as text, so reduced-motion or monochrome reading keeps it. */}
+        <span className="visually-hidden">Severity: {severity}. </span>
         <div>{labelFor(event)}</div>
         <div className="tiny muted mono">{describeGuardEvent(event)}</div>
       </td>
-      <td>
+      <td data-label="Decision">
         {event.decision ? (
           event.decision.result === "blocked" ? (
             <span className="pill danger">{event.decision.reason ?? "blocked"}</span>
@@ -683,7 +718,7 @@ const TelemetryRow = memo(function TelemetryRow({
           <div className="tiny muted">{explainReason(event.decision.reason)}</div>
         )}
       </td>
-      <td>
+      <td data-label="Guard">
         {guardLabel !== null ? (
           <span className="pill" title={event.contractId ?? "unknown contract"}>
             {guardLabel}
@@ -692,12 +727,12 @@ const TelemetryRow = memo(function TelemetryRow({
           <span className="tiny muted">—</span>
         )}
       </td>
-      <td>
+      <td data-label="Source">
         <span className={`pill${event.source === "diagnostic" ? " warn" : ""}`}>
           {event.source}
         </span>
       </td>
-      <td className="mono tiny">
+      <td className="mono tiny" data-label="Time">
         {iso ? <TimeAgo iso={iso} /> : "—"}
         {timestamp && (
           <div
@@ -716,7 +751,7 @@ const TelemetryRow = memo(function TelemetryRow({
           </div>
         ) : null}
       </td>
-      <td>
+      <td data-label="Transaction">
         {event.transactionHash ? (
           <TxHashCell hash={event.transactionHash} />
         ) : (
@@ -730,12 +765,12 @@ const TelemetryRow = memo(function TelemetryRow({
 const feedHead = (
   <thead>
     <tr>
-      <th>Event</th>
-      <th>Decision</th>
-      <th>Guard</th>
-      <th>Source</th>
-      <th>Time</th>
-      <th>Transaction</th>
+      <th scope="col">Event</th>
+      <th scope="col">Decision</th>
+      <th scope="col">Guard</th>
+      <th scope="col">Source</th>
+      <th scope="col">Time</th>
+      <th scope="col">Transaction</th>
     </tr>
   </thead>
 );

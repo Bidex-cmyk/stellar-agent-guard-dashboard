@@ -211,13 +211,13 @@ test("a verified freeze is announced into a region that outlives the dialog", as
       null,
       "the dialog is gone by the time the write is announced",
     );
-    const trigger = Array.from(mounted.container.querySelectorAll("button")).find(
-      (candidate) => candidate.textContent?.trim() === "Freeze this account",
+    const unfreeze = Array.from(mounted.container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent?.trim() === "Unfreeze",
     );
     assert.equal(
       document.activeElement,
-      trigger,
-      "focus is already back on the trigger the announcement is about",
+      unfreeze,
+      "focus moves to the available action when the confirmed freeze disables its trigger",
     );
     assert.equal(
       mounted.container.querySelector('[aria-live="polite"]'),
@@ -228,7 +228,7 @@ test("a verified freeze is announced into a region that outlives the dialog", as
     // Announced *and* queued before the teardown: the region is the only thing
     // left on screen, and the message is in it.
     await waitFor(
-      () => mounted.polite.textContent === "Account frozen",
+      () => mounted.polite.textContent === `Account frozen for guard ${TEST_GUARD_ID}`,
       "the verified freeze to be spoken",
     );
     assert.equal(mounted.assertive.textContent, "", "a confirmed freeze is not an interruption");
@@ -257,7 +257,7 @@ test("a freeze the chain disagrees with is announced assertively, with the reaso
     assert.match(spoken, /NOT visible on chain/);
     assert.notEqual(
       mounted.polite.textContent,
-      "Account frozen",
+      `Account frozen for guard ${TEST_GUARD_ID}`,
       "a freeze the chain contradicts is never announced as a success",
     );
   } finally {
@@ -298,7 +298,7 @@ test("an unfreeze is announced too, and not as a freeze", async () => {
       await sleep(30);
     });
     await waitFor(() => mounted.polite.textContent !== "", "the unfreeze to be spoken");
-    assert.equal(mounted.polite.textContent, "Account unfrozen");
+    assert.equal(mounted.polite.textContent, `Account unfrozen for guard ${TEST_GUARD_ID}`);
   } finally {
     await mounted.unmount();
   }
@@ -358,7 +358,7 @@ test("a freeze is spoken once, through the one channel that verified it", async 
     }
     assert.deepEqual(
       [...heard],
-      ["Account frozen"],
+      [`Account frozen for guard ${TEST_GUARD_ID}`],
       "the only thing spoken about this freeze is the verified outcome",
     );
     assert.equal(

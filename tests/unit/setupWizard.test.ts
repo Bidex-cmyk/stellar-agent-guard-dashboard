@@ -92,6 +92,7 @@ function contextValue(snapshot: GuardSnapshot) {
       guards: [],
       capped: 0,
       cappedLabels: [],
+      gaps: [],
     },
     startWatching: () => {},
     stopWatching: () => {},

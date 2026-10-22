@@ -19,7 +19,12 @@ import type { InvokeResult } from "../lib/guard/submit.ts";
 import { NETWORK, PHASE1_ARTIFACT } from "../lib/guard/network.ts";
 import { fetchContractWasm, verifyWasmIdentity } from "../lib/guard/chain.ts";
 import { toHex } from "../lib/guard/scval.ts";
-import { validateInitParameters, type InitValidation } from "../lib/guard/initValidator.ts";
+import {
+  validateInitFormFields,
+  validateInitParameters,
+  type InitValidation,
+} from "../lib/guard/initValidator.ts";
+import { useFormValidation } from "../lib/guard/useFormValidation.ts";
 import { sanitizeAddressInput } from "../lib/guard/inputSanitizer.ts";
 import {
   contractAlreadyDeployed,
@@ -45,9 +50,12 @@ import {
 } from "../lib/guard/friendbot.ts";
 import {
   buildIntegrityReport,
+  buildIntegrityReportWithProgress,
   describeBuild,
   sortEntrypoints,
   type IntegrityReport,
+  type WasmParseProgress,
+  type WasmHashProgress,
 } from "../lib/guard/wasmInspector.ts";
 import { useGuard } from "./GuardProvider.tsx";
 import { CopyButton } from "./CopyButton.tsx";
@@ -144,6 +152,10 @@ export function DeployPanel() {
   const [integrity, setIntegrity] = useState<IntegrityReport | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [inspectError, setInspectError] = useState<string | null>(null);
+  const [inspectProgress, setInspectProgress] = useState<
+    WasmParseProgress | WasmHashProgress | null
+  >(null);
+  const [inspectCancelled, setInspectCancelled] = useState(false);
 
   // Guard init parameters, audited by the pre-flight validator before the
   // "Sign and initialize" button will enable. The admin is whoever is connected,
@@ -159,6 +171,16 @@ export function DeployPanel() {
     perTxCap,
     windowCap,
   });
+  const initFieldValues = {
+    adminAddress: wallet?.address ?? "",
+    agentAddress,
+    dmsDurationSecs,
+    perTxCap,
+    windowCap,
+    agentPubkey,
+  };
+  const initFieldErrors = useFormValidation(initFieldValues, validateInitFormFields);
+  const agentPubkeyValid = /^[0-9a-fA-F]{64}$/.test(agentPubkey.trim());
 
   // Issue #20: restore the last saved draft for this network once on mount.
   // Client-side effects only — localStorage is never touched during the server
@@ -383,6 +405,23 @@ export function DeployPanel() {
     setSalt(typedSalt.bytes);
   }
 
+  function initValidationAttributes(field: string) {
+    const error = initFieldErrors[field];
+    return {
+      "aria-invalid": error ? true : undefined,
+      "aria-describedby": error ? `init-field-error-${field}` : undefined,
+    };
+  }
+
+  function initFieldError(field: string) {
+    const error = initFieldErrors[field];
+    return error ? (
+      <span className="field-error tiny" id={`init-field-error-${field}`} role="status">
+        {error}
+      </span>
+    ) : null;
+  }
+
   async function startVanitySearch() {
     if (!wallet) {
       setVanityError("Connect the admin wallet: the address depends on who deploys.");
@@ -460,20 +499,40 @@ export function DeployPanel() {
       return;
     }
     setInspecting(true);
+    setInspectCancelled(false);
     setInspectError(null);
+    setInspectProgress(null);
+    setIntegrity(null);
     try {
       const [wasm, identity] = await Promise.all([
         fetchContractWasm(server, target),
         verifyWasmIdentity(server, target),
       ]);
-      setIntegrity(
-        await buildIntegrityReport({ wasm, reportedWasmHash: identity.reportedWasmHash }),
-      );
+      const report = await buildIntegrityReportWithProgress({
+        wasm,
+        reportedWasmHash: identity.reportedWasmHash,
+        onParseProgress: (progress) => setInspectProgress(progress),
+        onHashProgress: (progress) => setInspectProgress(progress),
+      });
+      setIntegrity(report);
     } catch (caught) {
-      setInspectError(caught instanceof Error ? caught.message : String(caught));
+      if (caught instanceof Error && caught.message === "Parsing cancelled") {
+        setInspectCancelled(true);
+        setInspectProgress(null);
+      } else if (caught instanceof Error && caught.message === "Hashing cancelled") {
+        setInspectCancelled(true);
+        setInspectProgress(null);
+      } else {
+        setInspectError(caught instanceof Error ? caught.message : String(caught));
+      }
     } finally {
       setInspecting(false);
     }
+  }
+
+  function cancelInspect() {
+    setInspectCancelled(true);
+    // The worker will handle cancellation internally
   }
 
   /**
@@ -984,7 +1043,8 @@ export function DeployPanel() {
         <summary>Bytecode inspector</summary>
         <p className="tiny muted">
           Fetches the contract&apos;s stored WASM, hashes it here with Web Crypto, and compares it
-          to the pinned artifact — a second opinion on what the ledger says it is running.
+          to the pinned artifact — a second opinion on what the ledger says it is running. Parsing
+          and hashing run in a Web Worker so the UI stays responsive.
         </p>
         <div className="row">
           <button
@@ -994,10 +1054,64 @@ export function DeployPanel() {
           >
             {inspecting ? "Reading bytecode..." : "Inspect this contract"}
           </button>
+          {inspecting && (
+            <button className="secondary" onClick={() => void cancelInspect()}>
+              Cancel
+            </button>
+          )}
           <span className="tiny muted">
             Inspecting {(outcome?.guard ?? guard) || "no instance yet"}
           </span>
         </div>
+        {inspecting && inspectProgress && (
+          <div className="stack" style={{ marginTop: 8 }} role="status">
+            <div className="tiny mono">
+              {(() => {
+                const p = inspectProgress as WasmParseProgress | WasmHashProgress;
+                if ("phase" in p) {
+                  switch (p.phase) {
+                    case "validating-header":
+                      return "Validating WASM header...";
+                    case "parsing-sections":
+                      return `Parsing sections: ${p.current ?? 0} / ${p.total ?? "?"}`;
+                    case "reading-exports":
+                      return `Reading exports: ${p.count ?? 0} found`;
+                    case "reading-producers":
+                      return `Reading producers: ${p.section}`;
+                    case "hashing":
+                      return `Hashing: ${p.bytesProcessed ?? 0} / ${p.totalBytes ?? "?"} bytes`;
+                    case "complete":
+                      return "Complete";
+                    case "error":
+                      return `Error: ${p.reason}`;
+                    case "cancelled":
+                      return "Cancelled";
+                  }
+                }
+                return "Working...";
+              })()}
+            </div>
+            {inspectProgress.phase === "parsing-sections" && inspectProgress.total && (
+              <progress
+                value={inspectProgress.current ?? 0}
+                max={inspectProgress.total}
+                style={{ width: "100%", height: 6 }}
+              />
+            )}
+            {inspectProgress.phase === "hashing" && inspectProgress.totalBytes && (
+              <progress
+                value={inspectProgress.bytesProcessed ?? 0}
+                max={inspectProgress.totalBytes}
+                style={{ width: "100%", height: 6 }}
+              />
+            )}
+          </div>
+        )}
+        {inspectCancelled && (
+          <p className="tiny" style={{ color: "var(--warn)" }} role="status">
+            Inspection cancelled by operator.
+          </p>
+        )}
         {inspectError && (
           <ErrorBlock title="The bytecode could not be read" detail={inspectError} />
         )}
@@ -1054,10 +1168,12 @@ export function DeployPanel() {
       <label className="field">
         <span className="lbl">Agent public key (32 raw Ed25519 bytes, hex)</span>
         <input
+          {...initValidationAttributes("agentPubkey")}
           value={agentPubkey}
           onChange={(event) => setAgentPubkey(sanitizeAddressInput(event.target.value))}
           placeholder="53b093e0281a2d8f4276b77fd21e3380b3329f09097ace3d9e60cf0f2f9039e2"
         />
+        {initFieldError("agentPubkey")}
         <span className="hint">
           This is the raw 32-byte key the agent signs with, not its G... strkey form. The SDK
           derives it from the agent keypair.
@@ -1073,11 +1189,13 @@ export function DeployPanel() {
       <label className="field">
         <span className="lbl">Agent account address (G…)</span>
         <input
+          {...initValidationAttributes("agentAddress")}
           value={agentAddress}
           onChange={(event) => setAgentAddress(sanitizeAddressInput(event.target.value))}
           placeholder="GBUQ… (must differ from the connected admin)"
           aria-label="Agent account address"
         />
+        {initFieldError("agentAddress")}
       </label>
 
       <div className="grid">
@@ -1089,29 +1207,35 @@ export function DeployPanel() {
             Dead-man grace (seconds)
           </span>
           <input
+            {...initValidationAttributes("dmsDurationSecs")}
             value={dmsDurationSecs}
             onChange={(event) => setDmsDurationSecs(event.target.value)}
             placeholder="3600"
             inputMode="numeric"
           />
+          {initFieldError("dmsDurationSecs")}
         </label>
         <label className="field">
           <span className="lbl">Per-transaction cap (units)</span>
           <input
+            {...initValidationAttributes("perTxCap")}
             value={perTxCap}
             onChange={(event) => setPerTxCap(event.target.value)}
             placeholder="1000"
             inputMode="numeric"
           />
+          {initFieldError("perTxCap")}
         </label>
         <label className="field">
           <span className="lbl">Rolling-window cap (units)</span>
           <input
+            {...initValidationAttributes("windowCap")}
             value={windowCap}
             onChange={(event) => setWindowCap(event.target.value)}
             placeholder="5000"
             inputMode="numeric"
           />
+          {initFieldError("windowCap")}
         </label>
       </div>
 
@@ -1119,16 +1243,17 @@ export function DeployPanel() {
 
       <div className="row">
         <button
-          disabled={!wallet || agentPubkey.trim().length === 0 || !initValidation.canDeploy}
+          disabled={!wallet || !agentPubkeyValid || !initValidation.canDeploy}
           onClick={() => void initialize(outcome?.guard ?? "")}
         >
           Sign and initialize
         </button>
         {!wallet && <span className="tiny muted">Connect the admin wallet to initialize.</span>}
-        {wallet && !initValidation.canDeploy && (
+        {wallet && (!initValidation.canDeploy || !agentPubkeyValid) && (
           <span className="tiny" style={{ color: "var(--danger)" }}>
-            Resolve {initValidation.blockers.length} blocker
-            {initValidation.blockers.length === 1 ? "" : "s"} above before initializing.
+            Resolve {initValidation.blockers.length + (agentPubkeyValid ? 0 : 1)} blocker
+            {initValidation.blockers.length + (agentPubkeyValid ? 0 : 1) === 1 ? "" : "s"} above
+            before initializing.
           </span>
         )}
       </div>

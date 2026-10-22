@@ -21,9 +21,13 @@
  * one mock channel bus rather than a real browser.
  */
 
+import { looksLikeContractAddress } from "./instance.ts";
+
 /** The channel and storage key name. Versioned so a shape change cannot be misread. */
 export const TAB_SYNC_CHANNEL = "stellar-agent-guard-dashboard.tab-sync.v1";
 export const TAB_SYNC_STORAGE_KEY = "stellar-agent-guard-dashboard.tab-sync.v1";
+export const GUARD_WRITE_LOCK_TTL_MS = 120_000;
+const GUARD_WRITE_LOCK_PREFIX = "stellar-agent-guard-dashboard.guard-write.v1";
 
 /**
  * The state changes that are worth telling the other tabs about.
@@ -34,13 +38,18 @@ export const TAB_SYNC_STORAGE_KEY = "stellar-agent-guard-dashboard.tab-sync.v1";
  * payloads are the chain's to describe, not this module's.
  */
 export type TabSyncEventType =
-  "GUARD_CHANGED" | "FREEZE_STATE_CHANGED" | "WALLET_DISCONNECTED" | "POLICY_UPDATED";
+  | "GUARD_CHANGED"
+  | "FREEZE_STATE_CHANGED"
+  | "WALLET_DISCONNECTED"
+  | "POLICY_UPDATED"
+  | "REGISTRY_CHANGED";
 
 export const TAB_SYNC_EVENT_TYPES: readonly TabSyncEventType[] = [
   "GUARD_CHANGED",
   "FREEZE_STATE_CHANGED",
   "WALLET_DISCONNECTED",
   "POLICY_UPDATED",
+  "REGISTRY_CHANGED",
 ];
 
 /** One announcement. `origin` lets a tab ignore its own broadcast. */
@@ -77,6 +86,105 @@ export function isTabSyncEvent(value: unknown): value is TabSyncEvent {
   return true;
 }
 
+// ── Registry changes ───────────────────────────────────────────────────────
+//
+// A guard added, renamed or removed in one tab leaves every other tab holding a
+// stale in-memory list: the old label in the selector, a deleted guard still
+// tailed. `REGISTRY_CHANGED` tells them to re-read. Like every event on this
+// channel it carries no state — not the new label, not the new list. The
+// receiving tab reloads the saved registry itself, so a forged or reordered
+// message can at worst cause one redundant read, never plant an entry.
+
+/** Version of the registry-change payload. Bump on any shape change. */
+export const REGISTRY_SYNC_VERSION = 1;
+
+export type RegistryChangeKind = "add" | "rename" | "remove";
+
+export const REGISTRY_CHANGE_KINDS: readonly RegistryChangeKind[] = ["add", "rename", "remove"];
+
+/** A validated registry-change announcement from another tab. */
+export interface RegistryChangeNotice {
+  kind: RegistryChangeKind;
+  /** The guard the change concerns. */
+  guard: string;
+  /** The emitting tab's counter, increasing by one per announcement. */
+  revision: number;
+  /** The emitting tab. */
+  origin: string;
+}
+
+/** The payload for a registry change: a version, the kind and a revision. */
+export function registryChangePayload(
+  kind: RegistryChangeKind,
+  revision: number,
+): Record<string, unknown> {
+  return { v: REGISTRY_SYNC_VERSION, kind, revision };
+}
+
+/**
+ * Validate an incoming `REGISTRY_CHANGED` event, or `null` when it is not one
+ * this build understands: wrong type, unknown payload version, unknown kind, a
+ * revision that is not a positive integer, or a guard that is not a contract
+ * address. Nothing is repaired — a malformed event is dropped.
+ */
+export function parseRegistryChange(event: TabSyncEvent): RegistryChangeNotice | null {
+  if (event.type !== "REGISTRY_CHANGED") return null;
+  const payload = event.payload;
+  if (typeof payload !== "object" || payload === null) return null;
+  if (payload.v !== REGISTRY_SYNC_VERSION) return null;
+  const kind = REGISTRY_CHANGE_KINDS.find((candidate) => candidate === payload.kind);
+  if (kind === undefined) return null;
+  const revision = payload.revision;
+  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) return null;
+  if (typeof event.guard !== "string" || !looksLikeContractAddress(event.guard)) return null;
+  return { kind, guard: event.guard, revision, origin: event.origin };
+}
+
+/** Tabs remembered for replay protection; a console rarely has more than a handful open. */
+const REGISTRY_REPLAY_TABS = 64;
+
+/**
+ * Accepts each tab's announcements once and in order.
+ *
+ * The coordinator already drops a tab's own echo; this additionally drops a
+ * duplicate or an out-of-order replay (the same event delivered twice, a stale
+ * one arriving late) by remembering the highest revision seen per tab. It
+ * returns the validated notice to act on, or `null` to ignore the event.
+ */
+export function createRegistryChangeFilter(): (event: TabSyncEvent) => RegistryChangeNotice | null {
+  const lastRevision = new Map<string, number>();
+  return (event) => {
+    const notice = parseRegistryChange(event);
+    if (notice === null) return null;
+    const seen = lastRevision.get(notice.origin) ?? 0;
+    if (notice.revision <= seen) return null;
+    lastRevision.delete(notice.origin);
+    lastRevision.set(notice.origin, notice.revision);
+    if (lastRevision.size > REGISTRY_REPLAY_TABS) {
+      const oldest = lastRevision.keys().next().value;
+      if (oldest !== undefined) lastRevision.delete(oldest);
+    }
+    return notice;
+  };
+}
+
+/**
+ * Announce registry changes from this tab. One per tab: the revision counter it
+ * owns is what lets other tabs drop duplicates and replays.
+ */
+export function createRegistryAnnouncer(
+  tabSync: Pick<TabSyncCoordinator, "broadcast">,
+): (kind: RegistryChangeKind, guard: string) => TabSyncEvent {
+  let revision = 0;
+  return (kind, guard) => {
+    revision += 1;
+    return tabSync.broadcast("REGISTRY_CHANGED", {
+      guard,
+      payload: registryChangePayload(kind, revision),
+    });
+  };
+}
+
 // ── Transport seams ────────────────────────────────────────────────────────
 
 /** The subset of `BroadcastChannel` the coordinator needs, so tests can fake it. */
@@ -95,6 +203,10 @@ export interface TabStorage {
   setItem(key: string, value: string): void;
 }
 
+export interface GuardWriteStorage extends TabStorage {
+  removeItem(key: string): void;
+}
+
 /** A `storage` event, narrowed to the two fields the fallback reads. */
 export interface TabStorageEvent {
   key: string | null;
@@ -106,6 +218,46 @@ export interface TabEventTarget {
   addEventListener(type: "storage", listener: (event: TabStorageEvent) => void): void;
   removeEventListener(type: "storage", listener: (event: TabStorageEvent) => void): void;
 }
+
+export interface TabLifecycleTarget {
+  addEventListener(type: "pagehide", listener: () => void): void;
+  removeEventListener(type: "pagehide", listener: () => void): void;
+}
+
+export interface GuardWriteLockRecord {
+  guard: string;
+  action: "freeze" | "unfreeze";
+  network: string;
+  owner: string;
+  expiresAt: number;
+}
+
+export interface GuardWriteLockLease {
+  readonly record: GuardWriteLockRecord;
+  renew(): boolean;
+  release(): void;
+}
+
+export interface GuardWriteLockOptions {
+  storage?: GuardWriteStorage | null;
+  eventTarget?: TabEventTarget | null;
+  lifecycleTarget?: TabLifecycleTarget | null;
+  now?: () => number;
+  randomId?: () => string;
+  ttlMs?: number;
+}
+
+export interface GuardWriteLockScope {
+  guard: string;
+  action: GuardWriteLockRecord["action"];
+  network: string;
+}
+
+const inMemoryGuardWriteLocks = new Map<string, GuardWriteLockRecord>();
+const guardWriteLockListeners = new Map<
+  string,
+  Set<(record: GuardWriteLockRecord | null) => void>
+>();
 
 export interface TabSyncOptions {
   channelName?: string;
@@ -176,6 +328,182 @@ function defaultStorage(): TabStorage | null {
 function defaultEventTarget(): TabEventTarget | null {
   if (typeof window === "undefined") return null;
   return window as unknown as TabEventTarget;
+}
+
+function defaultLifecycleTarget(): TabLifecycleTarget | null {
+  if (typeof window === "undefined") return null;
+  return window as unknown as TabLifecycleTarget;
+}
+
+function guardWriteLockKey(scope: GuardWriteLockScope): string {
+  return `${GUARD_WRITE_LOCK_PREFIX}.${encodeURIComponent(scope.network)}.${encodeURIComponent(
+    scope.guard,
+  )}.${scope.action}`;
+}
+
+function isGuardWriteLockRecord(value: unknown): value is GuardWriteLockRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Partial<GuardWriteLockRecord>;
+  return (
+    typeof record.guard === "string" &&
+    (record.action === "freeze" || record.action === "unfreeze") &&
+    typeof record.network === "string" &&
+    typeof record.owner === "string" &&
+    typeof record.expiresAt === "number" &&
+    Number.isFinite(record.expiresAt)
+  );
+}
+
+function storageForGuardWrite(options: GuardWriteLockOptions): GuardWriteStorage | null {
+  if (options.storage !== undefined) return options.storage;
+  return defaultStorage() as GuardWriteStorage | null;
+}
+
+function readGuardWriteLock(
+  key: string,
+  now: number,
+  storage: GuardWriteStorage | null,
+): GuardWriteLockRecord | null {
+  if (!storage) {
+    const record = inMemoryGuardWriteLocks.get(key);
+    if (record && record.expiresAt > now) return record;
+    inMemoryGuardWriteLocks.delete(key);
+    return null;
+  }
+
+  try {
+    const raw = storage.getItem(key);
+    if (raw === null) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!isGuardWriteLockRecord(value) || value.expiresAt <= now) {
+      storage.removeItem(key);
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function notifyGuardWriteLockListeners(key: string, record: GuardWriteLockRecord | null): void {
+  for (const listener of [...(guardWriteLockListeners.get(key) ?? [])]) listener(record);
+}
+
+/**
+ * Claim one guard/action in this tab and, when localStorage is available, share
+ * the short-lived claim with other tabs. The lease coordinates operator intent;
+ * it is not a chain lock and never replaces a live read or simulation.
+ */
+export function acquireGuardWriteLock(
+  scope: GuardWriteLockScope,
+  options: GuardWriteLockOptions = {},
+): GuardWriteLockLease | null {
+  const key = guardWriteLockKey(scope);
+  const storage = storageForGuardWrite(options);
+  const now = options.now ?? Date.now;
+  const ttlMs = options.ttlMs ?? GUARD_WRITE_LOCK_TTL_MS;
+  const owner = (options.randomId ?? defaultRandomId)();
+  if (readGuardWriteLock(key, now(), storage) !== null) return null;
+
+  const record: GuardWriteLockRecord = {
+    ...scope,
+    owner,
+    expiresAt: now() + ttlMs,
+  };
+  const write = (next: GuardWriteLockRecord): boolean => {
+    if (!storage) {
+      inMemoryGuardWriteLocks.set(key, next);
+      return true;
+    }
+    try {
+      storage.setItem(key, JSON.stringify(next));
+      return readGuardWriteLock(key, now(), storage)?.owner === owner;
+    } catch {
+      inMemoryGuardWriteLocks.set(key, next);
+      return true;
+    }
+  };
+
+  if (!write(record)) return null;
+  notifyGuardWriteLockListeners(key, record);
+
+  let released = false;
+  const lifecycleTarget =
+    options.lifecycleTarget === undefined ? defaultLifecycleTarget() : options.lifecycleTarget;
+  const onPageHide = (): void => lease.release();
+  const lease: GuardWriteLockLease = {
+    get record() {
+      return record;
+    },
+    renew() {
+      if (released) return false;
+      const current = readGuardWriteLock(key, now(), storage);
+      if (current?.owner !== owner) return false;
+      record.expiresAt = now() + ttlMs;
+      if (!write(record)) return false;
+      notifyGuardWriteLockListeners(key, record);
+      return true;
+    },
+    release() {
+      if (released) return;
+      released = true;
+      lifecycleTarget?.removeEventListener("pagehide", onPageHide);
+      const current = readGuardWriteLock(key, now(), storage);
+      if (current?.owner === owner) {
+        if (storage) {
+          try {
+            storage.removeItem(key);
+          } catch {
+            inMemoryGuardWriteLocks.delete(key);
+          }
+        } else {
+          inMemoryGuardWriteLocks.delete(key);
+        }
+      }
+      inMemoryGuardWriteLocks.delete(key);
+      notifyGuardWriteLockListeners(key, null);
+    },
+  };
+  lifecycleTarget?.addEventListener("pagehide", onPageHide);
+  return lease;
+}
+
+/** Listen for this scope's active claim, including a claim made before subscribe. */
+export function subscribeGuardWriteLock(
+  scope: GuardWriteLockScope,
+  listener: (record: GuardWriteLockRecord | null) => void,
+  options: GuardWriteLockOptions = {},
+): () => void {
+  const key = guardWriteLockKey(scope);
+  const storage = storageForGuardWrite(options);
+  const now = options.now ?? Date.now;
+  const eventTarget =
+    options.eventTarget === undefined ? defaultEventTarget() : options.eventTarget;
+  const listeners = guardWriteLockListeners.get(key) ?? new Set();
+  listeners.add(listener);
+  guardWriteLockListeners.set(key, listeners);
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const publish = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    const record = readGuardWriteLock(key, now(), storage);
+    listener(record);
+    if (record) {
+      timer = setTimeout(publish, Math.max(0, record.expiresAt - now() + 1));
+    }
+  };
+  const onStorage = (event: TabStorageEvent): void => {
+    if (event.key === key) publish();
+  };
+  eventTarget?.addEventListener("storage", onStorage);
+  publish();
+
+  return () => {
+    if (timer !== null) clearTimeout(timer);
+    eventTarget?.removeEventListener("storage", onStorage);
+    listeners.delete(listener);
+    if (listeners.size === 0) guardWriteLockListeners.delete(key);
+  };
 }
 
 // ── Shared coordinator shell ───────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { describePolicy, isDeadManFrozen } from "stellar-agent-guard-sdk";
 import type { ReadResult, WasmIdentity } from "./chain.ts";
 import type { InvokeResult } from "./submit.ts";
 import { looksLikeContractAddress } from "./instance.ts";
+import { redactDiagnostics } from "./inputSanitizer.ts";
 
 export interface AuditReport {
   contractId: string;
@@ -49,6 +50,103 @@ export function compilePrintReport(
     network: networkName,
     timestamp: new Date().toISOString(),
   };
+}
+
+// ── Incident handoff summary (#321) ────────────────────────────────────────
+
+/**
+ * A safe snapshot for incident handoff that excludes sensitive data.
+ *
+ * This deliberately omits private keys, wallet sessions, signed envelopes, and
+ * any other credential material. It is labelled as client-generated to clarify
+ * it is not an audit record or chain proof.
+ */
+export interface IncidentSummary {
+  label: string;
+  captureTime: string;
+  network: string;
+  guardAddress: string;
+  freezeStatus: "frozen" | "clear" | "unknown";
+  dmsStatus: "FIRED" | "EXPIRED" | "OK" | "UNKNOWN";
+  lastRead: string | null;
+  txHash?: string;
+  policyInstalled: boolean;
+  readErrors: string[];
+}
+
+export function compileIncidentSummary(
+  snapshot: GuardSnapshot | null,
+  networkName: string,
+  options?: {
+    txHash?: string;
+    lastReadError?: string;
+    lastSuccessfulRead?: string;
+  },
+): IncidentSummary {
+  const status = snapshot?.status.ok ? snapshot.status.value : null;
+  const policy = snapshot?.policy.ok ? snapshot.policy.value : null;
+  const errors: string[] = [];
+
+  if (!snapshot) {
+    errors.push(options?.lastReadError ?? "Snapshot unavailable");
+  } else if (!snapshot.status.ok) {
+    errors.push(`Status read failed: ${snapshot.status.error}`);
+  }
+
+  const result: IncidentSummary = {
+    label: "CLIENT-GENERATED SNAPSHOT — Not an audit record",
+    captureTime: new Date().toISOString(),
+    network: networkName,
+    guardAddress: snapshot?.guard ?? "Unknown",
+    freezeStatus: status ? (status.admin_frozen ? "frozen" : "clear") : "unknown",
+    dmsStatus: status
+      ? isDeadManFrozen(status)
+        ? "FIRED"
+        : status.heartbeat_expired
+          ? "EXPIRED"
+          : "OK"
+      : "UNKNOWN",
+    lastRead: options?.lastSuccessfulRead ?? (snapshot ? new Date().toISOString() : null),
+    policyInstalled: !!policy,
+    readErrors: errors,
+  };
+
+  if (options?.txHash) {
+    result.txHash = options.txHash;
+  }
+
+  return result;
+}
+
+export function formatIncidentSummary(summary: IncidentSummary): string {
+  const lines: string[] = [
+    `=== ${summary.label} ===`,
+    "",
+    `Capture Time: ${summary.captureTime}`,
+    `Network: ${summary.network}`,
+    `Guard Address: ${summary.guardAddress}`,
+    `Freeze Status: ${summary.freezeStatus.toUpperCase()}`,
+    `DMS Status: ${summary.dmsStatus}`,
+    `Last Read: ${summary.lastRead ?? "N/A"}`,
+    `Policy Installed: ${summary.policyInstalled ? "Yes" : "No"}`,
+  ];
+
+  if (summary.txHash) {
+    lines.push(`Transaction Hash: ${summary.txHash}`);
+  }
+
+  if (summary.readErrors.length > 0) {
+    lines.push("");
+    lines.push("Read Errors:");
+    for (const error of summary.readErrors) {
+      lines.push(`  - ${error}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("Note: This snapshot excludes private keys, wallet sessions, and signed envelopes.");
+
+  return lines.join("\n");
 }
 
 // ── Deployment verification receipt (#396, #397) ───────────────────────────
@@ -181,7 +279,7 @@ function receiptTransaction(label: string, result: InvokeResult): DeploymentRece
         outcome: "failed",
         hash: result.hash,
         ledger: null,
-        detail: result.detail,
+        detail: result.detail ? redactDiagnostics(result.detail) : result.detail,
       };
     case "refused":
       return {
@@ -189,7 +287,15 @@ function receiptTransaction(label: string, result: InvokeResult): DeploymentRece
         outcome: "refused",
         hash: null,
         ledger: null,
-        detail: `${result.stage}: ${result.detail}`,
+        detail: redactDiagnostics(`${result.stage}: ${result.detail}`),
+      };
+    case "cancelled":
+      return {
+        operation: label,
+        outcome: "cancelled",
+        hash: null,
+        ledger: null,
+        detail: redactDiagnostics(result.detail),
       };
     case "exported":
       return {
@@ -197,7 +303,9 @@ function receiptTransaction(label: string, result: InvokeResult): DeploymentRece
         outcome: "exported",
         hash: null,
         ledger: null,
-        detail: result.detail ?? "an unsigned transaction was exported; nothing was broadcast",
+        detail: redactDiagnostics(
+          result.detail ?? "an unsigned transaction was exported; nothing was broadcast",
+        ),
       };
   }
 }
@@ -281,9 +389,11 @@ export function compileDeploymentReceipt(input: DeploymentReceiptInput): Deploym
         "contract-created",
         "Create transaction",
         "failed",
-        createStep.result.kind === "refused"
-          ? `The create transaction was refused before broadcast (${createStep.result.stage}): ${createStep.result.detail}`
-          : `The create transaction was broadcast and rejected: ${createStep.result.detail}`,
+        redactDiagnostics(
+          createStep.result.kind === "refused"
+            ? `The create transaction was refused before broadcast (${createStep.result.stage}): ${createStep.result.detail}`
+            : `The create transaction was broadcast and rejected: ${createStep.result.detail}`,
+        ),
       ),
     );
   }
@@ -312,7 +422,7 @@ export function compileDeploymentReceipt(input: DeploymentReceiptInput): Deploym
         "live-read",
         "Post-deploy read",
         "failed",
-        `Reading the deployed instance failed: ${input.read.error}`,
+        redactDiagnostics(`Reading the deployed instance failed: ${input.read.error}`),
       ),
     );
   }

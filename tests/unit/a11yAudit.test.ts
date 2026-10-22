@@ -73,6 +73,7 @@ const TEST_GUARD = {
     guards: [],
     capped: 0,
     cappedLabels: [],
+    gaps: [],
   },
   startWatching: () => {},
   stopWatching: () => {},
@@ -318,6 +319,8 @@ test("TxHistoryTable passes automated axe-core WCAG 2.1 AA checks", async () => 
       operation: "set_policy",
       status: "confirmed",
       feeStroops: "310",
+      networkName: null,
+      networkPassphrase: null,
       recordedAt: "2026-09-24T10:00:00.000Z",
     },
     {
@@ -325,6 +328,8 @@ test("TxHistoryTable passes automated axe-core WCAG 2.1 AA checks", async () => 
       operation: "freeze",
       status: "failed",
       feeStroops: "100",
+      networkName: null,
+      networkPassphrase: null,
       recordedAt: "2026-09-23T09:30:00.000Z",
     },
   ];

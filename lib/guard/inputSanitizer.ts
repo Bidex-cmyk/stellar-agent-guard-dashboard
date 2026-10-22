@@ -60,6 +60,40 @@ export function sanitizeAddressInput(value: string): string {
   return findSecretKeyInText(value) === null ? value : "";
 }
 
+/**
+ * Redact secret-like patterns (Stellar secret seeds, URL credentials, auth tokens)
+ * from diagnostic text, error messages, and incident summaries before they leave the dashboard.
+ *
+ * Keeps public addresses (G..., C...), transaction hashes (64-character hex),
+ * and error codes intact.
+ */
+export function redactDiagnostics(text: string): string {
+  if (!text) return text;
+  let result = text;
+  // 1. Redact Stellar secret keys (S followed by uppercase alphanumeric characters, standard 56 chars or test sentinels)
+  result = result.replace(/(^|[^A-Za-z0-9])(S[A-Z0-9]{50,60})(?![A-Za-z0-9])/g, "$1[REDACTED]");
+
+  // 2. Redact credential-like URL basic auth credentials: https://user:pass@host -> https://user:[REDACTED]@host
+  result = result.replace(/(https?:\/\/[^\/\s:@]+):[^\/\s:@]+@/g, "$1:[REDACTED]@");
+
+  // 3. Redact credential-like URL query parameters (token, api_key, apikey, secret, password, auth, bearer, key)
+  result = result.replace(
+    /([?&](?:token|api_key|apikey|secret|password|auth|bearer|key)=)[^&\s#]+/gi,
+    "$1[REDACTED]",
+  );
+
+  // 4. Redact Bearer authorization headers/tokens
+  result = result.replace(/(Bearer\s+)[A-Za-z0-9_\-\.]+/gi, "$1[REDACTED]");
+
+  // 5. Redact secret-bearing JSON fields
+  result = result.replace(
+    /("(?:secretKey|privateKey|password|secret|token|apiKey|api_key)"\s*:\s*")[^"]+(")/gi,
+    "$1[REDACTED]$2",
+  );
+
+  return result;
+}
+
 // ── Security alert store ─────────────────────────────────────────────────────
 // One current alert, not a queue: repeated blocks accumulate into the attempt
 // count of the alert already on screen rather than stacking dialogs.
